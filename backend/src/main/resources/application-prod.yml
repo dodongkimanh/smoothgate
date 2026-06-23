@@ -107,7 +107,7 @@ app:
   poscake:
     timestamp-source-timezone: ${POSCAKE_TIMESTAMP_SOURCE_TIMEZONE:UTC}
   facebook:
-    redirect-uri: ${FB_REDIRECT_URI:https://YOUR_BACKEND_URL/api/integrations/meta/oauth/callback}
+    redirect-uri: ${FB_REDIRECT_URI:https://smoothgate-backend.onrender.com/api/integrations/meta/oauth/callback}
   sync:
     attribution:
       batch-size: ${SYNC_ATTRIBUTION_BATCH_SIZE:100}
