@@ -1,0 +1,2 @@
+-- Seed data removed — create accounts via /api/auth/register on fresh deployment.
+-- This migration is intentionally empty.

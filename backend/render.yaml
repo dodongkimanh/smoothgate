@@ -1,0 +1,103 @@
+services:
+  - type: web
+    name: smitgate-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/ops/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DB_URL
+        sync: false   # jdbc:postgresql://aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require&prepareThreshold=0&stringtype=unspecified&preferQueryMode=simple
+      - key: DB_USERNAME
+        sync: false   # postgres.rqvffklesawgfupjttdf
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_POOL_MAX_SIZE
+        value: "5"
+      # Keep 2 idle connections: ensures warm pool even when 1 is being validated/evicted
+      - key: DB_POOL_MIN_IDLE
+        value: "1"
+      # 15 s — fail faster on pool starvation to avoid hanging request threads
+      - key: DB_POOL_CONNECTION_TIMEOUT_MS
+        value: "15000"
+      - key: DB_POOL_INITIALIZATION_FAIL_TIMEOUT_MS
+        value: "-1"
+      - key: DB_POOL_TRANSACTION_ISOLATION
+        value: "TRANSACTION_READ_COMMITTED"
+      # 10 min — matches PgBouncer server_idle_timeout
+      - key: DB_POOL_IDLE_TIMEOUT_MS
+        value: "600000"
+      - key: DB_POOL_MAX_LIFETIME_MS
+        value: "1680000"
+      # 2 min keepalive — validates idle connections without excessive PgBouncer churn
+      - key: DB_POOL_KEEPALIVE_TIME_MS
+        value: "120000"
+      # Detect connection leaks (connections held > 60s, e.g. external API inside @Transactional)
+      - key: DB_POOL_LEAK_DETECTION_MS
+        value: "60000"
+      # JDBC driver-level TCP connect timeout (seconds)
+      - key: DB_JDBC_CONNECT_TIMEOUT_S
+        value: "8"
+      # JDBC socket timeout (seconds) — reduced from 60 to 20 for faster dead connection detection
+      - key: DB_JDBC_SOCKET_TIMEOUT_S
+        value: "20"
+      # Heartbeat SELECT 1 every 2 min — monitors pool health + soft-evicts dead connections
+      - key: DB_HEARTBEAT_ENABLED
+        value: "true"
+      - key: SCHEDULER_POOL_SIZE
+        value: "2"
+      - key: REDIS_HOST
+        sync: false   # Your new Upstash Redis host
+      - key: REDIS_PORT
+        value: "6379"
+      - key: REDIS_USERNAME
+        value: default
+      - key: REDIS_PASSWORD
+        sync: false
+      - key: SYNC_SCHED_ORDERS_DELAY_MS
+        value: "1800000"
+      - key: SYNC_SCHED_ADS_DELAY_MS
+        value: "3600000"
+      - key: SYNC_SCHED_ATTRIBUTION_DELAY_MS
+        value: "3600000"
+      - key: SYNC_SCHED_REPORT_CACHE_EVICT_MIN_INTERVAL_MS
+        value: "300000"
+      - key: SYNC_ATTRIBUTION_BATCH_SIZE
+        value: "50"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false   # your Vercel URL e.g. https://YOUR_FRONTEND_URL
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false   # same as FRONTEND_URL
+      - key: FB_REDIRECT_URI
+        sync: false   # https://YOUR_BACKEND_URL/api/integrations/meta/oauth/callback
+      - key: FLYWAY_ENABLED
+        value: "true"
+      - key: FLYWAY_VALIDATE_ON_MIGRATE
+        value: "false"
+      # Direct Supabase connection for Flyway (port 5432, NOT the 6543 PgBouncer pooler).
+      # jdbc:postgresql://db.rqvffklesawgfupjttdf.supabase.co:5432/postgres?sslmode=require
+      - key: FLYWAY_DB_URL
+        sync: false
+      - key: FLYWAY_DB_USERNAME
+        sync: false   # postgres.rqvffklesawgfupjttdf
+      - key: FLYWAY_DB_PASSWORD
+        sync: false
+      - key: FLYWAY_CONNECT_RETRIES
+        value: "5"
+      - key: FLYWAY_CONNECT_RETRIES_INTERVAL
+        value: "15"
+      - key: SPRING_JPA_PROPERTIES_HIBERNATE_BOOT_ALLOW_JDBC_METADATA_ACCESS
+        value: "false"
+      - key: DATA_INITIALIZER_ENABLED
+        value: "false"
+      - key: JAVA_TOOL_OPTIONS
+        value: "-XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=30 -XX:+ExitOnOutOfMemoryError"
+      - key: TOMCAT_MAX_THREADS
+        value: "16"

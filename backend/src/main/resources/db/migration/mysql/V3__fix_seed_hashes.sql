@@ -1,0 +1,1 @@
+-- Seed data removed — this migration is intentionally empty.

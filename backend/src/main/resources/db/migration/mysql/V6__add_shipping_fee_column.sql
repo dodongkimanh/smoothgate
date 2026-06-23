@@ -1,0 +1,1 @@
+ALTER TABLE orders ADD COLUMN shipping_fee DECIMAL(18,2) DEFAULT 0;

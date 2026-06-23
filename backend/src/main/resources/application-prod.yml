@@ -1,0 +1,155 @@
+# Production profile — PostgreSQL / Supabase
+# Activate with: SPRING_PROFILES_ACTIVE=prod
+spring:
+  cache:
+    type: redis
+
+  data:
+    redis:
+      host: ${REDIS_HOST:YOUR_REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:default}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: true
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 1
+          max-wait: 3000ms
+      repositories:
+        enabled: false
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # Keep pool small for Supabase/PgBouncer session limits.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:4}
+      minimum-idle: ${DB_POOL_MIN_IDLE:0}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:20000}
+      initialization-fail-timeout: ${DB_POOL_INITIALIZATION_FAIL_TIMEOUT_MS:-1}
+      transaction-isolation: ${DB_POOL_TRANSACTION_ISOLATION:TRANSACTION_READ_COMMITTED}
+      validation-timeout: ${DB_POOL_VALIDATION_TIMEOUT_MS:3000}
+      # 3 min idle timeout keeps pool lean — Supabase may close idle sockets earlier than documented.
+      idle-timeout: ${DB_POOL_IDLE_TIMEOUT_MS:180000}
+      # 10 min lifetime retires connections well before Supabase server-side closes (~13min).
+      max-lifetime: ${DB_POOL_MAX_LIFETIME_MS:600000}
+      # 30s keepalive catches dead sockets more aggressively.
+      keepalive-time: ${DB_POOL_KEEPALIVE_TIME_MS:30000}
+      # Detect connection leaks held > 60s (e.g. external API call inside @Transactional)
+      leak-detection-threshold: ${DB_POOL_LEAK_DETECTION_MS:60000}
+      # Removed connection-test-query: PostgreSQL JDBC 42.x supports JDBC4 isValid()
+      # which does a lightweight TCP-level check instead of a full SELECT 1 roundtrip.
+      # This reduces PgBouncer transaction overhead on every connection borrow.
+      data-source-properties:
+        sslmode: require
+        prepareThreshold: 0
+        stringtype: unspecified
+        preferQueryMode: simple
+        # TCP connect timeout (seconds) — fail fast so HikariCP can retry within its window.
+        connectTimeout: ${DB_JDBC_CONNECT_TIMEOUT_S:8}
+        # TCP read/write timeout (seconds) on established connections.
+        # Reduced from 60→20s so dead connections are detected and evicted faster,
+        # freeing pool slots for healthy connection creation.
+        socketTimeout: ${DB_JDBC_SOCKET_TIMEOUT_S:20}
+        # OS-level TCP keepalive — detects stale connections caused by
+        # intermediate network devices (NAT/firewall) dropping idle sockets.
+        tcpKeepAlive: true
+        # Timeout for cancel signals — prevents indefinite hangs on query cancel.
+        cancelSignalTimeout: 10
+
+  task:
+    scheduling:
+      pool:
+        # 2 threads: heartbeat runs independently even when a sync task is active
+        size: ${SCHEDULER_POOL_SIZE:2}
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        boot:
+          allow_jdbc_metadata_access: false
+        jdbc:
+          lob:
+            non_contextual_creation: true
+
+  flyway:
+    enabled: ${FLYWAY_ENABLED:false}
+    locations: classpath:db/migration/postgresql
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-on-migrate: ${FLYWAY_VALIDATE_ON_MIGRATE:false}
+    url: ${FLYWAY_URL:${DB_URL}}
+    user: ${FLYWAY_USER:${DB_USERNAME}}
+    password: ${FLYWAY_PASSWORD:${DB_PASSWORD}}
+    
+
+app:
+  bootstrap:
+    data-initializer-enabled: ${DATA_INITIALIZER_ENABLED:false}
+  db:
+    # Periodic heartbeat and self-healing settings for transient Supabase drops.
+    heartbeat-enabled: ${DB_HEARTBEAT_ENABLED:true}
+    heartbeat-interval-ms: ${DB_HEARTBEAT_INTERVAL_MS:30000}
+    heartbeat-initial-delay-ms: ${DB_HEARTBEAT_INITIAL_DELAY_MS:20000}
+    heartbeat-evict-after-failures: ${DB_HEARTBEAT_EVICT_AFTER_FAILURES:2}
+  timezone: ${APP_TIMEZONE:Asia/Ho_Chi_Minh}
+  poscake:
+    timestamp-source-timezone: ${POSCAKE_TIMESTAMP_SOURCE_TIMEZONE:UTC}
+  facebook:
+    redirect-uri: ${FB_REDIRECT_URI:https://YOUR_BACKEND_URL/api/integrations/meta/oauth/callback}
+  sync:
+    attribution:
+      batch-size: ${SYNC_ATTRIBUTION_BATCH_SIZE:100}
+    scheduler:
+      orders-enabled: ${SYNC_SCHED_ORDERS_ENABLED:true}
+      orders-fixed-delay-ms: ${SYNC_SCHED_ORDERS_DELAY_MS:1800000}
+      orders-initial-delay-ms: ${SYNC_SCHED_ORDERS_INITIAL_DELAY_MS:60000}
+      ads-enabled: ${SYNC_SCHED_ADS_ENABLED:true}
+      ads-fixed-delay-ms: ${SYNC_SCHED_ADS_DELAY_MS:3600000}
+      ads-initial-delay-ms: ${SYNC_SCHED_ADS_INITIAL_DELAY_MS:90000}
+      attribution-enabled: ${SYNC_SCHED_ATTRIBUTION_ENABLED:true}
+      attribution-fixed-delay-ms: ${SYNC_SCHED_ATTRIBUTION_DELAY_MS:3600000}
+      attribution-initial-delay-ms: ${SYNC_SCHED_ATTRIBUTION_INITIAL_DELAY_MS:120000}
+      report-cache-evict-min-interval-ms: ${SYNC_SCHED_REPORT_CACHE_EVICT_MIN_INTERVAL_MS:300000}
+
+    pos:
+      page-size: ${SYNC_POS_PAGE_SIZE:100}
+      max-pages-per-shop: ${SYNC_POS_MAX_PAGES_PER_SHOP:120}
+      max-pages-per-shop-full: ${SYNC_POS_MAX_PAGES_PER_SHOP_FULL:5000}
+      max-orders-per-shop: ${SYNC_POS_MAX_ORDERS_PER_SHOP:12000}
+      max-orders-per-shop-full: ${SYNC_POS_MAX_ORDERS_PER_SHOP_FULL:300000}
+      max-raw-json-chars: ${SYNC_POS_MAX_RAW_JSON_CHARS:5000}
+      max-consecutive-upsert-failures: ${SYNC_POS_MAX_CONSECUTIVE_UPSERT_FAILURES:25}
+    ads:
+      max-rows-per-account: ${SYNC_ADS_MAX_ROWS_PER_ACCOUNT:3000}
+      max-campaigns-per-account: ${SYNC_ADS_MAX_CAMPAIGNS_PER_ACCOUNT:2500}
+      max-raw-json-chars: ${SYNC_ADS_MAX_RAW_JSON_CHARS:6000}
+
+server:
+  port: ${PORT:8080}
+  tomcat:
+    max-connections: ${TOMCAT_MAX_CONNECTIONS:200}
+    accept-count: ${TOMCAT_ACCEPT_COUNT:50}
+    threads:
+      max: ${TOMCAT_MAX_THREADS:16}
+      min-spare: ${TOMCAT_MIN_SPARE_THREADS:8}
+
+logging:
+  level:
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+    com.smitgate.connector.ads.MetaAdsConnector: INFO
+    com.smitgate.connector.pos.PancakeConnector: INFO
+#use to restart:
+#1.0.0

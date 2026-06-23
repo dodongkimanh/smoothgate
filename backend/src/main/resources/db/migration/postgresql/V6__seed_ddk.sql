@@ -1,0 +1,2 @@
+-- V6: No-op — all user accounts seeded in V2.
+-- Kept for Flyway version continuity.

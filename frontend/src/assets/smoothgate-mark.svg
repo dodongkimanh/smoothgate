@@ -1,0 +1,17 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sg_mark_grad" x1="6" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+    <radialGradient id="sg_glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(20 14) rotate(40) scale(40 32)">
+      <stop offset="0" stop-color="#93C5FD" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#93C5FD" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#sg_mark_grad)"/>
+  <rect x="4" y="4" width="56" height="56" rx="18" stroke="#DBEAFE" stroke-width="1.5"/>
+  <rect x="10" y="10" width="44" height="44" rx="14" fill="url(#sg_glow)"/>
+  <path d="M20 26.2C20 22.2235 23.2235 19 27.2 19H38.3C42.0019 19 45 22.0019 45 25.7038C45 29.4057 42.0019 32.4076 38.3 32.4076H28.4C26.7431 32.4076 25.4 33.7508 25.4 35.4076C25.4 37.0645 26.7431 38.4076 28.4 38.4076H43.5" stroke="white" stroke-width="4.1" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="43.5" cy="38.4" r="3.2" fill="#E0F2FE"/>
+</svg>

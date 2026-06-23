@@ -1,0 +1,2 @@
+-- V4: No-op — tenant separation handled in V2.
+-- Kept for Flyway version continuity.

@@ -1,0 +1,13 @@
+<svg width="220" height="54" viewBox="0 0 220 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sg_grad" x1="0" y1="0" x2="54" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0EA5E9"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="52" height="52" rx="15" fill="url(#sg_grad)"/>
+  <rect x="1" y="1" width="52" height="52" rx="15" stroke="#BFDBFE" stroke-width="2"/>
+  <path d="M14 21.5C14 17.3579 17.3579 14 21.5 14H33.5C37.6421 14 41 17.3579 41 21.5C41 25.6421 37.6421 29 33.5 29H22.8C21.1431 29 19.8 30.3431 19.8 32C19.8 33.6569 21.1431 35 22.8 35H40" stroke="white" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="40" cy="35" r="3.2" fill="#DBEAFE"/>
+  <text x="66" y="33" fill="#0F172A" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="700">SmoothGate</text>
+</svg>
