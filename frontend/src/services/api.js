@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 
-// Vercel proxies /api/* → YOUR_BACKEND_URL in production.
+// Vercel proxies /api/* → smoothgate-backend.onrender.com in production.
 // In dev, Vite proxy rewrites /api → localhost:8080.
 const api = axios.create({
   baseURL: '/api',

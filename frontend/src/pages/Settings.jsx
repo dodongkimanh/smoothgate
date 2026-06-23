@@ -25,7 +25,7 @@ export default function Settings() {
 
   const defaultRedirectUri = import.meta.env.DEV
     ? 'http://localhost:8080/api/integrations/meta/oauth/callback'
-    : 'https://YOUR_BACKEND_URL/api/integrations/meta/oauth/callback'
+    : 'https://smoothgate-backend.onrender.com/api/integrations/meta/oauth/callback'
 
   const [metaForm, setMetaForm] = useState({
     appId: '',
