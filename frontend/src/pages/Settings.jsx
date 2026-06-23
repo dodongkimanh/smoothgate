@@ -55,7 +55,9 @@ export default function Settings() {
       setMetaForm({
         appId: metaSettings.appId || '',
         appSecret: '',
-        redirectUri: metaSettings.redirectUri || defaultRedirectUri,
+        redirectUri: (metaSettings.redirectUri && !metaSettings.redirectUri.includes('YOUR_BACKEND_URL'))
+          ? metaSettings.redirectUri
+          : defaultRedirectUri,
       })
     }
   }, [metaSettings, metaFormDirty])
