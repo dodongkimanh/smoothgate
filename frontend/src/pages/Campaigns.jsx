@@ -820,19 +820,10 @@ export default function Campaigns() {
                 </div>
 
                 {/* Campaigns totals summary */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="text-xs text-slate-500">Tổng chi phí quảng cáo</div>
-                    <div className="text-xl font-bold text-slate-800 mt-1">{formatCurrency(campaignTotals.totalSpend)}</div>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="text-xs text-slate-500">Tổng doanh thu</div>
-                    <div className="text-xl font-bold text-emerald-700 mt-1">{formatCurrency(campaignTotals.totalRevenue)}</div>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="text-xs text-slate-500">Tổng lợi nhuận sau quảng cáo</div>
-                    <div className="text-xl font-bold text-slate-800 mt-1">{formatCurrency(campaignTotals.totalProfitAfterAds)}</div>
-                  </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <StatCard label="Chi phí QC" value={formatCurrency(campaignTotals.totalSpend)} color="text-slate-800" />
+                  <StatCard label="Doanh thu" value={formatCurrency(campaignTotals.totalRevenue)} color="text-emerald-700" />
+                  <StatCard label="LN sau QC" value={formatCurrency(campaignTotals.totalProfitAfterAds)} color="text-slate-800" />
                 </div>
 
                 <CampaignPerformanceTable
@@ -1341,31 +1332,13 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-3 overflow-x-auto pb-1">
-        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[150px] shrink-0">
-          <div className="text-xs text-slate-500 whitespace-nowrap">Tổng chi phí quảng cáo</div>
-          <div className="text-lg font-bold text-slate-800 mt-1">{formatCurrency(totals.totalSpend)}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[130px] shrink-0">
-          <div className="text-xs text-slate-500 whitespace-nowrap">Tin nhắn liên hệ</div>
-          <div className="text-lg font-bold text-violet-700 mt-1">{formatNumber(totals.totalMessageContacts)}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[130px] shrink-0">
-          <div className="text-xs text-slate-500 whitespace-nowrap">Số điện thoại mới</div>
-          <div className="text-lg font-bold text-teal-700 mt-1">{formatNumber(totals.totalPhoneCount)}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[110px] shrink-0">
-          <div className="text-xs text-slate-500 whitespace-nowrap">Số đơn hàng</div>
-          <div className="text-lg font-bold text-blue-700 mt-1">{formatNumber(totals.totalOrderCount)}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[140px] shrink-0">
-          <div className="text-xs text-slate-500 whitespace-nowrap">Tổng lợi nhuận đơn hàng</div>
-          <div className="text-lg font-bold text-slate-800 mt-1">{formatCurrency(totals.totalOrderProfit)}</div>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[150px] shrink-0">
-          <div className="text-xs text-slate-500 whitespace-nowrap">Tổng lợi nhuận sau QC</div>
-          <div className="text-lg font-bold text-slate-800 mt-1">{formatCurrency(totals.totalProfitAfterAds)}</div>
-        </div>
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        <StatCard label="Chi phí QC" value={formatCurrency(totals.totalSpend)} color="text-slate-800" />
+        <StatCard label="Tin nhắn" value={formatNumber(totals.totalMessageContacts)} color="text-violet-700" />
+        <StatCard label="SĐT mới" value={formatNumber(totals.totalPhoneCount)} color="text-teal-700" />
+        <StatCard label="Đơn hàng" value={formatNumber(totals.totalOrderCount)} color="text-blue-700" />
+        <StatCard label="LN đơn hàng" value={formatCurrency(totals.totalOrderProfit)} color="text-slate-800" />
+        <StatCard label="LN sau QC" value={formatCurrency(totals.totalProfitAfterAds)} color="text-slate-800" />
       </div>
 
       {/* Debug: Xem dữ liệu gốc từ Meta */}
@@ -2084,5 +2057,14 @@ function EditableBudget({ objectId, dataSourceId, currentBudget }) {
       {formatCurrency(displayBudget)}
       <span className="ml-1 text-slate-300 group-hover:text-blue-500 text-[10px]">✎</span>
     </button>
+  )
+}
+
+function StatCard({ label, value, color }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <div className="text-[11px] text-slate-500 whitespace-nowrap">{label}</div>
+      <div className={`text-sm font-bold mt-0.5 whitespace-nowrap ${color}`}>{value}</div>
+    </div>
   )
 }
