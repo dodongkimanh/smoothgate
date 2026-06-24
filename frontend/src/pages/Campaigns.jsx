@@ -625,7 +625,7 @@ export default function Campaigns() {
   return (
     <div className="landscape-mobile-host">
     <div className="landscape-mobile space-y-4 animate-fade-in p-4 lg:p-0">
-      <div className="bg-white border border-slate-200 shadow-sm rounded-2xl relative" style={{ overflow: 'visible' }}>
+      <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
         {/* Title bar */}
         <div className="px-4 py-2.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -656,102 +656,26 @@ export default function Campaigns() {
           </div>
         </div>
 
-        {/* Hierarchical Filter Bar */}
-        <div className="flex overflow-x-auto border-t border-slate-200 bg-slate-50/40">
-          {FILTER_LEVELS.map((level, idx) => {
+        {/* Tab Bar */}
+        <div className="flex border-t border-slate-200">
+          {FILTER_LEVELS.map((level) => {
             const isActive = activeTab === level.id
-            const isOpen = openFilter === level.id
-            const hasDropdown = level.id !== 'ads'
             const LevelIcon = level.icon
             return (
-              <div key={level.id} className={`relative flex-1 min-w-[160px] ${idx < 3 ? 'border-r border-slate-200' : ''}`}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab(level.id)
-                    setOpenFilter(null)
-                  }}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 transition-all group ${
-                    isActive
-                      ? 'bg-gradient-to-b from-blue-50/80 to-white border-b-[3px] border-b-blue-500'
-                      : 'hover:bg-white/60 border-b-[3px] border-b-transparent'
-                  }`}
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-                    isActive
-                      ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-md shadow-blue-200/50'
-                      : 'bg-white text-slate-400 group-hover:text-slate-600 shadow-sm border border-slate-200'
-                  }`}>
-                    <LevelIcon size={16} />
-                  </div>
-                  <div className="flex-1 text-left min-w-0">
-                    <div className={`text-sm font-semibold truncate ${isActive ? 'text-blue-700' : 'text-slate-700'}`}>
-                      {level.label}
-                    </div>
-                    {hasDropdown && (
-                      <div className="text-xs mt-0.5">
-                        {level.count > 0 ? (
-                          <span className="text-emerald-600 font-medium">Đã chọn {level.count} mục</span>
-                        ) : (
-                          <span className="text-slate-400">Tất cả ({level.total})</span>
-                        )}
-                      </div>
-                    )}
-                    {!hasDropdown && (
-                      <div className="text-xs text-slate-400 mt-0.5">{level.total} quảng cáo</div>
-                    )}
-                  </div>
-                  {hasDropdown && level.count > 0 && (
-                    <span className="bg-emerald-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[1.5rem] text-center shrink-0 shadow-sm">
-                      {level.count}
-                    </span>
-                  )}
-                  {hasDropdown && (
-                    <span
-                      role="button"
-                      onClick={(e) => { e.stopPropagation(); setOpenFilter(isOpen ? null : level.id) }}
-                      className="p-1 rounded hover:bg-slate-200/60 shrink-0"
-                    >
-                      <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-                    </span>
-                  )}
-                </button>
-
-                {isOpen && (
-                  <CascadingFilterDropdown
-                    items={
-                      level.id === 'accounts'
-                        ? accounts.map(a => ({ key: a.id, name: a.name || a.externalAccountId, subtext: a.externalAccountId, status: a.platform || 'META' }))
-                        : level.id === 'campaigns'
-                        ? campaigns.map(c => ({ key: c._rowKey || c.id, name: c.name || c.id, subtext: `${c.adAccountName || ''} · ${c.id}`, status: c.status || c.effective_status }))
-                        : filteredAdSets.map(as => ({ key: as._rowKey || as.id, name: as.name || as.id, subtext: `${as.campaignName || as.campaignId || ''} · ${as.id}`, status: as.status }))
-                    }
-                    selectedIds={
-                      level.id === 'accounts' ? selectedAccountIds
-                        : level.id === 'campaigns' ? selectedCampaignIds
-                        : selectedAdSetIds
-                    }
-                    onToggle={
-                      level.id === 'accounts' ? toggleAccount
-                        : level.id === 'campaigns' ? toggleCampaign
-                        : toggleAdSet
-                    }
-                    onSelectAll={
-                      level.id === 'accounts' ? selectAllAccounts
-                        : level.id === 'campaigns' ? () => setSelectedCampaignIds(campaigns.map(c => c._rowKey || c.id))
-                        : () => setSelectedAdSetIds(filteredAdSets.map(as => as._rowKey || as.id))
-                    }
-                    onClearAll={
-                      level.id === 'accounts' ? clearAccountSelection
-                        : level.id === 'campaigns' ? clearCampaignSelection
-                        : () => setSelectedAdSetIds([])
-                    }
-                    onClose={() => setOpenFilter(null)}
-                    search={filterSearch[level.id] || ''}
-                    onSearchChange={(val) => setFilterSearch(prev => ({ ...prev, [level.id]: val }))}
-                  />
-                )}
-              </div>
+              <button
+                key={level.id}
+                type="button"
+                onClick={() => setActiveTab(level.id)}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-medium transition-all border-b-2 ${
+                  isActive
+                    ? 'border-blue-500 text-blue-700 bg-blue-50/50'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <LevelIcon size={16} />
+                <span className="hidden sm:inline">{level.label}</span>
+                <span className="text-xs text-slate-400">({level.total})</span>
+              </button>
             )
           })}
         </div>
