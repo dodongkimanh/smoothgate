@@ -478,6 +478,83 @@ export default function Dashboard() {
         })}
       </div>
 
+      {/* Biểu đồ chi tiêu theo tài khoản quảng cáo */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-800">Chi tiêu theo tài khoản quảng cáo</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              So sánh ngân sách chi tiêu giữa các tài khoản quảng cáo trong khoảng thời gian đã chọn.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Wallet size={16} className="text-blue-600" />
+            <span className="text-sm font-semibold text-gray-800">
+              Ngân Sách Đã Chi Tiêu:{' '}
+              <span className="text-blue-600">
+                {formatCurrency(accountSpendData.reduce((sum, a) => sum + Number(a.totalSpend || 0), 0))}
+              </span>
+            </span>
+          </div>
+        </div>
+        <div className="p-6">
+          {accountSpendData.length === 0 ? (
+            <div className="h-[200px] rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-500 text-sm gap-2">
+              <AlertCircle size={16} /> Chưa có dữ liệu chi tiêu tài khoản
+            </div>
+          ) : (
+            <div style={{ height: Math.max(120, accountSpendData.length * 48 + 40) }}>
+              <Bar
+                plugins={[ChartDataLabels]}
+                data={{
+                  labels: accountSpendData.map((a) => a.adAccountName || `#${a.adAccountId}`),
+                  datasets: [
+                    {
+                      label: 'Chi tiêu',
+                      data: accountSpendData.map((a) => Number(a.totalSpend || 0)),
+                      backgroundColor: [
+                        'rgba(37, 99, 235, 0.8)',
+                        'rgba(239, 68, 68, 0.8)',
+                        'rgba(245, 158, 11, 0.8)',
+                        'rgba(139, 92, 246, 0.8)',
+                        'rgba(20, 184, 166, 0.8)',
+                        'rgba(236, 72, 153, 0.8)',
+                        'rgba(99, 102, 241, 0.8)',
+                        'rgba(34, 197, 94, 0.8)',
+                      ],
+                      borderRadius: 6,
+                      barThickness: 28,
+                    },
+                  ],
+                }}
+                options={{
+                  indexAxis: 'y',
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  layout: { padding: { right: 120 } },
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: (ctx) => formatCurrency(ctx.raw) } },
+                    datalabels: {
+                      anchor: 'end', align: 'right', color: '#1e293b',
+                      font: { weight: '600', size: 12 },
+                      formatter: (v) => new Intl.NumberFormat('vi-VN').format(v),
+                    },
+                  },
+                  scales: {
+                    x: {
+                      grid: { color: '#EEF2FF' }, beginAtZero: true,
+                      ticks: { callback: (v) => { if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`; if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`; return v } },
+                    },
+                    y: { grid: { display: false } },
+                  },
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-xl p-6 shadow-sm border border-gray-100">
           <h3 className="font-semibold text-gray-800 mb-4">Chi phí và doanh thu theo ngày</h3>
@@ -569,100 +646,6 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
-        </div>
-      </div>
-
-      {/* Biểu đồ chi tiêu theo tài khoản quảng cáo */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h3 className="font-semibold text-gray-800">Chi tiêu theo tài khoản quảng cáo</h3>
-            <p className="text-xs text-gray-500 mt-1">
-              So sánh ngân sách chi tiêu giữa các tài khoản quảng cáo trong khoảng thời gian đã chọn.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Wallet size={16} className="text-blue-600" />
-            <span className="text-sm font-semibold text-gray-800">
-              Ngân Sách Đã Chi Tiêu:{' '}
-              <span className="text-blue-600">
-                {formatCurrency(accountSpendData.reduce((sum, a) => sum + Number(a.totalSpend || 0), 0))}
-              </span>
-            </span>
-          </div>
-        </div>
-        <div className="p-6">
-          {accountSpendData.length === 0 ? (
-            <div className="h-[200px] rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-500 text-sm gap-2">
-              <AlertCircle size={16} /> Chưa có dữ liệu chi tiêu tài khoản
-            </div>
-          ) : (
-            <div style={{ height: Math.max(120, accountSpendData.length * 48 + 40) }}>
-              <Bar
-                plugins={[ChartDataLabels]}
-                data={{
-                  labels: accountSpendData.map((a) => a.adAccountName || `#${a.adAccountId}`),
-                  datasets: [
-                    {
-                      label: 'Chi tiêu',
-                      data: accountSpendData.map((a) => Number(a.totalSpend || 0)),
-                      backgroundColor: [
-                        'rgba(37, 99, 235, 0.8)',
-                        'rgba(239, 68, 68, 0.8)',
-                        'rgba(245, 158, 11, 0.8)',
-                        'rgba(139, 92, 246, 0.8)',
-                        'rgba(20, 184, 166, 0.8)',
-                        'rgba(236, 72, 153, 0.8)',
-                        'rgba(99, 102, 241, 0.8)',
-                        'rgba(34, 197, 94, 0.8)',
-                      ],
-                      borderRadius: 6,
-                      barThickness: 28,
-                    },
-                  ],
-                }}
-                options={{
-                  indexAxis: 'y',
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  layout: {
-                    padding: { right: 120 },
-                  },
-                  plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                      callbacks: {
-                        label: (ctx) => formatCurrency(ctx.raw),
-                      },
-                    },
-                    datalabels: {
-                      anchor: 'end',
-                      align: 'right',
-                      color: '#1e293b',
-                      font: { weight: '600', size: 12 },
-                      formatter: (v) => new Intl.NumberFormat('vi-VN').format(v),
-                    },
-                  },
-                  scales: {
-                    x: {
-                      grid: { color: '#EEF2FF' },
-                      beginAtZero: true,
-                      ticks: {
-                        callback: (v) => {
-                          if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
-                          if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`
-                          return v
-                        },
-                      },
-                    },
-                    y: {
-                      grid: { display: false },
-                    },
-                  },
-                }}
-              />
-            </div>
-          )}
         </div>
       </div>
 
