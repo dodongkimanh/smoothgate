@@ -176,17 +176,16 @@ body {
   }
 
   .landscape-mobile {
-    transform: rotate(90deg);
+    transform: rotate(90deg) scale(0.5);
     transform-origin: top left;
-    width: 100vh;
-    height: 100vw;
+    width: 200vh;
+    height: 200vw;
     position: absolute;
     top: 0;
     left: 100vw;
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    font-size: 15%;
   }
 }
 
