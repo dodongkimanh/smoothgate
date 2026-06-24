@@ -625,7 +625,7 @@ export default function Campaigns() {
   return (
     <div className="landscape-mobile-host">
     <div className="landscape-mobile space-y-4 animate-fade-in p-4 lg:p-0">
-      <div className="bg-white border border-slate-200 shadow-sm rounded-2xl" style={{ overflow: 'visible' }}>
+      <div className="bg-white border border-slate-200 shadow-sm rounded-2xl relative" style={{ overflow: 'visible' }}>
         {/* Title bar */}
         <div className="px-4 py-2.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -669,11 +669,7 @@ export default function Campaigns() {
                   type="button"
                   onClick={() => {
                     setActiveTab(level.id)
-                    if (hasDropdown) {
-                      setOpenFilter(isOpen ? null : level.id)
-                    } else {
-                      setOpenFilter(null)
-                    }
+                    setOpenFilter(null)
                   }}
                   className={`w-full flex items-center gap-3 px-4 py-3.5 transition-all group ${
                     isActive
@@ -711,7 +707,13 @@ export default function Campaigns() {
                     </span>
                   )}
                   {hasDropdown && (
-                    <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                    <span
+                      role="button"
+                      onClick={(e) => { e.stopPropagation(); setOpenFilter(isOpen ? null : level.id) }}
+                      className="p-1 rounded hover:bg-slate-200/60 shrink-0"
+                    >
+                      <ChevronDown size={14} className={`text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                    </span>
                   )}
                 </button>
 
