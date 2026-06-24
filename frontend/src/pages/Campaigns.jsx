@@ -1341,30 +1341,30 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-500">Tổng chi phí quảng cáo</div>
-          <div className="text-xl font-bold text-slate-800 mt-1">{formatCurrency(totals.totalSpend)}</div>
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[150px] shrink-0">
+          <div className="text-xs text-slate-500 whitespace-nowrap">Tổng chi phí quảng cáo</div>
+          <div className="text-lg font-bold text-slate-800 mt-1">{formatCurrency(totals.totalSpend)}</div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-500">Tin nhắn liên hệ (chiến dịch)</div>
-          <div className="text-xl font-bold text-violet-700 mt-1">{formatNumber(totals.totalMessageContacts)}</div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[130px] shrink-0">
+          <div className="text-xs text-slate-500 whitespace-nowrap">Tin nhắn liên hệ</div>
+          <div className="text-lg font-bold text-violet-700 mt-1">{formatNumber(totals.totalMessageContacts)}</div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-500">Số điện thoại mới</div>
-          <div className="text-xl font-bold text-teal-700 mt-1">{formatNumber(totals.totalPhoneCount)}</div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[130px] shrink-0">
+          <div className="text-xs text-slate-500 whitespace-nowrap">Số điện thoại mới</div>
+          <div className="text-lg font-bold text-teal-700 mt-1">{formatNumber(totals.totalPhoneCount)}</div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-500">Số đơn hàng</div>
-          <div className="text-xl font-bold text-blue-700 mt-1">{formatNumber(totals.totalOrderCount)}</div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[110px] shrink-0">
+          <div className="text-xs text-slate-500 whitespace-nowrap">Số đơn hàng</div>
+          <div className="text-lg font-bold text-blue-700 mt-1">{formatNumber(totals.totalOrderCount)}</div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-500">Tổng lợi nhuận đơn hàng</div>
-          <div className="text-xl font-bold text-slate-800 mt-1">{formatCurrency(totals.totalOrderProfit)}</div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[140px] shrink-0">
+          <div className="text-xs text-slate-500 whitespace-nowrap">Tổng lợi nhuận đơn hàng</div>
+          <div className="text-lg font-bold text-slate-800 mt-1">{formatCurrency(totals.totalOrderProfit)}</div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="text-xs text-slate-500">Tổng lợi nhuận sau quảng cáo</div>
-          <div className="text-xl font-bold text-slate-800 mt-1">{formatCurrency(totals.totalProfitAfterAds)}</div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3 min-w-[150px] shrink-0">
+          <div className="text-xs text-slate-500 whitespace-nowrap">Tổng lợi nhuận sau QC</div>
+          <div className="text-lg font-bold text-slate-800 mt-1">{formatCurrency(totals.totalProfitAfterAds)}</div>
         </div>
       </div>
 
