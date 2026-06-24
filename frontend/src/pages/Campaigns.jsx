@@ -2008,20 +2008,19 @@ function DeliveryStatus({ status, childrenAds }) {
 }
 
 function EditableBudget({ objectId, dataSourceId, currentBudget }) {
+  const budgetVnd = Math.round(Number(currentBudget || 0) / 100)
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
-  const [displayBudget, setDisplayBudget] = useState(Number(currentBudget || 0))
-  const [loading, setLoading] = useState(false)
-  const inputRef = useRef(null)
+  const [displayBudget, setDisplayBudget] = useState(budgetVnd)
+  const [saving, setSaving] = useState(false)
 
   const formatCurrency = (v) => new Intl.NumberFormat('vi-VN', {
     style: 'currency', currency: 'VND', maximumFractionDigits: 0,
   }).format(Number(v || 0))
 
   const handleEdit = () => {
-    setValue(String(Math.round(displayBudget)))
+    setValue(String(displayBudget))
     setEditing(true)
-    setTimeout(() => inputRef.current?.select(), 50)
   }
 
   const handleSave = async () => {
@@ -2030,39 +2029,48 @@ function EditableBudget({ objectId, dataSourceId, currentBudget }) {
       toast.error('Ngân sách không hợp lệ')
       return
     }
-    setLoading(true)
+    setSaving(true)
     try {
       await updateMetaBudget(objectId, dataSourceId, newBudget * 100, 'daily_budget')
       setDisplayBudget(newBudget)
-      setEditing(false)
-      toast.success('Đã cập nhật ngân sách')
+      toast.success('Đã cập nhật ngân sách: ' + formatCurrency(newBudget))
     } catch (err) {
       toast.error(err.response?.data?.message || 'Không thể cập nhật ngân sách')
     } finally {
-      setLoading(false)
+      setSaving(false)
+      setEditing(false)
     }
   }
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') handleSave()
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSave()
+    }
     if (e.key === 'Escape') setEditing(false)
   }
 
   if (editing) {
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
         <input
-          ref={inputRef}
           type="number"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          onBlur={() => !loading && setEditing(false)}
-          disabled={loading}
-          className="w-24 px-2 py-1 border border-blue-400 rounded text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+          disabled={saving}
+          className="w-28 px-2 py-1 border-2 border-blue-500 rounded text-xs text-right focus:outline-none"
           autoFocus
+          onFocus={(e) => e.target.select()}
         />
         <span className="text-[10px] text-slate-400">đ</span>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="text-[10px] px-1.5 py-0.5 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+        >
+          OK
+        </button>
       </div>
     )
   }
