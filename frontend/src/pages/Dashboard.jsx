@@ -100,8 +100,11 @@ function getPresetRange(presetId) {
   const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0)
 
   switch (presetId) {
-    case 'LIFETIME':
-      return { from: '2023-01-01', to: toDateKeySafe(today) }
+    case 'LIFETIME': {
+      const lifetime = new Date(today)
+      lifetime.setMonth(lifetime.getMonth() - 24)
+      return { from: toDateKeySafe(lifetime), to: toDateKeySafe(today) }
+    }
     case 'TODAY':
       return { from: toDateKeySafe(today), to: toDateKeySafe(today) }
     case 'YESTERDAY': {
