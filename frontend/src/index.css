@@ -186,7 +186,7 @@ body {
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    font-size: 60%;
+    font-size: 40%;
   }
 }
 

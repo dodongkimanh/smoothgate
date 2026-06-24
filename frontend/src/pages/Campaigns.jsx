@@ -679,7 +679,7 @@ export default function Campaigns() {
                 }`}
               >
                 <LevelIcon size={16} />
-                <span className="hidden sm:inline">{level.label}</span>
+                <span>{level.label}</span>
                 <span className="text-xs text-slate-400">({level.total})</span>
               </button>
             )
