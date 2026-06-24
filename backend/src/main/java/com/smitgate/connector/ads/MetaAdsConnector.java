@@ -662,6 +662,7 @@ public class MetaAdsConnector implements AdsConnector {
                 "created_time",
                 "status",
                 "effective_status",
+                "creative{thumbnail_url}",
                 "adset{id,name,campaign_id,campaign{name},daily_budget,lifetime_budget}",
                 insightsField
         );
@@ -741,6 +742,7 @@ public class MetaAdsConnector implements AdsConnector {
                 Map<String, Object> item = new HashMap<>();
                 item.put("adId", ad.path("id").asText(""));
                 item.put("adName", ad.path("name").asText(""));
+                item.put("thumbnailUrl", ad.path("creative").path("thumbnail_url").asText(""));
                 item.put("adAccountId", normalizedAccountId);
                 item.put("adAccountName", adAccountName);
                 item.put("createdDate", ad.path("created_time").asText(""));
