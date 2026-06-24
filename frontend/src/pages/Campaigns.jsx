@@ -894,6 +894,7 @@ export default function Campaigns() {
               <AdSetsTable
                 rows={filteredAdSets}
                 adSetMetrics={adSetMetrics}
+                adsPerformance={adsPerformance}
                 selectedAdSetIds={selectedAdSetIds}
                 onToggleAdSet={toggleAdSet}
                 onSelectAllAdSets={() => setSelectedAdSetIds(filteredAdSets.map(as => as._rowKey || as.id))}
@@ -1098,7 +1099,7 @@ function CampaignFunnelPanel({ selectedCampaign, selectedReportCampaign, campaig
   )
 }
 
-function AdSetsTable({ rows, adSetMetrics, selectedAdSetIds, onToggleAdSet, onSelectAllAdSets, onClearAdSetSelection, onClickAdSet, statusFilter, onStatusFilterChange, statusCounts, totalCount }) {
+function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onToggleAdSet, onSelectAllAdSets, onClearAdSetSelection, onClickAdSet, statusFilter, onStatusFilterChange, statusCounts, totalCount }) {
   const adSetSort = useSort()
   const allChecked = rows.length > 0 && rows.every(r => selectedAdSetIds.includes(r._rowKey || r.id))
   const someChecked = selectedAdSetIds.length > 0
@@ -1262,7 +1263,10 @@ function AdSetsTable({ rows, adSetMetrics, selectedAdSetIds, onToggleAdSet, onSe
                       <td className="px-4 py-2.5 text-slate-700 align-top">{row.adAccountName || '-'}</td>
                       <td className="px-4 py-2.5 text-slate-700 align-top">{row.campaignName || row.campaignId || '-'}</td>
                       <td className="px-4 py-2.5 align-top">
-                        <DeliveryStatus status={row.status} />
+                        <DeliveryStatus
+                          status={row.status}
+                          childrenAds={adsPerformance?.filter(ad => ad.adSetId === row.id)}
+                        />
                       </td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(metrics.comments)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(messages)}</td>
@@ -1965,8 +1969,23 @@ function MetaToggle({ objectId, dataSourceId, status }) {
   )
 }
 
-function DeliveryStatus({ status }) {
+function DeliveryStatus({ status, childrenAds }) {
   const s = (status || '').toUpperCase()
+
+  if (s === 'ACTIVE' && childrenAds && childrenAds.length > 0) {
+    const allChildrenOff = childrenAds.every(ad =>
+      (ad.delivery || ad.status || ad.effective_status || '').toUpperCase() !== 'ACTIVE'
+    )
+    if (allChildrenOff) {
+      return (
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-gray-400 inline-block" />
+          <span className="text-xs text-gray-500">Quảng cáo đang tắt</span>
+        </span>
+      )
+    }
+  }
+
   if (s === 'ACTIVE') {
     return <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-700">ACTIVE</span>
   }
@@ -1974,7 +1993,7 @@ function DeliveryStatus({ status }) {
     return (
       <span className="flex items-center gap-1">
         <span className="w-2 h-2 rounded-full bg-gray-400 inline-block" />
-        <span className="text-xs text-gray-500">Quảng cáo đang tắt</span>
+        <span className="text-xs text-gray-500">Đang tắt</span>
       </span>
     )
   }
