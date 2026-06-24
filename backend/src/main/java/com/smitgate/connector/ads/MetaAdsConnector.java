@@ -897,7 +897,7 @@ public class MetaAdsConnector implements AdsConnector {
             raw = lifetimeBudget.asText("0");
         }
         try {
-            return new BigDecimal(raw).divide(BigDecimal.valueOf(100), 0, java.math.RoundingMode.HALF_UP);
+            return new BigDecimal(raw);
         } catch (Exception ignored) {
             return BigDecimal.ZERO;
         }

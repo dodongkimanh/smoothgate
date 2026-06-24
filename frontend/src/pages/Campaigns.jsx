@@ -2031,7 +2031,7 @@ function EditableBudget({ objectId, dataSourceId, currentBudget }) {
     }
     setSaving(true)
     try {
-      await updateMetaBudget(objectId, dataSourceId, newBudget * 100, 'daily_budget')
+      await updateMetaBudget(objectId, dataSourceId, newBudget, 'daily_budget')
       setDisplayBudget(newBudget)
       toast.success('Đã cập nhật ngân sách: ' + formatCurrency(newBudget))
     } catch (err) {
