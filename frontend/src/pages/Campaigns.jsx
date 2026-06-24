@@ -1233,6 +1233,10 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
                 <SortableTh field="adAccountName" label="Tài khoản QC" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} align="left" />
                 <SortableTh field="campaignName" label="Chiến dịch" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} align="left" />
                 <SortableTh field="status" label="Phân phối" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} align="left" />
+                <SortableTh field="spend" label="Số tiền đã chi tiêu" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
+                <SortableTh field="cpm" label="CPM" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
+                <SortableTh field="ctr" label="CTR" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
+                <SortableTh field="frequency" label="Tần suất" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="comments" label="Bình luận" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="messageContacts" label="Tin nhắn mới" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="costPerMessage" label="Chi phí tin nhắn" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
@@ -1242,7 +1246,6 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
                 <SortableTh field="orderCount" label="Số đơn hàng" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="sales" label="Doanh thu" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="orderProfit" label="Lợi nhuận đơn hàng" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="spend" label="Số tiền đã tiêu" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="profitAfterAds" label="Lợi nhuận sau QC" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
               </tr>
@@ -1300,6 +1303,16 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
                           childrenAds={adsPerformance?.filter(ad => ad.adSetId === row.id)}
                         />
                       </td>
+                      <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(spend)}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-700 align-top">
+                        {(() => { const ads = (adsPerformance || []).filter(a => a.adSetId === row.id); const imp = ads.reduce((s,a) => s + Number(a.impressions||0), 0); return imp > 0 ? formatCurrency(spend / imp * 1000) : '-' })()}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-slate-700 align-top">
+                        {(() => { const ads = (adsPerformance || []).filter(a => a.adSetId === row.id); const imp = ads.reduce((s,a) => s + Number(a.impressions||0), 0); const cl = ads.reduce((s,a) => s + Number(a.clicks||0), 0); return imp > 0 ? (cl / imp * 100).toFixed(2) + '%' : '-' })()}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-slate-700 align-top">
+                        {(() => { const ads = (adsPerformance || []).filter(a => a.adSetId === row.id); const imp = ads.reduce((s,a) => s + Number(a.impressions||0), 0); const rc = ads.reduce((s,a) => s + Number(a.reach||0), 0); return rc > 0 ? (imp / rc).toFixed(2) : '-' })()}
+                      </td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(metrics.comments)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(messages)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{messages > 0 ? formatCurrency(costPerMessage) : '-'}</td>
@@ -1309,7 +1322,6 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
                       <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">{formatNumber(metrics.orderCount)}</td>
                       <td className="px-4 py-2.5 text-right text-emerald-700 align-top font-medium">{formatCurrency(metrics.sales)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(orderProfit)}</td>
-                      <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(spend)}</td>
                       <td className="px-4 py-2.5 text-right text-orange-700 align-top font-medium">{Number(metrics.orderCount || 0) > 0 ? formatCurrency(spend / Number(metrics.orderCount)) : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(profitAfterAds)}</td>
                     </tr>
