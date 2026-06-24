@@ -1414,6 +1414,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                 <SortableTh field="createdDate" label="Ngày tạo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
                 <SortableTh field="delivery" label="Phân phối" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
                 <SortableTh field="budget" label="Ngân sách" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+                <SortableTh field="spend" label="Số tiền đã chi tiêu" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="comments" label="Bình luận" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="messageContacts" label="Tin nhắn mới" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="costPerMessage" label="Chi phí tin nhắn mới" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
@@ -1423,7 +1424,6 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                 <SortableTh field="orderCount" label="Số đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="sales" label="Doanh thu" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="orderProfit" label="Lợi nhuận đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="spend" label="Số tiền đã chi tiêu" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="profitAfterAds" label="Lợi nhuận sau quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
               </tr>
@@ -1492,7 +1492,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                       <td className="px-4 py-2.5 text-slate-700 align-top whitespace-nowrap">
                         {row.createdDate ? new Date(row.createdDate).toLocaleDateString('vi-VN') : '-'}
                       </td>
-                      <td className="px-4 py-2.5 text-slate-700 align-top whitespace-nowrap">{row.delivery || '-'}</td>
+                      <td className="px-4 py-2.5 align-top whitespace-nowrap"><DeliveryStatus status={row.delivery} /></td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">
                         <EditableBudget
                           objectId={row.adSetId || row.adId}
@@ -1500,6 +1500,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                           currentBudget={row.budget}
                         />
                       </td>
+                      <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(spend)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(row.comments)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(messages)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{messages > 0 ? formatCurrency(costPerMessage) : '-'}</td>
@@ -1509,7 +1510,6 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                       <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">{formatNumber(row.orderCount)}</td>
                       <td className="px-4 py-2.5 text-right text-emerald-700 align-top font-medium">{formatCurrency(revenue)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(orderProfit)}</td>
-                      <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(spend)}</td>
                       <td className="px-4 py-2.5 text-right text-orange-700 align-top font-medium">{Number(row.orderCount || 0) > 0 ? formatCurrency(spend / Number(row.orderCount)) : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(profitAfterAds)}</td>
                     </tr>
