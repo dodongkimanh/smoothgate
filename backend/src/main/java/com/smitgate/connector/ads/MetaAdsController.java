@@ -186,5 +186,17 @@ public class MetaAdsController {
                 metaAdsConnector.debugInsightsRaw(tenantId, dataSourceId, adAccountId, from, to, campaignId)
         ));
     }
+
+    @PostMapping("/ads/toggle-status")
+    public ResponseEntity<ApiResponse<Map<String, String>>> toggleAdStatus(
+            HttpServletRequest request,
+            @RequestBody Map<String, String> body) {
+        Long tenantId = (Long) request.getAttribute("tenantId");
+        String adId = body.get("adId");
+        Long dataSourceId = Long.parseLong(body.get("dataSourceId"));
+        String newStatus = body.get("status");
+        metaAdsConnector.updateAdStatus(tenantId, dataSourceId, adId, newStatus);
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("adId", adId, "status", newStatus)));
+    }
 }
 

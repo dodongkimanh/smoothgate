@@ -997,6 +997,25 @@ public class MetaAdsConnector implements AdsConnector {
     }
 
     /**
+    public void updateAdStatus(Long tenantId, Long dataSourceId, String adId, String status) {
+        DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
+        String token = dataSourceService.decryptSecret(ds);
+
+        URI uri = UriComponentsBuilder
+                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + adId)
+                .queryParam("status", status)
+                .queryParam("access_token", token)
+                .build().encode().toUri();
+
+        webClientBuilder.build()
+                .post()
+                .uri(uri)
+                .retrieve()
+                .bodyToMono(String.class)
+                .block(Duration.ofSeconds(30));
+    }
+
+    /**
      * Debug endpoint: returns raw Meta API insights at campaign-level and ad-level
      * so the customer can verify exactly what Meta returns vs what we display.
      */

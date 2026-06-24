@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   getSelectedAdAccounts,
   getMetaCampaigns,
@@ -8,7 +8,9 @@ import {
   getMetaAdsDebug,
   getCampaignPerformance,
   getCampaignFunnel,
+  toggleAdStatus,
 } from '../services/api'
+import toast from 'react-hot-toast'
 import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bug, ChevronDown, ChevronRight, DollarSign, Layers3, Megaphone, Network, Phone, RefreshCw, Search, ShoppingCart, TrendingUp, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -1403,6 +1405,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                     className="w-4 h-4 rounded"
                   />
                 </th>
+                <th className="w-14 px-2 py-2.5 border-b border-slate-200 text-center text-xs uppercase tracking-wide font-semibold">Tắt/B</th>
                 <SortableTh field="adName" label="Quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
                 <SortableTh field="adAccountName" label="Tài khoản quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
                 <SortableTh field="createdDate" label="Ngày tạo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
@@ -1449,6 +1452,13 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                           checked={isChecked}
                           onChange={() => toggleAd(row._rowKey)}
                           className="w-4 h-4 rounded"
+                        />
+                      </td>
+                      <td className="px-2 py-2.5 align-top text-center">
+                        <AdToggle
+                          adId={row.adId}
+                          dataSourceId={row.dataSourceId}
+                          isActive={row.delivery === 'ACTIVE'}
                         />
                       </td>
                       <td className="px-4 py-2.5 text-slate-700 align-top">
@@ -1908,5 +1918,38 @@ function DataTable({ icon, title, columns, rows, emptyText }) {
         </table>
       </div>
     </div>
+  )
+}
+
+function AdToggle({ adId, dataSourceId, isActive }) {
+  const [on, setOn] = useState(isActive)
+  const [loading, setLoading] = useState(false)
+
+  const handleToggle = async () => {
+    const newStatus = on ? 'PAUSED' : 'ACTIVE'
+    setLoading(true)
+    try {
+      await toggleAdStatus(adId, dataSourceId, newStatus)
+      setOn(!on)
+      toast.success(`Quảng cáo ${newStatus === 'ACTIVE' ? 'đã bật' : 'đã tắt'}`)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Không thể đổi trạng thái')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleToggle}
+      disabled={loading}
+      className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${
+        loading ? 'opacity-50 cursor-wait' : 'cursor-pointer'
+      } ${on ? 'bg-blue-500' : 'bg-gray-300'}`}
+    >
+      <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
+        on ? 'translate-x-5' : 'translate-x-0'
+      }`} />
+    </button>
   )
 }
