@@ -996,7 +996,6 @@ public class MetaAdsConnector implements AdsConnector {
         return toDecimal(value.toString());
     }
 
-    /**
     public void updateBudget(Long tenantId, Long dataSourceId, String objectId, Long budgetCents, String budgetType) {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
         String token = dataSourceService.decryptSecret(ds);
