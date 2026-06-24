@@ -124,9 +124,9 @@ export const getHealth = () => api.get('/ops/health')
 export const getSyncJobs = () => api.get('/ops/sync-jobs')
 export const triggerSync = (type) => api.post(`/ops/sync-jobs/run?type=${type}`)
 
-// Ads toggle
-export const toggleAdStatus = (adId, dataSourceId, status) =>
-  api.post('/integrations/meta/ads/toggle-status', { adId, dataSourceId, status })
+// Meta toggle (campaigns, adsets, ads)
+export const toggleMetaStatus = (objectId, dataSourceId, status) =>
+  api.post('/integrations/meta/toggle-status', { objectId, dataSourceId, status })
 
 // Agent
 export const triggerAgentAnalysis = () => api.post('/agent/analyze')

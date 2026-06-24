@@ -187,16 +187,16 @@ public class MetaAdsController {
         ));
     }
 
-    @PostMapping("/ads/toggle-status")
-    public ResponseEntity<ApiResponse<Map<String, String>>> toggleAdStatus(
+    @PostMapping("/toggle-status")
+    public ResponseEntity<ApiResponse<Map<String, String>>> toggleStatus(
             HttpServletRequest request,
             @RequestBody Map<String, String> body) {
         Long tenantId = (Long) request.getAttribute("tenantId");
-        String adId = body.get("adId");
+        String objectId = body.get("objectId");
         Long dataSourceId = Long.parseLong(body.get("dataSourceId"));
         String newStatus = body.get("status");
-        metaAdsConnector.updateAdStatus(tenantId, dataSourceId, adId, newStatus);
-        return ResponseEntity.ok(ApiResponse.ok(Map.of("adId", adId, "status", newStatus)));
+        metaAdsConnector.updateAdStatus(tenantId, dataSourceId, objectId, newStatus);
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("objectId", objectId, "status", newStatus)));
     }
 }
 

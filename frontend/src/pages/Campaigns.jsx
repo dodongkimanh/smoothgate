@@ -8,7 +8,7 @@ import {
   getMetaAdsDebug,
   getCampaignPerformance,
   getCampaignFunnel,
-  toggleAdStatus,
+  toggleMetaStatus,
 } from '../services/api'
 import toast from 'react-hot-toast'
 import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bug, ChevronDown, ChevronRight, DollarSign, Layers3, Megaphone, Network, Phone, RefreshCw, Search, ShoppingCart, TrendingUp, Users } from 'lucide-react'
@@ -976,6 +976,7 @@ function CampaignPerformanceTable({ rows, reportCampaignMap, selectedCampaign, s
                   className="w-4 h-4 rounded"
                 />
               </th>
+              <th className="w-14 px-2 py-2.5 border-b border-slate-200 text-center text-xs uppercase tracking-wide font-semibold">Tắt/B</th>
               <SortableTh field="name" label="Chiến dịch" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
               <SortableTh field="adAccountName" label="Tài khoản quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
               <SortableTh field="status" label="Phân phối" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
@@ -1019,6 +1020,13 @@ function CampaignPerformanceTable({ rows, reportCampaignMap, selectedCampaign, s
                         className="w-4 h-4 rounded"
                       />
                     </td>
+                    <td className="px-2 py-2.5 align-top text-center">
+                      <MetaToggle
+                        objectId={row.id}
+                        dataSourceId={row.dataSourceId}
+                        status={row.status || row.effective_status}
+                      />
+                    </td>
                     <td className="px-4 py-2.5 text-slate-700 align-top cursor-pointer" onClick={() => onSelectCampaign(row)}>
                       <div className="font-medium text-slate-800">{row.name || '-'}</div>
                       <div className="text-xs text-slate-400 font-mono mt-0.5">{row.id || '-'}</div>
@@ -1027,7 +1035,9 @@ function CampaignPerformanceTable({ rows, reportCampaignMap, selectedCampaign, s
                       <div className="font-medium text-slate-800">{row.adAccountName || '-'}</div>
                       <div className="font-mono text-xs text-slate-500 mt-0.5">{row.adAccountId || '-'}</div>
                     </td>
-                    <td className="px-4 py-2.5 text-slate-700 align-top whitespace-nowrap">{row.status || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-700 align-top whitespace-nowrap">
+                      <DeliveryStatus status={row.status || row.effective_status} />
+                    </td>
                     <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(report?.newContacts)}</td>
                     <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(report?.messageContacts)}</td>
                     <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(report?.validOrders)}</td>
@@ -1186,6 +1196,7 @@ function AdSetsTable({ rows, adSetMetrics, selectedAdSetIds, onToggleAdSet, onSe
                     className="w-4 h-4 rounded"
                   />
                 </th>
+                <th className="w-14 px-2 py-2.5 border-b border-slate-200 text-center text-xs uppercase tracking-wide font-semibold">Tắt/B</th>
                 <SortableTh field="name" label="Nhóm quảng cáo" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} align="left" />
                 <SortableTh field="adAccountName" label="Tài khoản QC" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} align="left" />
                 <SortableTh field="campaignName" label="Chiến dịch" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} align="left" />
@@ -1237,6 +1248,13 @@ function AdSetsTable({ rows, adSetMetrics, selectedAdSetIds, onToggleAdSet, onSe
                           className="w-4 h-4 rounded"
                         />
                       </td>
+                      <td className="px-2 py-2.5 align-top text-center">
+                        <MetaToggle
+                          objectId={row.id}
+                          dataSourceId={row.dataSourceId}
+                          status={row.status}
+                        />
+                      </td>
                       <td className="px-4 py-2.5 text-slate-700 align-top cursor-pointer" onClick={() => onClickAdSet(row)}>
                         <div className="font-medium text-slate-800 hover:text-blue-600">{row.name || '-'}</div>
                         <div className="text-xs text-slate-400 font-mono mt-0.5">{row.id || '-'}</div>
@@ -1244,15 +1262,7 @@ function AdSetsTable({ rows, adSetMetrics, selectedAdSetIds, onToggleAdSet, onSe
                       <td className="px-4 py-2.5 text-slate-700 align-top">{row.adAccountName || '-'}</td>
                       <td className="px-4 py-2.5 text-slate-700 align-top">{row.campaignName || row.campaignId || '-'}</td>
                       <td className="px-4 py-2.5 align-top">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
-                          (row.status || '').toUpperCase() === 'ACTIVE'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : (row.status || '').toUpperCase() === 'PAUSED'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-slate-100 text-slate-500'
-                        }`}>
-                          {row.status || 'UNKNOWN'}
-                        </span>
+                        <DeliveryStatus status={row.status} />
                       </td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(metrics.comments)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(messages)}</td>
@@ -1455,10 +1465,10 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                         />
                       </td>
                       <td className="px-2 py-2.5 align-top text-center">
-                        <AdToggle
-                          adId={row.adId}
+                        <MetaToggle
+                          objectId={row.adId}
                           dataSourceId={row.dataSourceId}
-                          isActive={row.delivery === 'ACTIVE'}
+                          status={row.delivery}
                         />
                       </td>
                       <td className="px-4 py-2.5 text-slate-700 align-top">
@@ -1921,7 +1931,8 @@ function DataTable({ icon, title, columns, rows, emptyText }) {
   )
 }
 
-function AdToggle({ adId, dataSourceId, isActive }) {
+function MetaToggle({ objectId, dataSourceId, status }) {
+  const isActive = (status || '').toUpperCase() === 'ACTIVE'
   const [on, setOn] = useState(isActive)
   const [loading, setLoading] = useState(false)
 
@@ -1929,9 +1940,9 @@ function AdToggle({ adId, dataSourceId, isActive }) {
     const newStatus = on ? 'PAUSED' : 'ACTIVE'
     setLoading(true)
     try {
-      await toggleAdStatus(adId, dataSourceId, newStatus)
+      await toggleMetaStatus(objectId, dataSourceId, newStatus)
       setOn(!on)
-      toast.success(`Quảng cáo ${newStatus === 'ACTIVE' ? 'đã bật' : 'đã tắt'}`)
+      toast.success(newStatus === 'ACTIVE' ? 'Đã bật' : 'Đã tắt')
     } catch (err) {
       toast.error(err.response?.data?.message || 'Không thể đổi trạng thái')
     } finally {
@@ -1952,4 +1963,20 @@ function AdToggle({ adId, dataSourceId, isActive }) {
       }`} />
     </button>
   )
+}
+
+function DeliveryStatus({ status }) {
+  const s = (status || '').toUpperCase()
+  if (s === 'ACTIVE') {
+    return <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-700">ACTIVE</span>
+  }
+  if (s === 'PAUSED') {
+    return (
+      <span className="flex items-center gap-1">
+        <span className="w-2 h-2 rounded-full bg-gray-400 inline-block" />
+        <span className="text-xs text-gray-500">Quảng cáo đang tắt</span>
+      </span>
+    )
+  }
+  return <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-500">{status || 'UNKNOWN'}</span>
 }
