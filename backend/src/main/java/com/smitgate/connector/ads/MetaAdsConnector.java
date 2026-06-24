@@ -754,7 +754,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("messageContacts", messageContacts);
                 item.put("costPerResult", costPerResult);
                 item.put("averageCost", cpm);
-                item.put("phoneCount", leadPhones);
+                item.put("phoneCount", 0L);
                 item.put("sales", BigDecimal.ZERO);
                 item.put("metaPurchaseValue", metaPurchaseValue);
                 item.put("spend", spend);
@@ -844,13 +844,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("orderProfit", shippingFee);
                 item.put("orderCount", orderCount);
             }
-            if (phoneCount > 0) {
-                // Keep the higher of Meta lead count vs POS distinct phone count.
-                // Meta may report more leads (e.g. form fills) than POS has matched orders,
-                // so we should not blindly replace a higher Meta count with a lower POS count.
-                long metaLeadCount = toLong(item.getOrDefault("phoneCount", 0L));
-                item.put("phoneCount", Math.max(metaLeadCount, phoneCount));
-            }
+            item.put("phoneCount", phoneCount);
         }
     }
 
