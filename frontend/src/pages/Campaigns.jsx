@@ -772,22 +772,35 @@ export default function Campaigns() {
               <DataTable
                 icon={<Network size={16} />}
                 title="Danh sách tài khoản quảng cáo"
-                columns={['Chọn', 'Tên tài khoản', 'Mã tài khoản', 'Nền tảng']}
-                rows={filteredAccounts.map((row) => ({
-                  key: row.id,
-                  selected: selectedAccountIds.includes(row.id),
-                  values: [
-                    <input
-                      type="checkbox"
-                      checked={selectedAccountIds.includes(row.id)}
-                      onChange={() => toggleAccount(row.id)}
-                      className="w-4 h-4"
-                    />,
-                    row.name || '',
-                    row.externalAccountId || '',
-                    row.platform || 'META',
-                  ],
-                }))}
+                columns={['Chọn', 'Tên tài khoản', 'Mã tài khoản', 'Số tiền đã chi tiêu']}
+                rows={filteredAccounts.map((row) => {
+                  const accountSpend = reportCampaigns
+                    .filter(c => String(c.campaignExternalId || '').length > 0 &&
+                      campaigns.some(camp => String(camp.id) === String(c.campaignExternalId) &&
+                        (camp.adAccountId === row.externalAccountId || camp.adAccountId === 'act_' + row.externalAccountId)))
+                    .reduce((sum, c) => sum + Number(c.totalSpend || 0), 0)
+                  const spendFromAds = adsPerformance
+                    .filter(ad => ad.adAccountId === row.externalAccountId || ad.adAccountId === 'act_' + row.externalAccountId)
+                    .reduce((sum, ad) => sum + Number(ad.spend || 0), 0)
+                  const totalSpend = Math.max(accountSpend, spendFromAds)
+                  return {
+                    key: row.id,
+                    selected: selectedAccountIds.includes(row.id),
+                    values: [
+                      <input
+                        type="checkbox"
+                        checked={selectedAccountIds.includes(row.id)}
+                        onChange={() => toggleAccount(row.id)}
+                        className="w-4 h-4"
+                      />,
+                      row.name || '',
+                      row.externalAccountId || '',
+                      <span className="font-semibold text-slate-800">
+                        {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(totalSpend)}
+                      </span>,
+                    ],
+                  }
+                })}
                 emptyText="Không tìm thấy tài khoản phù hợp"
               />
             </div>
