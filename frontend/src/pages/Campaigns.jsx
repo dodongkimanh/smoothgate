@@ -842,6 +842,7 @@ export default function Campaigns() {
                 <CampaignPerformanceTable
                   rows={pagedCampaigns}
                   reportCampaignMap={reportCampaignMap}
+                  adsPerformance={adsPerformance}
                   selectedCampaign={selectedCampaign}
                   selectedCampaignIds={selectedCampaignIds}
                   onToggleCampaign={toggleCampaign}
@@ -943,7 +944,19 @@ export default function Campaigns() {
   )
 }
 
-function CampaignPerformanceTable({ rows, reportCampaignMap, selectedCampaign, selectedCampaignIds, onToggleCampaign, onSelectAllCampaigns, onClearCampaignSelection, onSelectCampaign, sortField, sortDir, onSortToggle }) {
+function CampaignPerformanceTable({ rows, reportCampaignMap, adsPerformance, selectedCampaign, selectedCampaignIds, onToggleCampaign, onSelectAllCampaigns, onClearCampaignSelection, onSelectCampaign, sortField, sortDir, onSortToggle }) {
+  const campaignAdsMetrics = useMemo(() => {
+    const map = {}
+    ;(adsPerformance || []).forEach(ad => {
+      const cid = ad.campaignId || ''
+      if (!map[cid]) map[cid] = { impressions: 0, clicks: 0, reach: 0, spend: 0 }
+      map[cid].impressions += Number(ad.impressions || 0)
+      map[cid].clicks += Number(ad.clicks || 0)
+      map[cid].reach += Number(ad.reach || 0)
+      map[cid].spend += Number(ad.spend || 0)
+    })
+    return map
+  }, [adsPerformance])
   const formatCurrency = (value) => new Intl.NumberFormat('vi-VN', {
     style: 'currency',
     currency: 'VND',
@@ -986,11 +999,14 @@ function CampaignPerformanceTable({ rows, reportCampaignMap, selectedCampaign, s
               <SortableTh field="name" label="Chiến dịch" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
               <SortableTh field="adAccountName" label="Tài khoản quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
               <SortableTh field="status" label="Phân phối" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
+              <SortableTh field="totalSpend" label="Số tiền đã chi tiêu" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+              <SortableTh field="cpm" label="CPM" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+              <SortableTh field="ctr" label="CTR" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+              <SortableTh field="frequency" label="Tần suất" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
               <SortableTh field="newContacts" label="SĐT" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
               <SortableTh field="messageContacts" label="Tin nhắn" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
               <SortableTh field="validOrders" label="Đơn xác nhận" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
               <SortableTh field="totalRevenue" label="Doanh thu" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-              <SortableTh field="totalSpend" label="Chi phí quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
               <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
               <SortableTh field="profitAfterAds" label="Lợi nhuận sau quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
             </tr>
@@ -1045,11 +1061,20 @@ function CampaignPerformanceTable({ rows, reportCampaignMap, selectedCampaign, s
                     <td className="px-4 py-2.5 text-slate-700 align-top whitespace-nowrap">
                       <DeliveryStatus status={row.status || row.effective_status} />
                     </td>
+                    <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(spend)}</td>
+                    <td className="px-4 py-2.5 text-right text-slate-700 align-top">
+                      {(() => { const m = campaignAdsMetrics[row.id] || {}; return m.impressions > 0 ? formatCurrency(m.spend / m.impressions * 1000) : '-' })()}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-700 align-top">
+                      {(() => { const m = campaignAdsMetrics[row.id] || {}; return m.impressions > 0 ? (m.clicks / m.impressions * 100).toFixed(2) + '%' : '-' })()}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-700 align-top">
+                      {(() => { const m = campaignAdsMetrics[row.id] || {}; return m.reach > 0 ? (m.impressions / m.reach).toFixed(2) : '-' })()}
+                    </td>
                     <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(report?.newContacts)}</td>
                     <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(report?.messageContacts)}</td>
                     <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(report?.validOrders)}</td>
                     <td className="px-4 py-2.5 text-right text-emerald-700 align-top font-medium">{formatCurrency(revenue)}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(spend)}</td>
                     <td className="px-4 py-2.5 text-right text-orange-700 align-top font-medium">{Number(report?.validOrders || 0) > 0 ? formatCurrency(spend / Number(report.validOrders)) : '-'}</td>
                     <td className="px-4 py-2.5 text-right align-top font-medium text-slate-800">{formatCurrency(profitAfterAds)}</td>
                   </tr>

@@ -651,7 +651,7 @@ public class MetaAdsConnector implements AdsConnector {
         }
 
         String insightsField = String.format(
-            "insights.time_range({'since':'%s','until':'%s'}){spend,impressions,clicks,cpc,cpm,actions,cost_per_action_type,action_values}",
+            "insights.time_range({'since':'%s','until':'%s'}){spend,impressions,clicks,reach,cpc,cpm,actions,cost_per_action_type,action_values}",
             safeFrom,
             safeTo
         );
@@ -714,6 +714,7 @@ public class MetaAdsConnector implements AdsConnector {
                 BigDecimal spend = parseInsightDecimal(insightsRow, "spend");
                 long impressions = parseInsightLong(insightsRow, "impressions");
                 long clicks = parseInsightLong(insightsRow, "clicks");
+                long reach = parseInsightLong(insightsRow, "reach");
                 BigDecimal cpc = parseInsightDecimal(insightsRow, "cpc");
                 BigDecimal cpm = parseInsightDecimal(insightsRow, "cpm");
 
@@ -763,6 +764,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("spend", spend);
                 item.put("impressions", impressions);
                 item.put("clicks", clicks);
+                item.put("reach", reach);
                 item.put("cpc", cpc);
                 item.put("cpm", cpm);
                 rows.add(item);
