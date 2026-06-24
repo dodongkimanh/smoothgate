@@ -1245,7 +1245,7 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
                 <SortableTh field="phoneRate" label="Tỷ lệ ra SĐT" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="orderCount" label="Số đơn hàng" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="sales" label="Doanh thu" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="orderProfit" label="Lợi nhuận đơn hàng" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
+                <SortableTh field="orderProfit" label="Lợi nhuận đã nhận" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="profitAfterAds" label="Lợi nhuận sau QC" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
               </tr>
@@ -1389,7 +1389,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
         <StatCard label="Tin nhắn" value={formatNumber(totals.totalMessageContacts)} color="text-violet-700" />
         <StatCard label="SĐT mới" value={formatNumber(totals.totalPhoneCount)} color="text-teal-700" />
         <StatCard label="Đơn hàng" value={formatNumber(totals.totalOrderCount)} color="text-blue-700" />
-        <StatCard label="LN đơn hàng" value={formatCurrency(totals.totalOrderProfit)} color="text-slate-800" />
+        <StatCard label="LN đã nhận" value={formatCurrency(totals.totalOrderProfit)} color="text-slate-800" />
         <StatCard label="LN sau QC" value={formatCurrency(totals.totalProfitAfterAds)} color="text-slate-800" />
       </div>
 
@@ -1460,7 +1460,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                 <SortableTh field="phoneRate" label="Tỷ lệ ra SĐT" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="orderCount" label="Số đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="sales" label="Doanh thu" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="orderProfit" label="Lợi nhuận đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+                <SortableTh field="orderProfit" label="Lợi nhuận đã nhận" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="profitAfterAds" label="Lợi nhuận sau quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
               </tr>
