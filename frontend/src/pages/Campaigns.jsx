@@ -2008,7 +2008,7 @@ function DeliveryStatus({ status, childrenAds }) {
 }
 
 function EditableBudget({ objectId, dataSourceId, currentBudget }) {
-  const budgetVnd = Math.round(Number(currentBudget || 0) / 100)
+  const budgetVnd = Math.round(Number(currentBudget || 0))
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
   const [displayBudget, setDisplayBudget] = useState(budgetVnd)
