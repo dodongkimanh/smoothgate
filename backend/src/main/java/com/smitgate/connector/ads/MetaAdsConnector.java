@@ -743,6 +743,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("adId", ad.path("id").asText(""));
                 item.put("adName", ad.path("name").asText(""));
                 item.put("thumbnailUrl", ad.path("creative").path("thumbnail_url").asText(""));
+                item.put("dataSourceId", dataSourceId);
                 item.put("adAccountId", normalizedAccountId);
                 item.put("adAccountName", adAccountName);
                 item.put("createdDate", ad.path("created_time").asText(""));
