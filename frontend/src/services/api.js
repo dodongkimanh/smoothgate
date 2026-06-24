@@ -127,6 +127,8 @@ export const triggerSync = (type) => api.post(`/ops/sync-jobs/run?type=${type}`)
 // Meta toggle (campaigns, adsets, ads)
 export const toggleMetaStatus = (objectId, dataSourceId, status) =>
   api.post('/integrations/meta/toggle-status', { objectId, dataSourceId, status })
+export const updateMetaBudget = (objectId, dataSourceId, budgetCents, budgetType) =>
+  api.post('/integrations/meta/update-budget', { objectId, dataSourceId, budgetCents, budgetType })
 
 // Agent
 export const triggerAgentAnalysis = () => api.post('/agent/analyze')

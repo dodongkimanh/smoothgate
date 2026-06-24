@@ -997,6 +997,24 @@ public class MetaAdsConnector implements AdsConnector {
     }
 
     /**
+    public void updateBudget(Long tenantId, Long dataSourceId, String objectId, Long budgetCents, String budgetType) {
+        DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
+        String token = dataSourceService.decryptSecret(ds);
+
+        URI uri = UriComponentsBuilder
+                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + objectId)
+                .queryParam(budgetType, budgetCents.toString())
+                .queryParam("access_token", token)
+                .build().encode().toUri();
+
+        webClientBuilder.build()
+                .post()
+                .uri(uri)
+                .retrieve()
+                .bodyToMono(String.class)
+                .block(Duration.ofSeconds(30));
+    }
+
     public void updateAdStatus(Long tenantId, Long dataSourceId, String adId, String status) {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
         String token = dataSourceService.decryptSecret(ds);

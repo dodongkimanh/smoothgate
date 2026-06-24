@@ -187,6 +187,19 @@ public class MetaAdsController {
         ));
     }
 
+    @PostMapping("/update-budget")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateBudget(
+            HttpServletRequest request,
+            @RequestBody Map<String, Object> body) {
+        Long tenantId = (Long) request.getAttribute("tenantId");
+        String objectId = (String) body.get("objectId");
+        Long dataSourceId = Long.parseLong(body.get("dataSourceId").toString());
+        Long budgetCents = Long.parseLong(body.get("budgetCents").toString());
+        String budgetType = (String) body.getOrDefault("budgetType", "daily_budget");
+        metaAdsConnector.updateBudget(tenantId, dataSourceId, objectId, budgetCents, budgetType);
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("objectId", objectId, "budgetCents", budgetCents)));
+    }
+
     @PostMapping("/toggle-status")
     public ResponseEntity<ApiResponse<Map<String, String>>> toggleStatus(
             HttpServletRequest request,

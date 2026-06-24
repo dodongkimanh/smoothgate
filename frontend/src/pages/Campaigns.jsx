@@ -9,6 +9,7 @@ import {
   getCampaignPerformance,
   getCampaignFunnel,
   toggleMetaStatus,
+  updateMetaBudget,
 } from '../services/api'
 import toast from 'react-hot-toast'
 import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bug, ChevronDown, ChevronRight, DollarSign, Layers3, Megaphone, Network, Phone, RefreshCw, Search, ShoppingCart, TrendingUp, Users } from 'lucide-react'
@@ -1503,7 +1504,13 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                         {row.createdDate ? new Date(row.createdDate).toLocaleDateString('vi-VN') : '-'}
                       </td>
                       <td className="px-4 py-2.5 text-slate-700 align-top whitespace-nowrap">{row.delivery || '-'}</td>
-                      <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatCurrency(row.budget)}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-700 align-top">
+                        <EditableBudget
+                          objectId={row.adSetId || row.adId}
+                          dataSourceId={row.dataSourceId}
+                          currentBudget={row.budget}
+                        />
+                      </td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(row.comments)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(messages)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{messages > 0 ? formatCurrency(costPerMessage) : '-'}</td>
@@ -1998,4 +2005,76 @@ function DeliveryStatus({ status, childrenAds }) {
     )
   }
   return <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-500">{status || 'UNKNOWN'}</span>
+}
+
+function EditableBudget({ objectId, dataSourceId, currentBudget }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const [displayBudget, setDisplayBudget] = useState(Number(currentBudget || 0))
+  const [loading, setLoading] = useState(false)
+  const inputRef = useRef(null)
+
+  const formatCurrency = (v) => new Intl.NumberFormat('vi-VN', {
+    style: 'currency', currency: 'VND', maximumFractionDigits: 0,
+  }).format(Number(v || 0))
+
+  const handleEdit = () => {
+    setValue(String(Math.round(displayBudget)))
+    setEditing(true)
+    setTimeout(() => inputRef.current?.select(), 50)
+  }
+
+  const handleSave = async () => {
+    const newBudget = parseInt(value, 10)
+    if (isNaN(newBudget) || newBudget < 0) {
+      toast.error('Ngân sách không hợp lệ')
+      return
+    }
+    setLoading(true)
+    try {
+      await updateMetaBudget(objectId, dataSourceId, newBudget * 100, 'daily_budget')
+      setDisplayBudget(newBudget)
+      setEditing(false)
+      toast.success('Đã cập nhật ngân sách')
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Không thể cập nhật ngân sách')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleSave()
+    if (e.key === 'Escape') setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          ref={inputRef}
+          type="number"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={() => !loading && setEditing(false)}
+          disabled={loading}
+          className="w-24 px-2 py-1 border border-blue-400 rounded text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-500"
+          autoFocus
+        />
+        <span className="text-[10px] text-slate-400">đ</span>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      onClick={handleEdit}
+      className="text-right hover:bg-blue-50 hover:text-blue-700 px-2 py-0.5 rounded transition-colors cursor-pointer group"
+      title="Nhấn để sửa ngân sách"
+    >
+      {formatCurrency(displayBudget)}
+      <span className="ml-1 text-slate-300 group-hover:text-blue-500 text-[10px]">✎</span>
+    </button>
+  )
 }
