@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getOverview, getCampaignPerformance, getCampaignFunnel, getAccountSpend } from '../services/api'
 import {
@@ -658,19 +658,11 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="min-w-[280px]">
-            <select
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={selectedCampaign?.campaignId || ''}
-              onChange={(e) => setSelectedCampaignId(Number(e.target.value))}
-              disabled={campaignsData.length === 0}
-            >
-              {campaignsData.length === 0 && <option value="">Chưa có chiến dịch</option>}
-              {campaignsData.map((campaign) => (
-                <option key={campaign.campaignId} value={campaign.campaignId}>
-                  {campaign.campaignName} ({campaign.campaignId})
-                </option>
-              ))}
-            </select>
+            <CampaignSearchInput
+              campaigns={campaignsData}
+              selectedId={selectedCampaign?.campaignId}
+              onSelect={(id) => setSelectedCampaignId(id)}
+            />
           </div>
         </div>
 
@@ -706,6 +698,62 @@ function FunnelStat({ title, value, icon: Icon, color }) {
         </span>
       </div>
       <div className="mt-2 text-lg font-semibold text-gray-800">{value}</div>
+    </div>
+  )
+}
+
+function CampaignSearchInput({ campaigns, selectedId, onSelect }) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  const selected = campaigns.find(c => c.campaignId === selectedId)
+
+  const filtered = campaigns.filter(c => {
+    if (!query) return true
+    const q = query.toLowerCase()
+    return (c.campaignName || '').toLowerCase().includes(q) ||
+      String(c.campaignId || '').includes(q) ||
+      String(c.campaignExternalId || '').includes(q)
+  })
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        type="text"
+        value={open ? query : (selected ? `${selected.campaignName} (${selected.campaignExternalId || selected.campaignId})` : '')}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+        onFocus={() => { setQuery(''); setOpen(true) }}
+        placeholder="Nhập ID hoặc tên chiến dịch..."
+        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-[250px] overflow-y-auto bg-white rounded-lg border border-gray-200 shadow-xl">
+          {filtered.slice(0, 20).map((c) => (
+            <button
+              key={c.campaignId}
+              type="button"
+              onClick={() => { onSelect(c.campaignId); setOpen(false); setQuery('') }}
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors border-b border-gray-50 ${
+                c.campaignId === selectedId ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+              }`}
+            >
+              <div className="font-medium truncate">{c.campaignName}</div>
+              <div className="text-xs text-gray-400 font-mono">
+                ID: {c.campaignExternalId || c.campaignId}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
