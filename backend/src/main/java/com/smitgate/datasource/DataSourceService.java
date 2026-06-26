@@ -181,19 +181,24 @@ public class DataSourceService {
     }
 
     private String handleDecryptionFailure(DataSource ds, Exception originalError) {
+        String fallbackKey = poscakeFallbackApiKey;
+        if (fallbackKey == null || fallbackKey.isBlank()) {
+            fallbackKey = System.getenv("POSCAKE_FALLBACK_API_KEY");
+        }
+        final String resolvedKey = fallbackKey;
         log.warn("Decryption failed for datasource {} (type={}) — fallback available: {}",
-                ds.getId(), ds.getType(), poscakeFallbackApiKey != null && !poscakeFallbackApiKey.isBlank());
-        if (ds.getType() == DataSource.Type.PANCAKE_POS && poscakeFallbackApiKey != null && !poscakeFallbackApiKey.isBlank()) {
+                ds.getId(), ds.getType(), resolvedKey != null && !resolvedKey.isBlank());
+        if (ds.getType() == DataSource.Type.PANCAKE_POS && resolvedKey != null && !resolvedKey.isBlank()) {
             try {
                 new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
                     DataSource fresh = dataSourceRepository.findById(ds.getId()).orElse(ds);
-                    fresh.setSecretEncrypted(encryptionUtil.encrypt(poscakeFallbackApiKey));
+                    fresh.setSecretEncrypted(encryptionUtil.encrypt(resolvedKey));
                     fresh.setLastErrorMsg(null);
                     fresh.setStatus(DataSource.Status.ACTIVE);
                     dataSourceRepository.saveAndFlush(fresh);
                 });
                 log.info("Re-encrypted Poscake API key for datasource {} using fallback", ds.getId());
-                return poscakeFallbackApiKey;
+                return resolvedKey;
             } catch (Exception saveErr) {
                 log.error("Failed to save re-encrypted key for datasource {}: {}", ds.getId(), saveErr.getMessage());
             }
