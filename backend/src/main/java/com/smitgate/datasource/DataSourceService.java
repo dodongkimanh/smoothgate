@@ -2,6 +2,8 @@ package com.smitgate.datasource;
 
 import com.smitgate.common.EncryptionUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
@@ -16,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DataSourceService {
@@ -26,6 +29,9 @@ public class DataSourceService {
     private final DataSourceRepository dataSourceRepository;
     private final EncryptionUtil encryptionUtil;
     private final CacheManager cacheManager;
+
+    @Value("${app.poscake.fallback-api-key:}")
+    private String poscakeFallbackApiKey;
 
     private static final String SOFT_DELETED_MARKER = "\"softDeleted\":true";
 
@@ -163,6 +169,20 @@ public class DataSourceService {
     }
 
     public String decryptSecret(DataSource ds) {
-        return ds.getSecretEncrypted() != null ? encryptionUtil.decrypt(ds.getSecretEncrypted()) : null;
+        if (ds.getSecretEncrypted() == null) return null;
+        try {
+            return encryptionUtil.decrypt(ds.getSecretEncrypted());
+        } catch (Exception e) {
+            log.warn("Decryption failed for datasource {} — attempting re-encrypt with fallback key", ds.getId());
+            if (ds.getType() == DataSource.Type.PANCAKE_POS && poscakeFallbackApiKey != null && !poscakeFallbackApiKey.isBlank()) {
+                ds.setSecretEncrypted(encryptionUtil.encrypt(poscakeFallbackApiKey));
+                ds.setLastErrorMsg(null);
+                ds.setStatus(DataSource.Status.ACTIVE);
+                dataSourceRepository.save(ds);
+                log.info("Re-encrypted Poscake API key for datasource {} using fallback", ds.getId());
+                return poscakeFallbackApiKey;
+            }
+            throw new RuntimeException("Decryption failed and no fallback available", e);
+        }
     }
 }

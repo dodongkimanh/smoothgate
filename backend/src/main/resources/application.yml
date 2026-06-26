@@ -57,6 +57,7 @@ app:
   poscake:
     base-url: ${POSCAKE_BASE_URL:https://pos.pages.fm/api/v1}
     timestamp-source-timezone: ${POSCAKE_TIMESTAMP_SOURCE_TIMEZONE:UTC}
+    fallback-api-key: ${POSCAKE_FALLBACK_API_KEY:}
 
   sync:
     pos:
