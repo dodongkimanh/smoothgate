@@ -168,12 +168,14 @@ public class DataSourceService {
         }
     }
 
+    @Transactional
     public String decryptSecret(DataSource ds) {
         if (ds.getSecretEncrypted() == null) return null;
         try {
             return encryptionUtil.decrypt(ds.getSecretEncrypted());
         } catch (Exception e) {
-            log.warn("Decryption failed for datasource {} — attempting re-encrypt with fallback key", ds.getId());
+            log.warn("Decryption failed for datasource {} (type={}) — attempting re-encrypt with fallback key (available={})",
+                    ds.getId(), ds.getType(), poscakeFallbackApiKey != null && !poscakeFallbackApiKey.isBlank());
             if (ds.getType() == DataSource.Type.PANCAKE_POS && poscakeFallbackApiKey != null && !poscakeFallbackApiKey.isBlank()) {
                 ds.setSecretEncrypted(encryptionUtil.encrypt(poscakeFallbackApiKey));
                 ds.setLastErrorMsg(null);

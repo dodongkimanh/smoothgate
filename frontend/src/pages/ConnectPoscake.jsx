@@ -25,7 +25,7 @@ const STEP_SELECT = 'select'
 export default function ConnectPoscake() {
   const queryClient = useQueryClient()
   const [step, setStep] = useState(STEP_INPUT)
-  const [apiKey, setApiKey] = useState('')
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('poscake_api_key') || '')
   const [shopName, setShopName] = useState('')
   const [dataSourceId, setDataSourceId] = useState(null)
   const [availableShops, setAvailableShops] = useState([])
@@ -45,9 +45,9 @@ export default function ConnectPoscake() {
       const { dataSourceId: dsId, shops } = res.data.data
       setDataSourceId(dsId)
       setAvailableShops(shops || [])
-      // Pre-select all shops by default
       setSelectedShopIds((shops || []).map((s) => s.id))
       setStep(STEP_SELECT)
+      localStorage.setItem('poscake_api_key', apiKey)
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Kết nối thất bại. Kiểm tra API key và thử lại.')
