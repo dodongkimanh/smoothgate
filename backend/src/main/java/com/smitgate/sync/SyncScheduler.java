@@ -60,7 +60,7 @@ public class SyncScheduler {
         List<DataSource> sources;
         try {
             sources = dataSourceRepository
-                    .findByTypeAndStatus(DataSource.Type.PANCAKE_POS, DataSource.Status.ACTIVE);
+                    .findByTypeAndStatusIn(DataSource.Type.PANCAKE_POS, SYNCABLE_STATUSES);
         } catch (DataAccessException ex) {
             log.warn("Skip POS scheduled sync due to DB connection issue: {}", ex.getMessage());
             return;
@@ -74,6 +74,12 @@ public class SyncScheduler {
                 log.info("Synced {} orders for tenant {} datasource {}", count, ds.getTenantId(), ds.getId());
                 if (count > 0) {
                     hasDataChange = true;
+                }
+                if (ds.getStatus() == DataSource.Status.ERROR) {
+                    ds.setStatus(DataSource.Status.ACTIVE);
+                    ds.setLastErrorMsg(null);
+                    dataSourceRepository.save(ds);
+                    log.info("Auto-recovered datasource {} from ERROR to ACTIVE", ds.getId());
                 }
             } catch (Exception e) {
                 log.error("Order sync failed for datasource {}: {}", ds.getId(), e.getMessage());
