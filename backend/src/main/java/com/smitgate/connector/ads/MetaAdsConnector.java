@@ -663,7 +663,7 @@ public class MetaAdsConnector implements AdsConnector {
                 "status",
                 "effective_status",
                 "creative{thumbnail_url,effective_object_story_id}",
-                "adset{id,name,campaign_id,campaign{name},daily_budget,lifetime_budget}",
+                "adset{id,name,campaign_id,campaign{name},daily_budget,lifetime_budget,effective_status}",
                 insightsField
         );
 
@@ -754,6 +754,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("campaignName", adset.path("campaign").path("name").asText(""));
                 item.put("adSetId", rowAdSetId);
                 item.put("adSetName", adset.path("name").asText(""));
+                item.put("adSetStatus", adset.path("effective_status").asText(""));
                 item.put("budget", parseBudget(adset.path("daily_budget"), adset.path("lifetime_budget")));
                 item.put("comments", comments);
                 item.put("messageContacts", messageContacts);
