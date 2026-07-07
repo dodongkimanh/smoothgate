@@ -101,3 +101,12 @@ services:
         value: "-XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=30 -XX:+ExitOnOutOfMemoryError"
       - key: TOMCAT_MAX_THREADS
         value: "16"
+      # AI campaign monitoring agent (Claude API analysis -> Telegram report)
+      - key: APP_AGENT_ENABLED
+        value: "true"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
