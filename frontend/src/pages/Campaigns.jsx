@@ -115,6 +115,14 @@ function buildUniqueKey(adAccountId, id) {
   return `${adAccountId || 'unknown'}:${id || 'unknown'}`
 }
 
+// An ad set reporting status ACTIVE is not really delivering if every ad inside it is off.
+function isAdSetEffectivelyActive(adSet, adsPerformance) {
+  if ((adSet.status || '').toUpperCase() !== 'ACTIVE') return false
+  const childrenAds = (adsPerformance || []).filter(ad => ad.adSetId === adSet.id)
+  if (childrenAds.length === 0) return true
+  return childrenAds.some(ad => (ad.delivery || ad.status || ad.effective_status || '').toUpperCase() === 'ACTIVE')
+}
+
 function useSort(defaultField = null, defaultDir = null) {
   const [sortField, setSortField] = useState(defaultField)
   const [sortDir, setSortDir] = useState(defaultDir) // 'asc' | 'desc' | null
@@ -396,10 +404,11 @@ export default function Campaigns() {
     const counts = {}
     adSets.forEach((as) => {
       const s = (as.status || 'UNKNOWN').toUpperCase()
+      if (s === 'ACTIVE' && !isAdSetEffectivelyActive(as, adsPerformance)) return
       counts[s] = (counts[s] || 0) + 1
     })
     return counts
-  }, [adSets])
+  }, [adSets, adsPerformance])
 
   useEffect(() => {
     setCampaignPage(1)
@@ -440,6 +449,7 @@ export default function Campaigns() {
     }
     const matchStatus = adSetStatusFilter === 'ALL' || (item.status || '').toUpperCase() === adSetStatusFilter
     if (!matchStatus) return false
+    if (adSetStatusFilter === 'ACTIVE' && !isAdSetEffectivelyActive(item, adsPerformance)) return false
     return true
   })
 
@@ -1243,8 +1253,8 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
                 <SortableTh field="phoneCount" label="SĐT mới" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="costPerPhone" label="Chi phí SĐT" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="phoneRate" label="Tỷ lệ ra SĐT" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="orderCount" label="Số đơn hàng" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="sales" label="Doanh thu" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
+                <SortableTh field="orderCount" label="Số Đơn Chốt" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
+                <SortableTh field="sales" label="Doanh số" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="orderProfit" label="Lợi nhuận đã nhận" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="profitAfterAds" label="Lợi nhuận sau QC" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
@@ -1458,8 +1468,8 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                 <SortableTh field="phoneCount" label="Số điện thoại mới" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="costPerPhone" label="Chi phí số điện thoại" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="phoneRate" label="Tỷ lệ ra SĐT" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="orderCount" label="Số đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="sales" label="Doanh thu" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+                <SortableTh field="orderCount" label="Số Đơn Chốt" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+                <SortableTh field="sales" label="Doanh số" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="orderProfit" label="Lợi nhuận đã nhận" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="profitAfterAds" label="Lợi nhuận sau quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
