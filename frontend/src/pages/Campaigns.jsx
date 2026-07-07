@@ -31,6 +31,7 @@ function dateKey(date) {
 
 const CAMPAIGN_PAGE_SIZE = 50
 const ADS_PAGE_SIZE = 50
+const ADSET_PAGE_SIZE = 50
 
 const DATE_PRESETS = [
   { id: 'LIFETIME', label: 'Trọn đời' },
@@ -1144,6 +1145,7 @@ function CampaignFunnelPanel({ selectedCampaign, selectedReportCampaign, campaig
 
 function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onToggleAdSet, onSelectAllAdSets, onClearAdSetSelection, onClickAdSet, statusFilter, onStatusFilterChange, statusCounts, totalCount }) {
   const adSetSort = useSort()
+  const [adSetPage, setAdSetPage] = useState(1)
   const allChecked = rows.length > 0 && rows.every(r => selectedAdSetIds.includes(r._rowKey || r.id))
   const someChecked = selectedAdSetIds.length > 0
 
@@ -1189,6 +1191,15 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
       }
     })
   }, [rows, adSetSort.sortField, adSetSort.sortDir, adSetMetrics])
+
+  useEffect(() => {
+    setAdSetPage(1)
+  }, [rows, statusFilter])
+
+  const adSetTotalPages = Math.max(1, Math.ceil(sortedRows.length / ADSET_PAGE_SIZE))
+  const adSetPageSafe = Math.min(adSetPage, adSetTotalPages)
+  const adSetPageStart = (adSetPageSafe - 1) * ADSET_PAGE_SIZE
+  const pagedRows = sortedRows.slice(adSetPageStart, adSetPageStart + ADSET_PAGE_SIZE)
 
   return (
     <div className="space-y-3">
@@ -1265,14 +1276,14 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
               </tr>
             </thead>
             <tbody>
-              {sortedRows.length === 0 ? (
+              {pagedRows.length === 0 ? (
                 <tr>
                   <td colSpan={19} className="px-4 py-8 text-center text-gray-400">
                     Không có nhóm quảng cáo cho điều kiện đang chọn
                   </td>
                 </tr>
               ) : (
-                sortedRows.map((row) => {
+                pagedRows.map((row) => {
                   const key = row._rowKey || row.id
                   const isChecked = selectedAdSetIds.includes(key)
                   const metrics = adSetMetrics[key] || {}
@@ -1347,6 +1358,33 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
           </table>
         </div>
       </div>
+
+      {sortedRows.length > 0 && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-1">
+          <div className="text-xs text-slate-500">
+            Hiển thị {adSetPageStart + 1}-{Math.min(adSetPageStart + ADSET_PAGE_SIZE, sortedRows.length)} / {sortedRows.length} nhóm quảng cáo
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 disabled:opacity-50"
+              disabled={adSetPageSafe <= 1}
+              onClick={() => setAdSetPage((p) => Math.max(1, p - 1))}
+            >
+              Trang trước
+            </button>
+            <span className="text-xs text-slate-500">Trang {adSetPageSafe}/{adSetTotalPages}</span>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 disabled:opacity-50"
+              disabled={adSetPageSafe >= adSetTotalPages}
+              onClick={() => setAdSetPage((p) => Math.min(adSetTotalPages, p + 1))}
+            >
+              Trang sau
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
