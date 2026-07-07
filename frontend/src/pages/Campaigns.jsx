@@ -583,7 +583,7 @@ export default function Campaigns() {
     adsPerformance.forEach((ad) => {
       const key = buildUniqueKey(ad.adAccountId, ad.adSetId)
       if (!map[key]) {
-        map[key] = { spend: 0, messageContacts: 0, phoneCount: 0, sales: 0, orderProfit: 0, comments: 0, orderCount: 0 }
+        map[key] = { spend: 0, messageContacts: 0, phoneCount: 0, sales: 0, orderProfit: 0, comments: 0, orderCount: 0, profitOrderCount: 0 }
       }
       map[key].spend += Number(ad.spend || 0)
       map[key].messageContacts += Number(ad.messageContacts || 0)
@@ -592,6 +592,7 @@ export default function Campaigns() {
       map[key].orderProfit += Number(ad.orderProfit || 0)
       map[key].comments += Number(ad.comments || 0)
       map[key].orderCount += Number(ad.orderCount || 0)
+      map[key].profitOrderCount += Number(ad.profitOrderCount || 0)
     })
     return map
   }, [adsPerformance])
@@ -613,6 +614,7 @@ export default function Campaigns() {
         case 'phoneRate': { const msg = Number(row.messageContacts || 0); return msg > 0 ? Number(row.phoneCount || 0) / msg : 0 }
         case 'orderCount': return Number(row.orderCount || 0)
         case 'sales': return Number(row.sales || 0)
+        case 'profitOrderCount': return Number(row.profitOrderCount || 0)
         case 'orderProfit': return Number(row.orderProfit || 0)
         case 'spend': return Number(row.spend || 0)
         case 'costPerOrder': { const o = Number(row.orderCount || 0); return o > 0 ? Number(row.spend || 0) / o : 0 }
@@ -1178,6 +1180,7 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
         case 'phoneRate': return messages > 0 ? phones / messages : 0
         case 'orderCount': return Number(metrics.orderCount || 0)
         case 'sales': return Number(metrics.sales || 0)
+        case 'profitOrderCount': return Number(metrics.profitOrderCount || 0)
         case 'orderProfit': return Number(metrics.orderProfit || 0)
         case 'spend': return spend
         case 'costPerOrder': { const o = Number(metrics.orderCount || 0); return o > 0 ? spend / o : 0 }
@@ -1255,7 +1258,7 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
                 <SortableTh field="phoneRate" label="Tỷ lệ ra SĐT" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="orderCount" label="Số Đơn Chốt" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="sales" label="Doanh số" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="orderCount" label="Đơn Đã Gửi" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
+                <SortableTh field="profitOrderCount" label="Đơn Đã Gửi" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="orderProfit" label="Lợi nhuận đã nhận" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
                 <SortableTh field="profitAfterAds" label="Lợi nhuận sau QC" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
@@ -1332,7 +1335,7 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatPercent(phoneRate)}</td>
                       <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">{formatNumber(metrics.orderCount)}</td>
                       <td className="px-4 py-2.5 text-right text-emerald-700 align-top font-medium">{formatCurrency(metrics.sales)}</td>
-                      <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">{formatNumber(metrics.orderCount)}</td>
+                      <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">{formatNumber(metrics.profitOrderCount)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(orderProfit)}</td>
                       <td className="px-4 py-2.5 text-right text-orange-700 align-top font-medium">{Number(metrics.orderCount || 0) > 0 ? formatCurrency(spend / Number(metrics.orderCount)) : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(profitAfterAds)}</td>
@@ -1472,7 +1475,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                 <SortableTh field="phoneRate" label="Tỷ lệ ra SĐT" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="orderCount" label="Số Đơn Chốt" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="sales" label="Doanh số" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="orderCount" label="Đơn Đã Gửi" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+                <SortableTh field="profitOrderCount" label="Đơn Đã Gửi" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="orderProfit" label="Lợi nhuận đã nhận" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="profitAfterAds" label="Lợi nhuận sau quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
@@ -1559,7 +1562,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatPercent(phoneRate)}</td>
                       <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">{formatNumber(row.orderCount)}</td>
                       <td className="px-4 py-2.5 text-right text-emerald-700 align-top font-medium">{formatCurrency(revenue)}</td>
-                      <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">{formatNumber(row.orderCount)}</td>
+                      <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">{formatNumber(row.profitOrderCount)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(orderProfit)}</td>
                       <td className="px-4 py-2.5 text-right text-orange-700 align-top font-medium">{Number(row.orderCount || 0) > 0 ? formatCurrency(spend / Number(row.orderCount)) : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(profitAfterAds)}</td>

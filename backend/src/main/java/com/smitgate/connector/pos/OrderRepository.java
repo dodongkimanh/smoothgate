@@ -313,7 +313,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
              @Param("to") LocalDateTime to,
              @Param("validStatuses") List<String> validStatuses);
 
-    @Query("SELECT o.clickId, COUNT(o), COALESCE(SUM(o.revenue), 0), COALESCE(SUM(o.shippingFee), 0) " +
+    @Query("SELECT o.clickId, COUNT(o), COALESCE(SUM(o.revenue), 0), COALESCE(SUM(o.shippingFee), 0), " +
+            "SUM(CASE WHEN o.shippingFee > 0 THEN 1 ELSE 0 END) " +
             "FROM Order o WHERE o.tenantId = :tenantId " +
             "AND o.createdAtExternal BETWEEN :from AND :to " +
             "AND o.clickId IN :clickIds " +

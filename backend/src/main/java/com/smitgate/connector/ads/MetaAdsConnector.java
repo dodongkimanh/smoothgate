@@ -808,6 +808,7 @@ public class MetaAdsConnector implements AdsConnector {
         Map<String, BigDecimal> revenueByClickId = new HashMap<>();
         Map<String, Long> orderCountByClickId = new HashMap<>();
         Map<String, BigDecimal> shippingFeeByClickId = new HashMap<>();
+        Map<String, Long> profitOrderCountByClickId = new HashMap<>();
         for (Object[] row : orderRepository.aggregateRevenueAndOrderCountByClickIds(
                 tenantId,
                 clickIds,
@@ -821,6 +822,7 @@ public class MetaAdsConnector implements AdsConnector {
             orderCountByClickId.put(clickId, toLong(row[1]));
             revenueByClickId.put(clickId, toDecimal(row[2]));
             shippingFeeByClickId.put(clickId, toDecimal(row[3]));
+            profitOrderCountByClickId.put(clickId, toLong(row[4]));
         }
 
         Map<String, Long> phoneCountByClickId = new HashMap<>();
@@ -845,9 +847,11 @@ public class MetaAdsConnector implements AdsConnector {
             if (orderCount > 0) {
                 BigDecimal revenue = revenueByClickId.getOrDefault(clickId, BigDecimal.ZERO);
                 BigDecimal shippingFee = shippingFeeByClickId.getOrDefault(clickId, BigDecimal.ZERO);
+                long profitOrderCount = profitOrderCountByClickId.getOrDefault(clickId, 0L);
                 item.put("sales", revenue);
                 item.put("orderProfit", shippingFee);
                 item.put("orderCount", orderCount);
+                item.put("profitOrderCount", profitOrderCount);
             }
             item.put("phoneCount", phoneCount);
         }
