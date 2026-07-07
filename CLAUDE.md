@@ -46,7 +46,9 @@ docker compose up -d    # MySQL + backend + frontend (nginx on port 80)
 - `report/` — `ReportService`/`ReportController` aggregate dashboard data (overview, campaign perf, funnel, account spend)
 - `datasource/` — Multi-source abstraction (`DataSource` entity with type `META_ADS` or `PANCAKE_POS`), manages connection lifecycle and sync state
 - `sync/` — `SyncScheduler` runs periodic jobs (orders every 15min, ads every 30min, attribution every 20min); `OpsController` for manual trigger
+- `agent/` — AI campaign monitoring: `CampaignMonitorService` runs hourly per-tenant analysis of the last 7 days, `ClaudeAnalysisService` calls the Claude API (Anthropic Java SDK) to produce a Vietnamese-language report, `TelegramService` pushes it to a Telegram chat; gated by `app.agent.enabled` (off by default)
 - `tenant/` — Multi-tenant support via `Tenant` entity; all data is scoped by `tenantId`
+- `health/` — `HealthController` for uptime checks
 - `common/` — `EncryptionUtil` (AES-256-GCM for stored tokens), `GlobalExceptionHandler`
 
 ### Frontend structure (`frontend/src/`)
@@ -63,12 +65,14 @@ docker compose up -d    # MySQL + backend + frontend (nginx on port 80)
 - **Redis caching (prod only)**: Dev uses Spring's simple in-memory cache; prod uses Redis (Upstash) with `RedisCacheConfig` and `CacheInvalidationService`
 - **Spring Retry**: `@Retryable` on auth service for transient Supabase cold-start connection failures
 - **Scheduled sync with cache eviction cooldown**: `SyncScheduler` evicts report caches after data changes, but rate-limits eviction via `reportCacheEvictMinIntervalMs`
+- **DataSource self-healing**: `SyncScheduler` flips a `PANCAKE_POS`/`META_ADS` datasource from `ERROR` back to `ACTIVE` automatically on the next successful sync. Separately, `DataSourceService` handles stored-token decryption failures (e.g. after an `ENCRYPTION_SECRET` rotation) by re-encrypting the Poscake API key with a fallback key (`app.poscake.fallback-api-key`, falling back further to the `POSCAKE_FALLBACK_API_KEY` env var if the property isn't injected)
 
 ## Environment & Configuration
 
 - Default dev DB: MySQL on `localhost:3306/smitgate` (user `root`)
-- Env vars for secrets: `DB_PASSWORD`, `JWT_SECRET`, `ENCRYPTION_SECRET`, `FB_APP_ID`, `FB_APP_SECRET`, `FB_REDIRECT_URI`
-- Production activates via `SPRING_PROFILES_ACTIVE=prod` (PostgreSQL, Redis, tuned HikariCP)
+- Env vars for secrets: `DB_PASSWORD`, `JWT_SECRET`, `ENCRYPTION_SECRET`, `FB_APP_ID`, `FB_APP_SECRET`, `FB_REDIRECT_URI`, `POSCAKE_FALLBACK_API_KEY`
+- AI agent env vars (all optional, feature is off unless `app.agent.enabled=true`): `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
+- Production activates via `SPRING_PROFILES_ACTIVE=prod` (PostgreSQL, Redis, tuned HikariCP); `application-local.yml` is available for local overrides
 - Frontend proxy: Vite dev server proxies `/api` requests to `http://localhost:8080`
 
 ## API Auth
