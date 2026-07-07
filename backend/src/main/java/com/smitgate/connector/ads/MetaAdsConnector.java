@@ -662,7 +662,7 @@ public class MetaAdsConnector implements AdsConnector {
                 "created_time",
                 "status",
                 "effective_status",
-                "creative{thumbnail_url}",
+                "creative{thumbnail_url,effective_object_story_id}",
                 "adset{id,name,campaign_id,campaign{name},daily_budget,lifetime_budget}",
                 insightsField
         );
@@ -744,6 +744,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("adId", ad.path("id").asText(""));
                 item.put("adName", ad.path("name").asText(""));
                 item.put("thumbnailUrl", ad.path("creative").path("thumbnail_url").asText(""));
+                item.put("postId", extractPostId(ad.path("creative").path("effective_object_story_id").asText("")));
                 item.put("dataSourceId", dataSourceId);
                 item.put("adAccountId", normalizedAccountId);
                 item.put("adAccountName", adAccountName);
@@ -855,6 +856,15 @@ public class MetaAdsConnector implements AdsConnector {
             }
             item.put("phoneCount", phoneCount);
         }
+    }
+
+    /** Meta's effective_object_story_id is formatted as "{pageId}_{postId}" — we only want the postId. */
+    private String extractPostId(String objectStoryId) {
+        if (objectStoryId == null || objectStoryId.isBlank()) {
+            return "";
+        }
+        int underscoreIdx = objectStoryId.lastIndexOf('_');
+        return underscoreIdx >= 0 ? objectStoryId.substring(underscoreIdx + 1) : objectStoryId;
     }
 
     private long toLong(Object value) {

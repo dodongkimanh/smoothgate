@@ -620,6 +620,7 @@ export default function Campaigns() {
         case 'spend': return Number(row.spend || 0)
         case 'costPerOrder': { const o = Number(row.orderCount || 0); return o > 0 ? Number(row.spend || 0) / o : 0 }
         case 'profitAfterAds': return Number(row.orderProfit || 0) - Number(row.spend || 0)
+        case 'postId': return (row.postId || '').toLowerCase()
         default: return 0
       }
     })
@@ -1517,12 +1518,13 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                 <SortableTh field="orderProfit" label="Lợi nhuận đã nhận" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
                 <SortableTh field="profitAfterAds" label="Lợi nhuận sau quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+                <SortableTh field="postId" label="ID Bài viết" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={19} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={20} className="px-4 py-10 text-center text-gray-400">
                     Không có dữ liệu quảng cáo theo bộ lọc hiện tại
                   </td>
                 </tr>
@@ -1604,6 +1606,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(orderProfit)}</td>
                       <td className="px-4 py-2.5 text-right text-orange-700 align-top font-medium">{Number(row.orderCount || 0) > 0 ? formatCurrency(spend / Number(row.orderCount)) : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(profitAfterAds)}</td>
+                      <td className="px-4 py-2.5 text-slate-700 align-top font-mono text-xs">{row.postId || '-'}</td>
                     </tr>
                   )
                 })
