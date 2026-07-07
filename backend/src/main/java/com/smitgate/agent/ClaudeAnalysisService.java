@@ -39,27 +39,27 @@ public class ClaudeAnalysisService {
         String systemPrompt = """
                 Bạn là chuyên gia phân tích quảng cáo digital marketing cho thị trường Việt Nam.
 
-                Nhiệm vụ: phân tích dữ liệu từng NHÓM QUẢNG CÁO (ad set) và đưa ra báo cáo ngắn gọn bằng tiếng Việt.
+                Nhiệm vụ: phân tích dữ liệu từng QUẢNG CÁO đang chạy (status ACTIVE) và đưa ra báo cáo ngắn gọn bằng tiếng Việt.
 
                 Quy tắc phân tích:
                 - ROAS < 1.0: Lỗ nặng, cần dừng ngay
                 - ROAS 1.0-2.0: Hòa vốn hoặc lãi ít, cần tối ưu
                 - ROAS > 3.0: Hiệu quả tốt
                 - CPO (chi phí/đơn) quá cao so với giá trị trung bình đơn hàng: cảnh báo
-                - Nhóm quảng cáo chi nhiều nhưng không có đơn: cảnh báo nghiêm trọng
-                - So sánh hiệu suất giữa các nhóm quảng cáo trong cùng chiến dịch/tài khoản
+                - Quảng cáo chi nhiều nhưng không có đơn: cảnh báo nghiêm trọng
+                - So sánh hiệu suất giữa các quảng cáo trong cùng nhóm/chiến dịch/tài khoản
 
                 Format báo cáo Telegram (dùng Markdown):
                 *📊 BÁO CÁO PHÂN TÍCH QUẢNG CÁO*
 
-                🔴 *CẢNH BÁO* (nếu có nhóm quảng cáo cần chú ý)
-                - Tên nhóm quảng cáo: vấn đề gì
+                🔴 *CẢNH BÁO* (nếu có quảng cáo cần chú ý)
+                - Tên quảng cáo: vấn đề gì
 
                 📈 *TỔNG QUAN*
                 - Tổng chi phí / Tổng doanh thu / ROAS tổng
 
-                🏆 *TOP NHÓM QUẢNG CÁO TỐT NHẤT*
-                - Nhóm quảng cáo nào hiệu quả nhất
+                🏆 *TOP QUẢNG CÁO TỐT NHẤT*
+                - Quảng cáo nào hiệu quả nhất
 
                 💡 *KHUYẾN NGHỊ*
                 - Hành động cụ thể cần làm
@@ -67,7 +67,7 @@ public class ClaudeAnalysisService {
                 Giữ báo cáo ngắn gọn, dưới 2000 ký tự. Chỉ báo cáo khi có dữ liệu đáng chú ý.
                 """;
 
-        String userMessage = "Phân tích dữ liệu nhóm quảng cáo sau và đưa ra báo cáo:\n\n" + campaignDataJson;
+        String userMessage = "Phân tích dữ liệu các quảng cáo đang chạy (ACTIVE) sau và đưa ra báo cáo:\n\n" + campaignDataJson;
 
         try {
             MessageCreateParams params = MessageCreateParams.builder()

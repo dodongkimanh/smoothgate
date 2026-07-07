@@ -66,25 +66,30 @@ public class CampaignMonitorService {
                 .filter(a -> a.getPlatform() == AdAccount.Platform.META)
                 .toList();
 
-        Map<String, Map<String, Object>> adSetAgg = new LinkedHashMap<>();
+        List<Map<String, Object>> activeAds = new ArrayList<>();
         for (AdAccount account : accounts) {
             try {
                 List<Map<String, Object>> ads = metaAdsConnector.listAdPerformance(
                         tenantId, account.getDataSourceId(), account.getExternalAccountId(),
                         sevenDaysAgo, today, null, null);
-                aggregateByAdSet(adSetAgg, account, ads);
+                for (Map<String, Object> ad : ads) {
+                    String delivery = String.valueOf(ad.getOrDefault("delivery", "")).trim();
+                    if ("ACTIVE".equalsIgnoreCase(delivery)) {
+                        activeAds.add(ad);
+                    }
+                }
             } catch (Exception e) {
                 log.warn("Skip account {} for tenant {} agent analysis: {}",
                         account.getExternalAccountId(), tenantId, e.getMessage());
             }
         }
 
-        if (adSetAgg.isEmpty()) {
-            log.info("No ad set data for tenant {} — skipping analysis", tenantId);
+        if (activeAds.isEmpty()) {
+            log.info("No active ads for tenant {} — skipping analysis", tenantId);
             return null;
         }
 
-        String dataJson = buildAdSetDataJson(adSetAgg.values(), sevenDaysAgo, today);
+        String dataJson = buildAdDataJson(activeAds, sevenDaysAgo, today);
         String analysis = claudeAnalysisService.analyzeCampaigns(dataJson);
 
         if (analysis != null && !analysis.startsWith("Lỗi")) {
@@ -95,47 +100,22 @@ public class CampaignMonitorService {
         return analysis;
     }
 
-    private void aggregateByAdSet(Map<String, Map<String, Object>> adSetAgg, AdAccount account, List<Map<String, Object>> ads) {
-        for (Map<String, Object> ad : ads) {
-            String adSetId = String.valueOf(ad.getOrDefault("adSetId", "")).trim();
-            if (adSetId.isEmpty()) {
-                continue;
-            }
-            String key = account.getExternalAccountId() + ":" + adSetId;
-            Map<String, Object> agg = adSetAgg.computeIfAbsent(key, k -> {
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("name", ad.get("adSetName"));
-                m.put("campaignName", ad.get("campaignName"));
-                m.put("adAccountName", ad.get("adAccountName"));
-                m.put("status", ad.getOrDefault("adSetStatus", ""));
-                m.put("spend", BigDecimal.ZERO);
-                m.put("revenue", BigDecimal.ZERO);
-                m.put("orderProfit", BigDecimal.ZERO);
-                m.put("orders", 0L);
-                return m;
-            });
-            agg.put("spend", toBigDecimal(agg.get("spend")).add(toBigDecimal(ad.get("spend"))));
-            agg.put("revenue", toBigDecimal(agg.get("revenue")).add(toBigDecimal(ad.get("sales"))));
-            agg.put("orderProfit", toBigDecimal(agg.get("orderProfit")).add(toBigDecimal(ad.get("orderProfit"))));
-            agg.put("orders", toLong(agg.get("orders")) + toLong(ad.get("orderCount")));
-        }
-    }
-
-    private String buildAdSetDataJson(java.util.Collection<Map<String, Object>> adSets, LocalDate from, LocalDate to) {
+    private String buildAdDataJson(List<Map<String, Object>> ads, LocalDate from, LocalDate to) {
         try {
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("period", from + " → " + to);
-            data.put("totalAdSets", adSets.size());
+            data.put("totalActiveAds", ads.size());
 
             BigDecimal totalSpend = BigDecimal.ZERO;
             BigDecimal totalRevenue = BigDecimal.ZERO;
             long totalOrders = 0;
 
-            List<Map<String, Object>> adSetList = new ArrayList<>();
-            for (Map<String, Object> as : adSets) {
-                BigDecimal spend = toBigDecimal(as.get("spend"));
-                BigDecimal revenue = toBigDecimal(as.get("revenue"));
-                long orders = toLong(as.get("orders"));
+            List<Map<String, Object>> adList = new ArrayList<>();
+            for (Map<String, Object> ad : ads) {
+                BigDecimal spend = toBigDecimal(ad.get("spend"));
+                BigDecimal revenue = toBigDecimal(ad.get("sales"));
+                BigDecimal orderProfit = toBigDecimal(ad.get("orderProfit"));
+                long orders = toLong(ad.get("orderCount"));
 
                 totalSpend = totalSpend.add(spend);
                 totalRevenue = totalRevenue.add(revenue);
@@ -149,27 +129,27 @@ public class CampaignMonitorService {
                         : BigDecimal.ZERO;
 
                 Map<String, Object> am = new LinkedHashMap<>();
-                am.put("name", as.get("name"));
-                am.put("campaign", as.get("campaignName"));
-                am.put("adAccount", as.get("adAccountName"));
-                am.put("status", as.get("status"));
+                am.put("name", ad.get("adName"));
+                am.put("adSet", ad.get("adSetName"));
+                am.put("campaign", ad.get("campaignName"));
+                am.put("adAccount", ad.get("adAccountName"));
                 am.put("spend", spend);
                 am.put("revenue", revenue);
                 am.put("orders", orders);
                 am.put("roas", roas);
                 am.put("cpo", cpo);
-                am.put("orderProfit", as.get("orderProfit"));
-                adSetList.add(am);
+                am.put("orderProfit", orderProfit);
+                adList.add(am);
             }
 
             data.put("totalSpend", totalSpend);
             data.put("totalRevenue", totalRevenue);
             data.put("totalOrders", totalOrders);
-            data.put("adSets", adSetList);
+            data.put("ads", adList);
 
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(data);
         } catch (Exception e) {
-            log.error("Failed to build ad set data JSON: {}", e.getMessage());
+            log.error("Failed to build ad data JSON: {}", e.getMessage());
             return "{}";
         }
     }
