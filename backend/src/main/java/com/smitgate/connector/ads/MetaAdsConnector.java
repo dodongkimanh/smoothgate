@@ -663,7 +663,7 @@ public class MetaAdsConnector implements AdsConnector {
                 "status",
                 "effective_status",
                 "creative{thumbnail_url,effective_object_story_id}",
-                "adset{id,name,campaign_id,campaign{name},daily_budget,lifetime_budget,effective_status}",
+                "adset{id,name,campaign_id,campaign{name,daily_budget,lifetime_budget},daily_budget,lifetime_budget,effective_status}",
                 insightsField
         );
 
@@ -755,7 +755,9 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("adSetId", rowAdSetId);
                 item.put("adSetName", adset.path("name").asText(""));
                 item.put("adSetStatus", adset.path("effective_status").asText(""));
-                item.put("budget", parseBudget(adset.path("daily_budget"), adset.path("lifetime_budget")));
+                item.put("budget", parseBudget(
+                        adset.path("daily_budget"), adset.path("lifetime_budget"),
+                        adset.path("campaign").path("daily_budget"), adset.path("campaign").path("lifetime_budget")));
                 item.put("comments", comments);
                 item.put("messageContacts", messageContacts);
                 item.put("costPerResult", costPerResult);
@@ -908,13 +910,25 @@ public class MetaAdsConnector implements AdsConnector {
         }
     }
 
-    private BigDecimal parseBudget(JsonNode dailyBudget, JsonNode lifetimeBudget) {
-        String raw = dailyBudget.asText("");
+    /**
+     * Ad sets under a Campaign Budget Optimization (CBO) campaign have no daily_budget/
+     * lifetime_budget of their own — the budget lives on the parent campaign instead.
+     */
+    private BigDecimal parseBudget(
+            JsonNode adSetDailyBudget, JsonNode adSetLifetimeBudget,
+            JsonNode campaignDailyBudget, JsonNode campaignLifetimeBudget) {
+        String raw = adSetDailyBudget.asText("");
         if (raw == null || raw.isBlank()) {
-            raw = lifetimeBudget.asText("0");
+            raw = adSetLifetimeBudget.asText("");
+        }
+        if ((raw == null || raw.isBlank()) && campaignDailyBudget != null) {
+            raw = campaignDailyBudget.asText("");
+        }
+        if ((raw == null || raw.isBlank()) && campaignLifetimeBudget != null) {
+            raw = campaignLifetimeBudget.asText("0");
         }
         try {
-            return new BigDecimal(raw);
+            return new BigDecimal(raw == null || raw.isBlank() ? "0" : raw);
         } catch (Exception ignored) {
             return BigDecimal.ZERO;
         }
