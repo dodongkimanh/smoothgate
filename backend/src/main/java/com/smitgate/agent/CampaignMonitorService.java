@@ -92,7 +92,14 @@ public class CampaignMonitorService {
             return null;
         }
 
-        String dataJson = buildAdDataJson(activeAds, from, today, settings);
+        AdMetrics metrics = computeMetrics(activeAds, from, today, settings);
+
+        if (metrics.alerts.isEmpty()) {
+            log.info("No threshold breaches for tenant {} — skipping Claude call and Telegram notification", tenantId);
+            return "✅ Tất cả " + activeAds.size() + " quảng cáo đang chạy đều trong ngưỡng an toàn — không có cảnh báo.";
+        }
+
+        String dataJson = toJson(metrics);
         String analysis = claudeAnalysisService.analyzeCampaigns(dataJson);
 
         if (analysis != null && !analysis.startsWith("Lỗi")) {
@@ -103,7 +110,19 @@ public class CampaignMonitorService {
         return analysis;
     }
 
-    private String buildAdDataJson(
+    private String toJson(AdMetrics metrics) {
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(metrics.data);
+        } catch (Exception e) {
+            log.error("Failed to serialize ad data JSON: {}", e.getMessage());
+            return "{}";
+        }
+    }
+
+    private record AdMetrics(Map<String, Object> data, List<Map<String, Object>> alerts) {
+    }
+
+    private AdMetrics computeMetrics(
             List<Map<String, Object>> ads, LocalDate from, LocalDate to, AgentSettingsService.AgentSettings settings) {
         try {
             Map<String, Object> data = new LinkedHashMap<>();
@@ -185,10 +204,10 @@ public class CampaignMonitorService {
             data.put("alerts", alerts);
             data.put("ads", adList);
 
-            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(data);
+            return new AdMetrics(data, alerts);
         } catch (Exception e) {
-            log.error("Failed to build ad data JSON: {}", e.getMessage());
-            return "{}";
+            log.error("Failed to compute ad metrics: {}", e.getMessage());
+            return new AdMetrics(Map.of(), List.of());
         }
     }
 
