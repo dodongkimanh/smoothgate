@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
-import { triggerAgentAnalysis } from '../services/api'
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { triggerAgentAnalysis, getAgentSettings, saveAgentSettings } from '../services/api'
 import toast from 'react-hot-toast'
 import {
   Bot,
@@ -11,10 +11,39 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
+  Settings,
+  Save,
 } from 'lucide-react'
+
+const DEFAULT_SETTINGS = {
+  costPerMessageThreshold: 90000,
+  costPerPhoneThreshold: 350000,
+  costPerOrderThreshold: 3000000,
+  lossAfterAdsThreshold: 5000000,
+  analysisWindowDays: 3,
+}
 
 export default function Agent() {
   const [report, setReport] = useState(null)
+  const [form, setForm] = useState(DEFAULT_SETTINGS)
+  const queryClient = useQueryClient()
+
+  const { data: settingsData } = useQuery({
+    queryKey: ['agent-settings'],
+    queryFn: () => getAgentSettings().then((r) => r.data?.data),
+  })
+
+  useEffect(() => {
+    if (settingsData) {
+      setForm({
+        costPerMessageThreshold: Number(settingsData.costPerMessageThreshold),
+        costPerPhoneThreshold: Number(settingsData.costPerPhoneThreshold),
+        costPerOrderThreshold: Number(settingsData.costPerOrderThreshold),
+        lossAfterAdsThreshold: Number(settingsData.lossAfterAdsThreshold),
+        analysisWindowDays: Number(settingsData.analysisWindowDays),
+      })
+    }
+  }, [settingsData])
 
   const analyzeMutation = useMutation({
     mutationFn: () => triggerAgentAnalysis(),
@@ -28,6 +57,25 @@ export default function Agent() {
     },
   })
 
+  const saveSettingsMutation = useMutation({
+    mutationFn: () => saveAgentSettings(form),
+    onSuccess: (res) => {
+      queryClient.setQueryData(['agent-settings'], res.data?.data)
+      toast.success('Đã lưu cấu hình ngưỡng cảnh báo')
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.message || 'Không thể lưu cấu hình')
+    },
+  })
+
+  const updateField = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const formatCurrency = (value) => new Intl.NumberFormat('vi-VN', {
+    style: 'currency', currency: 'VND', maximumFractionDigits: 0,
+  }).format(Number(value || 0))
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
       <div>
@@ -36,7 +84,7 @@ export default function Agent() {
           Agent AI — Phân tích quảng cáo
         </h2>
         <p className="text-sm text-gray-500 mt-1">
-          Claude AI tự động phân tích hiệu quả chiến dịch và gửi cảnh báo qua Telegram
+          Claude AI tự động phân tích các quảng cáo đang chạy theo dữ liệu CRM (không đọc trực tiếp từ Meta) và gửi cảnh báo qua Telegram
         </p>
       </div>
 
@@ -58,11 +106,81 @@ export default function Agent() {
         />
         <StatusCard
           icon={Clock}
-          title="Tần suất"
-          value="Mỗi 1 giờ"
-          desc="Phân tích tự động"
+          title="Khung dữ liệu"
+          value={`${form.analysisWindowDays} ngày gần nhất`}
+          desc="Chạy tự động mỗi 1 giờ"
           color="text-emerald-600 bg-emerald-50"
         />
+      </div>
+
+      {/* Threshold Settings */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+          <Settings size={18} className="text-blue-600" />
+          <h3 className="font-semibold text-gray-800">Cấu hình ngưỡng cảnh báo</h3>
+        </div>
+
+        <div className="px-6 py-5 space-y-5">
+          <p className="text-sm text-gray-600">
+            Agent chỉ phân tích các quảng cáo đang <strong>ACTIVE</strong>, dựa trên đúng số liệu hiển thị
+            trong bảng "Quảng cáo" (chi phí tin nhắn, chi phí SĐT, chi phí/đơn hàng, lợi nhuận sau quảng cáo).
+            Một quảng cáo bị đưa vào cảnh báo khi vượt bất kỳ ngưỡng nào bên dưới.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <ThresholdField
+              label="Chi phí tin nhắn mới tối đa"
+              value={form.costPerMessageThreshold}
+              onChange={(v) => updateField('costPerMessageThreshold', v)}
+              preview={formatCurrency(form.costPerMessageThreshold)}
+            />
+            <ThresholdField
+              label="Chi phí số điện thoại mới tối đa"
+              value={form.costPerPhoneThreshold}
+              onChange={(v) => updateField('costPerPhoneThreshold', v)}
+              preview={formatCurrency(form.costPerPhoneThreshold)}
+            />
+            <ThresholdField
+              label="Chi phí/đơn hàng tối đa"
+              value={form.costPerOrderThreshold}
+              onChange={(v) => updateField('costPerOrderThreshold', v)}
+              preview={formatCurrency(form.costPerOrderThreshold)}
+            />
+            <ThresholdField
+              label="Mức lỗ tối đa sau quảng cáo"
+              value={form.lossAfterAdsThreshold}
+              onChange={(v) => updateField('lossAfterAdsThreshold', v)}
+              preview={`Cảnh báo khi lỗ từ ${formatCurrency(form.lossAfterAdsThreshold)}`}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1.5 block">Số ngày phân tích gần nhất</label>
+            <input
+              type="number"
+              min="1"
+              max="30"
+              value={form.analysisWindowDays}
+              onChange={(e) => updateField('analysisWindowDays', e.target.value === '' ? '' : Number(e.target.value))}
+              className="w-32 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            />
+            <span className="ml-2 text-xs text-gray-500">ngày</span>
+          </div>
+
+          <button
+            onClick={() => saveSettingsMutation.mutate()}
+            disabled={saveSettingsMutation.isPending}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl font-medium text-sm
+                       hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saveSettingsMutation.isPending ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Save size={16} />
+            )}
+            Lưu cấu hình
+          </button>
+        </div>
       </div>
 
       {/* Config Guide */}
@@ -103,7 +221,7 @@ export default function Agent() {
 {`ANTHROPIC_API_KEY=sk-ant-api03-...
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 TELEGRAM_CHAT_ID=-100123456789
-AGENT_ENABLED=true`}
+APP_AGENT_ENABLED=true`}
             </pre>
           </div>
 
@@ -114,17 +232,17 @@ AGENT_ENABLED=true`}
               <FeatureItem
                 icon={Clock}
                 title="Chạy định kỳ"
-                desc="Mỗi 1 giờ tự động phân tích dữ liệu 7 ngày gần nhất"
+                desc={`Mỗi 1 giờ tự động phân tích dữ liệu ${form.analysisWindowDays} ngày gần nhất`}
               />
               <FeatureItem
                 icon={Bot}
                 title="Claude AI phân tích"
-                desc="Đánh giá ROAS, CPO, chiến dịch lỗ, chi phí cao bất thường"
+                desc="Viết báo cáo dựa trên số liệu CRM đã tính sẵn (chi phí tin nhắn, SĐT, đơn hàng, lợi nhuận)"
               />
               <FeatureItem
                 icon={AlertCircle}
-                title="Cảnh báo thông minh"
-                desc="Phát hiện chiến dịch cần dừng hoặc tối ưu ngay"
+                title="Cảnh báo theo ngưỡng"
+                desc="Chỉ cảnh báo khi vượt đúng ngưỡng bạn cấu hình ở trên"
               />
               <FeatureItem
                 icon={MessageCircle}
@@ -145,8 +263,9 @@ AGENT_ENABLED=true`}
 
         <div className="px-6 py-5 space-y-4">
           <p className="text-sm text-gray-600">
-            Nhấn nút bên dưới để chạy phân tích ngay lập tức. Agent sẽ lấy dữ liệu 7 ngày gần nhất,
-            phân tích bằng Claude AI, và gửi báo cáo qua Telegram (nếu đã cấu hình).
+            Nhấn nút bên dưới để chạy phân tích ngay lập tức. Agent sẽ lấy các quảng cáo đang ACTIVE trong{' '}
+            {form.analysisWindowDays} ngày gần nhất, phân tích bằng Claude AI theo ngưỡng đã cấu hình,
+            và gửi báo cáo qua Telegram (nếu đã cấu hình).
           </p>
 
           <button
@@ -183,6 +302,23 @@ AGENT_ENABLED=true`}
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ThresholdField({ label, value, onChange, preview }) {
+  return (
+    <div>
+      <label className="text-xs font-medium text-gray-600 mb-1.5 block">{label}</label>
+      <input
+        type="number"
+        min="0"
+        step="1000"
+        value={value}
+        onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+      />
+      <div className="text-xs text-gray-400 mt-1">{preview}</div>
     </div>
   )
 }

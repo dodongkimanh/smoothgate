@@ -132,5 +132,7 @@ export const updateMetaBudget = (objectId, dataSourceId, budgetCents, budgetType
 
 // Agent
 export const triggerAgentAnalysis = () => api.post('/agent/analyze')
+export const getAgentSettings = () => api.get('/agent/settings')
+export const saveAgentSettings = (settings) => api.put('/agent/settings', settings)
 
 export default api

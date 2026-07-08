@@ -29,6 +29,7 @@ public class CampaignMonitorService {
     private final DataSourceRepository dataSourceRepository;
     private final AdAccountRepository adAccountRepository;
     private final MetaAdsConnector metaAdsConnector;
+    private final AgentSettingsService agentSettingsService;
     private final ClaudeAnalysisService claudeAnalysisService;
     private final TelegramService telegramService;
     private final ObjectMapper objectMapper;
@@ -59,8 +60,10 @@ public class CampaignMonitorService {
     }
 
     public String analyzeForTenant(Long tenantId) {
+        AgentSettingsService.AgentSettings settings = agentSettingsService.getSettings(tenantId);
+
         LocalDate today = LocalDate.now(VIETNAM_ZONE);
-        LocalDate sevenDaysAgo = today.minusDays(6);
+        LocalDate from = today.minusDays(settings.analysisWindowDays() - 1L);
 
         List<AdAccount> accounts = adAccountRepository.findByTenantId(tenantId).stream()
                 .filter(a -> a.getPlatform() == AdAccount.Platform.META)
@@ -71,7 +74,7 @@ public class CampaignMonitorService {
             try {
                 List<Map<String, Object>> ads = metaAdsConnector.listAdPerformance(
                         tenantId, account.getDataSourceId(), account.getExternalAccountId(),
-                        sevenDaysAgo, today, null, null);
+                        from, today, null, null);
                 for (Map<String, Object> ad : ads) {
                     String delivery = String.valueOf(ad.getOrDefault("delivery", "")).trim();
                     if ("ACTIVE".equalsIgnoreCase(delivery)) {
@@ -89,7 +92,7 @@ public class CampaignMonitorService {
             return null;
         }
 
-        String dataJson = buildAdDataJson(activeAds, sevenDaysAgo, today);
+        String dataJson = buildAdDataJson(activeAds, from, today, settings);
         String analysis = claudeAnalysisService.analyzeCampaigns(dataJson);
 
         if (analysis != null && !analysis.startsWith("Lỗi")) {
@@ -100,36 +103,51 @@ public class CampaignMonitorService {
         return analysis;
     }
 
-    private String buildAdDataJson(List<Map<String, Object>> ads, LocalDate from, LocalDate to) {
+    private String buildAdDataJson(
+            List<Map<String, Object>> ads, LocalDate from, LocalDate to, AgentSettingsService.AgentSettings settings) {
         try {
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("period", from + " → " + to);
             data.put("totalActiveAds", ads.size());
+            data.put("thresholds", Map.of(
+                    "costPerMessage", settings.costPerMessageThreshold(),
+                    "costPerPhone", settings.costPerPhoneThreshold(),
+                    "costPerOrder", settings.costPerOrderThreshold(),
+                    "lossAfterAds", settings.lossAfterAdsThreshold()
+            ));
 
             BigDecimal totalSpend = BigDecimal.ZERO;
             BigDecimal totalRevenue = BigDecimal.ZERO;
             long totalOrders = 0;
 
             List<Map<String, Object>> adList = new ArrayList<>();
+            List<Map<String, Object>> alerts = new ArrayList<>();
+
             for (Map<String, Object> ad : ads) {
                 BigDecimal spend = toBigDecimal(ad.get("spend"));
                 BigDecimal revenue = toBigDecimal(ad.get("sales"));
                 BigDecimal orderProfit = toBigDecimal(ad.get("orderProfit"));
                 long orders = toLong(ad.get("orderCount"));
+                long messages = toLong(ad.get("messageContacts"));
+                long phones = toLong(ad.get("phoneCount"));
+                String adName = String.valueOf(ad.getOrDefault("adName", ""));
 
                 totalSpend = totalSpend.add(spend);
                 totalRevenue = totalRevenue.add(revenue);
                 totalOrders += orders;
 
+                BigDecimal costPerMessage = messages > 0
+                        ? spend.divide(BigDecimal.valueOf(messages), 0, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+                BigDecimal costPerPhone = phones > 0
+                        ? spend.divide(BigDecimal.valueOf(phones), 0, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+                BigDecimal costPerOrder = orders > 0
+                        ? spend.divide(BigDecimal.valueOf(orders), 0, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+                BigDecimal profitAfterAds = orderProfit.subtract(spend);
                 BigDecimal roas = spend.compareTo(BigDecimal.ZERO) > 0
-                        ? revenue.divide(spend, 2, RoundingMode.HALF_UP)
-                        : BigDecimal.ZERO;
-                BigDecimal cpo = orders > 0
-                        ? spend.divide(BigDecimal.valueOf(orders), 2, RoundingMode.HALF_UP)
-                        : BigDecimal.ZERO;
+                        ? revenue.divide(spend, 2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
 
                 Map<String, Object> am = new LinkedHashMap<>();
-                am.put("name", ad.get("adName"));
+                am.put("name", adName);
                 am.put("adSet", ad.get("adSetName"));
                 am.put("campaign", ad.get("campaignName"));
                 am.put("adAccount", ad.get("adAccountName"));
@@ -137,14 +155,34 @@ public class CampaignMonitorService {
                 am.put("revenue", revenue);
                 am.put("orders", orders);
                 am.put("roas", roas);
-                am.put("cpo", cpo);
-                am.put("orderProfit", orderProfit);
+                am.put("costPerMessage", costPerMessage);
+                am.put("costPerPhone", costPerPhone);
+                am.put("costPerOrder", costPerOrder);
+                am.put("profitAfterAds", profitAfterAds);
                 adList.add(am);
+
+                if (messages > 0 && costPerMessage.compareTo(settings.costPerMessageThreshold()) > 0) {
+                    alerts.add(alert(adName, "Chi phí tin nhắn mới " + costPerMessage
+                            + "đ vượt ngưỡng " + settings.costPerMessageThreshold() + "đ"));
+                }
+                if (phones > 0 && costPerPhone.compareTo(settings.costPerPhoneThreshold()) > 0) {
+                    alerts.add(alert(adName, "Chi phí số điện thoại mới " + costPerPhone
+                            + "đ vượt ngưỡng " + settings.costPerPhoneThreshold() + "đ"));
+                }
+                if (orders > 0 && costPerOrder.compareTo(settings.costPerOrderThreshold()) > 0) {
+                    alerts.add(alert(adName, "Chi phí/đơn hàng " + costPerOrder
+                            + "đ vượt ngưỡng " + settings.costPerOrderThreshold() + "đ"));
+                }
+                if (profitAfterAds.negate().compareTo(settings.lossAfterAdsThreshold()) >= 0) {
+                    alerts.add(alert(adName, "Lợi nhuận sau quảng cáo âm " + profitAfterAds
+                            + "đ, vượt ngưỡng lỗ cho phép " + settings.lossAfterAdsThreshold() + "đ"));
+                }
             }
 
             data.put("totalSpend", totalSpend);
             data.put("totalRevenue", totalRevenue);
             data.put("totalOrders", totalOrders);
+            data.put("alerts", alerts);
             data.put("ads", adList);
 
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(data);
@@ -152,6 +190,13 @@ public class CampaignMonitorService {
             log.error("Failed to build ad data JSON: {}", e.getMessage());
             return "{}";
         }
+    }
+
+    private Map<String, Object> alert(String adName, String reason) {
+        Map<String, Object> a = new LinkedHashMap<>();
+        a.put("adName", adName);
+        a.put("reason", reason);
+        return a;
     }
 
     private BigDecimal toBigDecimal(Object value) {
