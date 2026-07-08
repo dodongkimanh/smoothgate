@@ -37,6 +37,7 @@ const DATE_PRESETS = [
   { id: 'LIFETIME', label: 'Trọn đời' },
   { id: 'TODAY', label: 'Hôm nay' },
   { id: 'YESTERDAY', label: 'Hôm qua' },
+  { id: 'LAST_3_DAYS', label: '3 ngày qua' },
   { id: 'LAST_7_DAYS', label: '7 ngày qua' },
   { id: 'LAST_30_DAYS', label: '30 ngày qua' },
   { id: 'THIS_WEEK', label: 'Tuần này' },
@@ -80,6 +81,11 @@ function getPresetRange(presetId) {
       const y = new Date(today)
       y.setDate(y.getDate() - 1)
       return { from: toDateKeySafe(y), to: toDateKeySafe(y) }
+    }
+    case 'LAST_3_DAYS': {
+      const from = new Date(today)
+      from.setDate(from.getDate() - 2)
+      return { from: toDateKeySafe(from), to: toDateKeySafe(today) }
     }
     case 'LAST_7_DAYS': {
       const from = new Date(today)
