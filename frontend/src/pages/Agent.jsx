@@ -77,7 +77,7 @@ export default function Agent() {
   }).format(Number(value || 0))
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       <div>
         <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
           <Bot size={24} className="text-blue-600" />
@@ -127,7 +127,7 @@ export default function Agent() {
             Một quảng cáo bị đưa vào cảnh báo khi vượt bất kỳ ngưỡng nào bên dưới.
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <ThresholdField
               label="Chi phí tin nhắn mới tối đa"
               value={form.costPerMessageThreshold}
@@ -228,7 +228,7 @@ APP_AGENT_ENABLED=true`}
           {/* How it works */}
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-gray-700">Cách hoạt động</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <FeatureItem
                 icon={Clock}
                 title="Chạy định kỳ"
