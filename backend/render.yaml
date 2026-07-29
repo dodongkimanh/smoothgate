@@ -68,7 +68,7 @@ services:
       - key: SYNC_ATTRIBUTION_BATCH_SIZE
         value: "50"
       - key: JWT_SECRET
-        generateValue: true
+        sync: false   # set once in Render dashboard — must stay fixed, or all existing tokens are invalidated
       - key: ENCRYPTION_SECRET
         sync: false
       - key: FRONTEND_URL
