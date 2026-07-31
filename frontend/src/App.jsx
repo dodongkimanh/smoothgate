@@ -133,10 +133,24 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function LoginRoute() {
+  const token = useAuthStore((s) => s.token)
+  const [hydrated, setHydrated] = useState(useAuthStore.persist.hasHydrated())
+
+  useEffect(() => {
+    const unsub = useAuthStore.persist.onFinishHydration(() => setHydrated(true))
+    return unsub
+  }, [])
+
+  if (!hydrated) return null
+  if (token) return <Navigate to="/dashboard" replace />
+  return <Login />
+}
+
 function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<LoginRoute />} />
       <Route
         path="/"
         element={
