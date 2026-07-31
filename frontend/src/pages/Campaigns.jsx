@@ -1709,7 +1709,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="font-medium text-slate-800 truncate max-w-[200px]">{row.adName || '-'}</div>
+                            <div className="font-medium text-slate-800 truncate">{row.adName || '-'}</div>
                             <div className="text-xs text-slate-400 font-mono mt-0.5">{row.adId || '-'}</div>
                           </div>
                         </div>
