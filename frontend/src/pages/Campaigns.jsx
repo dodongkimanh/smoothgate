@@ -166,17 +166,81 @@ function SortIcon({ field, sortField, sortDir }) {
   return <ArrowUp size={14} strokeWidth={3} className="text-blue-600 ml-1 inline-block" />
 }
 
-function SortableTh({ field, label, sortField, sortDir, onToggle, align = 'right', className = '' }) {
+const MIN_COLUMN_WIDTH = 70
+
+function useResizableColumns(storageKey, fields) {
+  const defaults = useMemo(() => Object.fromEntries(fields.map((f) => [f.field, f.defaultWidth])), [fields])
+
+  const [widths, setWidths] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || '{}')
+      return { ...defaults, ...saved }
+    } catch {
+      return defaults
+    }
+  })
+
+  const dragRef = useRef(null)
+
+  useEffect(() => {
+    const onMouseMove = (e) => {
+      const drag = dragRef.current
+      if (!drag) return
+      const next = Math.max(MIN_COLUMN_WIDTH, drag.startWidth + (e.clientX - drag.startX))
+      setWidths((prev) => (prev[drag.field] === next ? prev : { ...prev, [drag.field]: next }))
+    }
+    const onMouseUp = () => {
+      if (!dragRef.current) return
+      dragRef.current = null
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      setWidths((prev) => {
+        localStorage.setItem(storageKey, JSON.stringify(prev))
+        return prev
+      })
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [storageKey])
+
+  const startResize = useCallback((field) => (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragRef.current = { field, startX: e.clientX, startWidth: widths[field] || defaults[field] || 140 }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [widths, defaults])
+
+  return { widths, startResize }
+}
+
+function ColumnResizeHandle({ onMouseDown }) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      onClick={(e) => e.stopPropagation()}
+      className="absolute top-0 right-0 h-full w-2 cursor-col-resize select-none z-10 hover:bg-blue-400/40 active:bg-blue-500/60"
+    />
+  )
+}
+
+function SortableTh({ field, label, sortField, sortDir, onToggle, align = 'right', className = '', width, onResizeStart }) {
   const isActive = sortField === field
   return (
     <th
-      className={`group px-4 py-2.5 font-semibold border-b border-slate-200 text-xs uppercase tracking-wide cursor-pointer select-none transition-colors ${isActive ? 'bg-blue-50/80 text-blue-700' : 'hover:bg-slate-200/50'} ${align === 'left' ? 'text-left' : 'text-right'} ${className}`}
+      style={width ? { width, minWidth: width, maxWidth: width } : undefined}
+      className={`group relative px-4 py-2.5 font-semibold border-b border-slate-200 text-xs uppercase tracking-wide cursor-pointer select-none transition-colors overflow-hidden ${isActive ? 'bg-blue-50/80 text-blue-700' : 'hover:bg-slate-200/50'} ${align === 'left' ? 'text-left' : 'text-right'} ${className}`}
       onClick={() => onToggle(field)}
     >
       <span className="inline-flex items-center gap-0.5 whitespace-nowrap">
         {label}
         <SortIcon field={field} sortField={sortField} sortDir={sortDir} />
       </span>
+      {onResizeStart && <ColumnResizeHandle onMouseDown={onResizeStart(field)} />}
     </th>
   )
 }
@@ -988,6 +1052,23 @@ function CampaignPerformanceTable({ rows, reportCampaignMap, adsPerformance, sel
   const allChecked = rows.length > 0 && rows.every(r => selectedCampaignIds.includes(r._rowKey || r.id))
   const someChecked = selectedCampaignIds.length > 0
 
+  const columns = [
+    { field: 'name', label: 'Chiến dịch', align: 'left', defaultWidth: 220 },
+    { field: 'adAccountName', label: 'Tài khoản quảng cáo', align: 'left', defaultWidth: 180 },
+    { field: 'status', label: 'Phân phối', align: 'left', defaultWidth: 130 },
+    { field: 'totalSpend', label: 'Số tiền đã chi tiêu', defaultWidth: 150 },
+    { field: 'cpm', label: 'CPM', defaultWidth: 100 },
+    { field: 'ctr', label: 'CTR', defaultWidth: 90 },
+    { field: 'frequency', label: 'Tần suất', defaultWidth: 100 },
+    { field: 'newContacts', label: 'SĐT', defaultWidth: 90 },
+    { field: 'messageContacts', label: 'Tin nhắn', defaultWidth: 100 },
+    { field: 'validOrders', label: 'Đơn xác nhận', defaultWidth: 120 },
+    { field: 'totalRevenue', label: 'Doanh thu', defaultWidth: 140 },
+    { field: 'costPerOrder', label: 'Chi phí/Đơn hàng', defaultWidth: 150 },
+    { field: 'profitAfterAds', label: 'Lợi nhuận sau quảng cáo', defaultWidth: 180 },
+  ]
+  const { widths, startResize } = useResizableColumns('smitgate-col-widths-campaigns', columns)
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3 bg-slate-50/80">
@@ -1004,7 +1085,12 @@ function CampaignPerformanceTable({ rows, reportCampaignMap, adsPerformance, sel
         {someChecked && <button type="button" onClick={onClearCampaignSelection} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100">Bỏ chọn</button>}
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-[1600px] text-sm">
+        <table className="text-sm table-fixed">
+          <colgroup>
+            <col style={{ width: 48 }} />
+            <col style={{ width: 56 }} />
+            {columns.map((c) => <col key={c.field} style={{ width: widths[c.field] }} />)}
+          </colgroup>
           <thead className="sticky top-0 z-10">
             <tr className="bg-slate-100 text-slate-600">
               <th className="w-12 px-4 py-2.5 border-b border-slate-200">
@@ -1016,19 +1102,19 @@ function CampaignPerformanceTable({ rows, reportCampaignMap, adsPerformance, sel
                 />
               </th>
               <th className="w-14 px-2 py-2.5 border-b border-slate-200 text-center text-xs uppercase tracking-wide font-semibold">Tắt/B</th>
-              <SortableTh field="name" label="Chiến dịch" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
-              <SortableTh field="adAccountName" label="Tài khoản quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
-              <SortableTh field="status" label="Phân phối" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
-              <SortableTh field="totalSpend" label="Số tiền đã chi tiêu" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-              <SortableTh field="cpm" label="CPM" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-              <SortableTh field="ctr" label="CTR" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-              <SortableTh field="frequency" label="Tần suất" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-              <SortableTh field="newContacts" label="SĐT" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-              <SortableTh field="messageContacts" label="Tin nhắn" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-              <SortableTh field="validOrders" label="Đơn xác nhận" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-              <SortableTh field="totalRevenue" label="Doanh thu" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-              <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-              <SortableTh field="profitAfterAds" label="Lợi nhuận sau quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+              {columns.map((c) => (
+                <SortableTh
+                  key={c.field}
+                  field={c.field}
+                  label={c.label}
+                  sortField={sortField}
+                  sortDir={sortDir}
+                  onToggle={onSortToggle}
+                  align={c.align}
+                  width={widths[c.field]}
+                  onResizeStart={startResize}
+                />
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -1208,6 +1294,30 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
   const adSetPageStart = (adSetPageSafe - 1) * ADSET_PAGE_SIZE
   const pagedRows = sortedRows.slice(adSetPageStart, adSetPageStart + ADSET_PAGE_SIZE)
 
+  const columns = [
+    { field: 'name', label: 'Nhóm quảng cáo', align: 'left', defaultWidth: 200 },
+    { field: 'adAccountName', label: 'Tài khoản QC', align: 'left', defaultWidth: 160 },
+    { field: 'campaignName', label: 'Chiến dịch', align: 'left', defaultWidth: 180 },
+    { field: 'status', label: 'Phân phối', align: 'left', defaultWidth: 130 },
+    { field: 'spend', label: 'Số tiền đã chi tiêu', defaultWidth: 150 },
+    { field: 'cpm', label: 'CPM', defaultWidth: 100 },
+    { field: 'ctr', label: 'CTR', defaultWidth: 90 },
+    { field: 'frequency', label: 'Tần suất', defaultWidth: 100 },
+    { field: 'comments', label: 'Bình luận', defaultWidth: 100 },
+    { field: 'messageContacts', label: 'Tin nhắn mới', defaultWidth: 110 },
+    { field: 'costPerMessage', label: 'Chi phí tin nhắn', defaultWidth: 140 },
+    { field: 'phoneCount', label: 'SĐT mới', defaultWidth: 100 },
+    { field: 'costPerPhone', label: 'Chi phí SĐT', defaultWidth: 130 },
+    { field: 'phoneRate', label: 'Tỷ lệ ra SĐT', defaultWidth: 120 },
+    { field: 'orderCount', label: 'Số Đơn Chốt', defaultWidth: 120 },
+    { field: 'sales', label: 'Doanh số', defaultWidth: 130 },
+    { field: 'profitOrderCount', label: 'Đơn Đã Gửi', defaultWidth: 120 },
+    { field: 'orderProfit', label: 'Lợi nhuận đã nhận', defaultWidth: 150 },
+    { field: 'costPerOrder', label: 'Chi phí/Đơn hàng', defaultWidth: 150 },
+    { field: 'profitAfterAds', label: 'Lợi nhuận sau QC', defaultWidth: 160 },
+  ]
+  const { widths, startResize } = useResizableColumns('smitgate-col-widths-adsets', columns)
+
   return (
     <div className="space-y-3">
       {/* Status filter */}
@@ -1248,7 +1358,12 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
           {someChecked && <button type="button" onClick={onClearAdSetSelection} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100">Bỏ chọn</button>}
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-[2000px] text-sm">
+          <table className="text-sm table-fixed">
+            <colgroup>
+              <col style={{ width: 48 }} />
+              <col style={{ width: 56 }} />
+              {columns.map((c) => <col key={c.field} style={{ width: widths[c.field] }} />)}
+            </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-100 text-slate-600">
                 <th className="w-12 px-4 py-2.5 border-b border-slate-200">
@@ -1260,26 +1375,19 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
                   />
                 </th>
                 <th className="w-14 px-2 py-2.5 border-b border-slate-200 text-center text-xs uppercase tracking-wide font-semibold">Tắt/B</th>
-                <SortableTh field="name" label="Nhóm quảng cáo" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} align="left" />
-                <SortableTh field="adAccountName" label="Tài khoản QC" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} align="left" />
-                <SortableTh field="campaignName" label="Chiến dịch" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} align="left" />
-                <SortableTh field="status" label="Phân phối" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} align="left" />
-                <SortableTh field="spend" label="Số tiền đã chi tiêu" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="cpm" label="CPM" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="ctr" label="CTR" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="frequency" label="Tần suất" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="comments" label="Bình luận" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="messageContacts" label="Tin nhắn mới" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="costPerMessage" label="Chi phí tin nhắn" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="phoneCount" label="SĐT mới" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="costPerPhone" label="Chi phí SĐT" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="phoneRate" label="Tỷ lệ ra SĐT" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="orderCount" label="Số Đơn Chốt" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="sales" label="Doanh số" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="profitOrderCount" label="Đơn Đã Gửi" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="orderProfit" label="Lợi nhuận đã nhận" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
-                <SortableTh field="profitAfterAds" label="Lợi nhuận sau QC" sortField={adSetSort.sortField} sortDir={adSetSort.sortDir} onToggle={adSetSort.toggle} />
+                {columns.map((c) => (
+                  <SortableTh
+                    key={c.field}
+                    field={c.field}
+                    label={c.label}
+                    sortField={adSetSort.sortField}
+                    sortDir={adSetSort.sortDir}
+                    onToggle={adSetSort.toggle}
+                    align={c.align}
+                    width={widths[c.field]}
+                    onResizeStart={startResize}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -1442,6 +1550,29 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
     }
   }
 
+  const columns = [
+    { field: 'adName', label: 'Quảng cáo', align: 'left', defaultWidth: 220 },
+    { field: 'adAccountName', label: 'Tài khoản quảng cáo', align: 'left', defaultWidth: 180 },
+    { field: 'createdDate', label: 'Ngày tạo', align: 'left', defaultWidth: 110 },
+    { field: 'delivery', label: 'Phân phối', align: 'left', defaultWidth: 130 },
+    { field: 'budget', label: 'Ngân sách', defaultWidth: 130 },
+    { field: 'spend', label: 'Số tiền đã chi tiêu', defaultWidth: 150 },
+    { field: 'comments', label: 'Bình luận', defaultWidth: 100 },
+    { field: 'messageContacts', label: 'Tin nhắn mới', defaultWidth: 110 },
+    { field: 'costPerMessage', label: 'Chi phí tin nhắn mới', defaultWidth: 150 },
+    { field: 'phoneCount', label: 'Số điện thoại mới', defaultWidth: 140 },
+    { field: 'costPerPhone', label: 'Chi phí số điện thoại', defaultWidth: 150 },
+    { field: 'phoneRate', label: 'Tỷ lệ ra SĐT', defaultWidth: 120 },
+    { field: 'orderCount', label: 'Số Đơn Chốt', defaultWidth: 120 },
+    { field: 'sales', label: 'Doanh số', defaultWidth: 130 },
+    { field: 'profitOrderCount', label: 'Đơn Đã Gửi', defaultWidth: 120 },
+    { field: 'orderProfit', label: 'Lợi nhuận đã nhận', defaultWidth: 150 },
+    { field: 'costPerOrder', label: 'Chi phí/Đơn hàng', defaultWidth: 150 },
+    { field: 'profitAfterAds', label: 'Lợi nhuận sau quảng cáo', defaultWidth: 180 },
+    { field: 'postId', label: 'ID Bài viết', defaultWidth: 150 },
+  ]
+  const { widths, startResize } = useResizableColumns('smitgate-col-widths-ads', columns)
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
@@ -1494,7 +1625,12 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
           {someAdsChecked && <button type="button" onClick={() => setSelectedAdIds([])} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100">Bỏ chọn</button>}
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-[2200px] text-sm">
+          <table className="text-sm table-fixed">
+            <colgroup>
+              <col style={{ width: 48 }} />
+              <col style={{ width: 56 }} />
+              {columns.map((c) => <col key={c.field} style={{ width: widths[c.field] }} />)}
+            </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-100 text-slate-600">
                 <th className="w-12 px-4 py-2.5 border-b border-slate-200">
@@ -1506,25 +1642,19 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                   />
                 </th>
                 <th className="w-14 px-2 py-2.5 border-b border-slate-200 text-center text-xs uppercase tracking-wide font-semibold">Tắt/B</th>
-                <SortableTh field="adName" label="Quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
-                <SortableTh field="adAccountName" label="Tài khoản quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
-                <SortableTh field="createdDate" label="Ngày tạo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
-                <SortableTh field="delivery" label="Phân phối" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} align="left" />
-                <SortableTh field="budget" label="Ngân sách" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="spend" label="Số tiền đã chi tiêu" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="comments" label="Bình luận" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="messageContacts" label="Tin nhắn mới" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="costPerMessage" label="Chi phí tin nhắn mới" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="phoneCount" label="Số điện thoại mới" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="costPerPhone" label="Chi phí số điện thoại" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="phoneRate" label="Tỷ lệ ra SĐT" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="orderCount" label="Số Đơn Chốt" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="sales" label="Doanh số" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="profitOrderCount" label="Đơn Đã Gửi" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="orderProfit" label="Lợi nhuận đã nhận" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="costPerOrder" label="Chi phí/Đơn hàng" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="profitAfterAds" label="Lợi nhuận sau quảng cáo" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
-                <SortableTh field="postId" label="ID Bài viết" sortField={sortField} sortDir={sortDir} onToggle={onSortToggle} />
+                {columns.map((c) => (
+                  <SortableTh
+                    key={c.field}
+                    field={c.field}
+                    label={c.label}
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onToggle={onSortToggle}
+                    align={c.align}
+                    width={widths[c.field]}
+                    onResizeStart={startResize}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
