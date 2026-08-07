@@ -327,6 +327,18 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("to") LocalDateTime to,
             @Param("validStatuses") List<String> validStatuses);
 
+    @Query("SELECT o FROM Order o WHERE o.tenantId = :tenantId " +
+            "AND o.clickId = :clickId " +
+            "AND o.createdAtExternal BETWEEN :from AND :to " +
+            "AND LOWER(o.status) IN :validStatuses " +
+            "ORDER BY o.createdAtExternal DESC")
+    List<Order> findValidOrdersByTenantIdAndClickId(
+            @Param("tenantId") Long tenantId,
+            @Param("clickId") String clickId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("validStatuses") List<String> validStatuses);
+
     @Query("SELECT o.clickId, COUNT(DISTINCT o.customerPhone) " +
             "FROM Order o WHERE o.tenantId = :tenantId " +
             "AND o.createdAtExternal BETWEEN :from AND :to " +

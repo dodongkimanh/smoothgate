@@ -164,6 +164,42 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.ok(payload));
     }
 
+    @GetMapping("/by-ad/{adId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getOrdersByAd(
+            HttpServletRequest request,
+            @PathVariable String adId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "false") boolean profitOnly) {
+
+        Long tenantId = (Long) request.getAttribute("tenantId");
+        LocalDateTime fromDateTime = from.atStartOfDay();
+        LocalDateTime toDateTime = to.atTime(LocalTime.MAX);
+
+        List<Order> orders = orderRepository.findValidOrdersByTenantIdAndClickId(
+                tenantId, adId, fromDateTime, toDateTime, OrderStatusClassifier.validStatusesForAggregation());
+
+        if (profitOnly) {
+            orders = orders.stream()
+                    .filter(o -> o.getShippingFee() != null && o.getShippingFee().compareTo(BigDecimal.ZERO) > 0)
+                    .toList();
+        }
+
+        Map<Long, String> shopNames = posShopRepository.findByTenantId(tenantId).stream()
+                .collect(Collectors.toMap(PosShop::getId, PosShop::getName, (a, b) -> a));
+
+        List<Map<String, Object>> items = orders.stream()
+                .map(o -> toMap(o, shopNames))
+                .toList();
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("adId", adId);
+        payload.put("profitOnly", profitOnly);
+        payload.put("count", items.size());
+        payload.put("items", items);
+        return ResponseEntity.ok(ApiResponse.ok(payload));
+    }
+
     @GetMapping("/by-external/{externalOrderId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getOrderByExternalId(
             HttpServletRequest request,

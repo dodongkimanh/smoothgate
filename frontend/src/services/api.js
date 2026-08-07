@@ -73,6 +73,8 @@ export const getCampaignFunnel = (id, from, to, limit = 30) =>
 export const getAccountSpend = (from, to) =>
   api.get('/reports/account-spend', { params: { from, to } })
 export const getOrders = (params) => api.get('/orders', { params })
+export const getOrdersByAd = (adId, from, to, profitOnly = false) =>
+  api.get(`/orders/by-ad/${encodeURIComponent(adId)}`, { params: { from, to, profitOnly } })
 
 // Data Sources
 export const getDataSources = () => api.get('/datasources')

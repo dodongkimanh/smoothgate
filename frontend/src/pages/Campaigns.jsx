@@ -10,9 +10,10 @@ import {
   getCampaignFunnel,
   toggleMetaStatus,
   updateMetaBudget,
+  getOrdersByAd,
 } from '../services/api'
 import toast from 'react-hot-toast'
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bug, ChevronDown, ChevronRight, DollarSign, Layers3, Megaphone, Network, Phone, RefreshCw, Search, ShoppingCart, TrendingUp, Users } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bug, ChevronDown, ChevronRight, DollarSign, Eye, Layers3, Megaphone, Network, Phone, RefreshCw, Search, ShoppingCart, TrendingUp, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const TABS = [
@@ -635,12 +636,13 @@ export default function Campaigns() {
       const spend = Number(row.spend || 0)
       const orderProfit = Number(row.orderProfit || 0)
       acc.totalSpend += spend
+      acc.totalSales += Number(row.sales || 0)
       acc.totalOrderProfit += orderProfit
       acc.totalProfitAfterAds += orderProfit - spend
       acc.totalPhoneCount += Number(row.phoneCount || 0)
       acc.totalOrderCount += Number(row.orderCount || 0)
       return acc
-    }, { totalSpend: 0, totalOrderProfit: 0, totalProfitAfterAds: 0, totalPhoneCount: 0, totalOrderCount: 0 })
+    }, { totalSpend: 0, totalSales: 0, totalOrderProfit: 0, totalProfitAfterAds: 0, totalPhoneCount: 0, totalOrderCount: 0 })
     let totalMessageContacts = 0
     reportCampaigns.forEach((item) => {
       totalMessageContacts += Number(item.messageContacts || 0)
@@ -1509,6 +1511,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
   const [debugLoading, setDebugLoading] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
   const [selectedAdIds, setSelectedAdIds] = useState([])
+  const [orderModal, setOrderModal] = useState(null)
 
   const toggleAd = (key) => setSelectedAdIds(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])
   const allAdsChecked = rows.length > 0 && rows.every(r => selectedAdIds.includes(r._rowKey))
@@ -1575,8 +1578,9 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-7 gap-2">
         <StatCard label="Chi phí QC" value={formatCurrency(totals.totalSpend)} color="text-slate-800" />
+        <StatCard label="Doanh Số" value={formatCurrency(totals.totalSales)} color="text-emerald-700" />
         <StatCard label="Tin nhắn" value={formatNumber(totals.totalMessageContacts)} color="text-violet-700" />
         <StatCard label="SĐT mới" value={formatNumber(totals.totalPhoneCount)} color="text-teal-700" />
         <StatCard label="Đơn hàng" value={formatNumber(totals.totalOrderCount)} color="text-blue-700" />
@@ -1736,9 +1740,37 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(phones)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{phones > 0 ? formatCurrency(costPerPhone) : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatPercent(phoneRate)}</td>
-                      <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">{formatNumber(row.orderCount)}</td>
+                      <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">
+                        <span className="inline-flex items-center gap-1.5 justify-end">
+                          {formatNumber(row.orderCount)}
+                          {Number(row.orderCount || 0) > 0 && (
+                            <button
+                              type="button"
+                              title="Xem chi tiết đơn hàng"
+                              onClick={() => setOrderModal({ adId: row.adId, adName: row.adName, profitOnly: false, title: 'Số Đơn Chốt' })}
+                              className="text-slate-400 hover:text-blue-600"
+                            >
+                              <Eye size={14} />
+                            </button>
+                          )}
+                        </span>
+                      </td>
                       <td className="px-4 py-2.5 text-right text-emerald-700 align-top font-medium">{formatCurrency(revenue)}</td>
-                      <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">{formatNumber(row.profitOrderCount)}</td>
+                      <td className="px-4 py-2.5 text-right text-blue-700 align-top font-medium">
+                        <span className="inline-flex items-center gap-1.5 justify-end">
+                          {formatNumber(row.profitOrderCount)}
+                          {Number(row.profitOrderCount || 0) > 0 && (
+                            <button
+                              type="button"
+                              title="Xem chi tiết đơn hàng"
+                              onClick={() => setOrderModal({ adId: row.adId, adName: row.adName, profitOnly: true, title: 'Đơn Đã Gửi' })}
+                              className="text-slate-400 hover:text-blue-600"
+                            >
+                              <Eye size={14} />
+                            </button>
+                          )}
+                        </span>
+                      </td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(orderProfit)}</td>
                       <td className="px-4 py-2.5 text-right text-orange-700 align-top font-medium">{Number(row.orderCount || 0) > 0 ? formatCurrency(spend / Number(row.orderCount)) : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(profitAfterAds)}</td>
@@ -1778,6 +1810,85 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
           </div>
         </div>
       )}
+
+      {orderModal && (
+        <OrderListModal
+          adId={orderModal.adId}
+          adName={orderModal.adName}
+          title={orderModal.title}
+          profitOnly={orderModal.profitOnly}
+          fromDate={fromDate}
+          toDate={toDate}
+          onClose={() => setOrderModal(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function OrderListModal({ adId, adName, title, profitOnly, fromDate, toDate, onClose }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['ordersByAd', adId, fromDate, toDate, profitOnly],
+    queryFn: () => getOrdersByAd(adId, fromDate, toDate, profitOnly),
+    enabled: !!adId,
+  })
+
+  const orders = data?.data?.data?.items || []
+
+  const formatCurrency = (value) => new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0))
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div>
+            <div className="text-sm font-semibold text-slate-800">{title} — {adName || adId}</div>
+            <div className="text-xs text-slate-400 font-mono mt-0.5">{adId}</div>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">×</button>
+        </div>
+
+        <div className="overflow-auto flex-1 -mx-2">
+          {isLoading ? (
+            <div className="text-center text-slate-400 py-8 text-sm">Đang tải...</div>
+          ) : error ? (
+            <div className="text-center text-red-500 py-8 text-sm">Không thể tải danh sách đơn hàng</div>
+          ) : orders.length === 0 ? (
+            <div className="text-center text-slate-400 py-8 text-sm">Không có đơn hàng</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-slate-50">
+                <tr className="text-slate-500 text-xs uppercase tracking-wide">
+                  <th className="px-2 py-2 text-left">Mã đơn</th>
+                  <th className="px-2 py-2 text-left">Khách hàng</th>
+                  <th className="px-2 py-2 text-left">SĐT</th>
+                  <th className="px-2 py-2 text-left">Trạng thái</th>
+                  <th className="px-2 py-2 text-right">Doanh số</th>
+                  <th className="px-2 py-2 text-right">Phí ship</th>
+                  <th className="px-2 py-2 text-left">Ngày đặt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr key={o.id} className="border-t border-slate-100">
+                    <td className="px-2 py-2 font-mono text-xs text-slate-600">{o.orderId || '-'}</td>
+                    <td className="px-2 py-2 text-slate-700">{o.customerName || '-'}</td>
+                    <td className="px-2 py-2 text-slate-700">{o.customerPhone || '-'}</td>
+                    <td className="px-2 py-2 text-slate-600">{o.status || '-'}</td>
+                    <td className="px-2 py-2 text-right text-emerald-700 font-medium">{formatCurrency(o.revenue)}</td>
+                    <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(o.shippingFee)}</td>
+                    <td className="px-2 py-2 text-slate-600 whitespace-nowrap">{o.orderTime ? new Date(o.orderTime).toLocaleDateString('vi-VN') : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
