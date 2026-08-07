@@ -66,6 +66,13 @@ public class Order {
     @Column(name = "raw_json", columnDefinition = "TEXT")
     private String rawJson;
 
+    /** Manual operational tracking status, independent of the POS-synced `status` field. One of: PENDING, DONE, CANCELLED. */
+    @Column(name = "review_status", length = 20)
+    private String reviewStatus = "PENDING";
+
+    @Column(name = "note", columnDefinition = "TEXT")
+    private String note;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 

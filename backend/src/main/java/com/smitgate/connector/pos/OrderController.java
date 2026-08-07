@@ -200,6 +200,40 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.ok(payload));
     }
 
+    private static final java.util.Set<String> VALID_REVIEW_STATUSES = java.util.Set.of("PENDING", "DONE", "CANCELLED");
+
+    @PostMapping("/{id}/review")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> updateOrderReview(
+            HttpServletRequest request,
+            @PathVariable Long id,
+            @org.springframework.web.bind.annotation.RequestBody Map<String, Object> body) {
+
+        Long tenantId = (Long) request.getAttribute("tenantId");
+        Order order = orderRepository.findById(id)
+                .filter(o -> o.getTenantId().equals(tenantId))
+                .orElse(null);
+        if (order == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        if (body.containsKey("reviewStatus")) {
+            String reviewStatus = String.valueOf(body.get("reviewStatus"));
+            if (!VALID_REVIEW_STATUSES.contains(reviewStatus)) {
+                return ResponseEntity.badRequest().body(ApiResponse.ok(Map.of("error", "Invalid reviewStatus")));
+            }
+            order.setReviewStatus(reviewStatus);
+        }
+        if (body.containsKey("note")) {
+            Object note = body.get("note");
+            order.setNote(note != null ? String.valueOf(note) : null);
+        }
+        orderRepository.save(order);
+
+        Map<Long, String> shopNames = posShopRepository.findByTenantId(tenantId).stream()
+                .collect(Collectors.toMap(PosShop::getId, PosShop::getName, (a, b) -> a));
+        return ResponseEntity.ok(ApiResponse.ok(toMap(order, shopNames)));
+    }
+
     @GetMapping("/by-external/{externalOrderId}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getOrderByExternalId(
             HttpServletRequest request,
@@ -428,7 +462,9 @@ public class OrderController {
                 Map.entry("poscakeInsertedAtRaw", parsedRaw.insertedAtRaw),
                 Map.entry("poscakeUpdatedAtRaw", parsedRaw.updatedAtRaw),
                 Map.entry("orderTime", o.getCreatedAtExternal() != null ? o.getCreatedAtExternal().toString() : ""),
-                Map.entry("createdAt", o.getCreatedAt() != null ? o.getCreatedAt().toString() : "")
+                Map.entry("createdAt", o.getCreatedAt() != null ? o.getCreatedAt().toString() : ""),
+                Map.entry("reviewStatus", o.getReviewStatus() != null ? o.getReviewStatus() : "PENDING"),
+                Map.entry("note", o.getNote() != null ? o.getNote() : "")
         );
     }
 

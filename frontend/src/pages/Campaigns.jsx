@@ -11,6 +11,7 @@ import {
   toggleMetaStatus,
   updateMetaBudget,
   getOrdersByAd,
+  updateOrderReview,
 } from '../services/api'
 import toast from 'react-hot-toast'
 import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bug, ChevronDown, ChevronRight, DollarSign, Eye, Layers3, Megaphone, Network, Phone, RefreshCw, Search, ShoppingCart, TrendingUp, Users } from 'lucide-react'
@@ -1826,14 +1827,55 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
   )
 }
 
+const REVIEW_STATUS_OPTIONS = [
+  { value: 'PENDING', label: 'Đang chờ' },
+  { value: 'DONE', label: 'Hoàn Thành' },
+  { value: 'CANCELLED', label: 'Hủy' },
+]
+
 function OrderListModal({ adId, adName, title, profitOnly, fromDate, toDate, onClose }) {
+  const queryClient = useQueryClient()
+  const queryKey = ['ordersByAd', adId, fromDate, toDate, profitOnly]
   const { data, isLoading, error } = useQuery({
-    queryKey: ['ordersByAd', adId, fromDate, toDate, profitOnly],
+    queryKey,
     queryFn: () => getOrdersByAd(adId, fromDate, toDate, profitOnly),
     enabled: !!adId,
   })
 
   const orders = data?.data?.data?.items || []
+  const [noteDrafts, setNoteDrafts] = useState({})
+
+  const applyOrderUpdate = (orderId, updated) => {
+    queryClient.setQueryData(queryKey, (old) => {
+      if (!old?.data?.data?.items) return old
+      return {
+        ...old,
+        data: {
+          ...old.data,
+          data: {
+            ...old.data.data,
+            items: old.data.data.items.map((o) => (o.id === orderId ? { ...o, ...updated } : o)),
+          },
+        },
+      }
+    })
+  }
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ orderId, updates }) => updateOrderReview(orderId, updates),
+    onSuccess: (res, variables) => applyOrderUpdate(variables.orderId, res.data?.data || {}),
+    onError: () => toast.error('Không thể lưu thay đổi'),
+  })
+
+  const handleStatusChange = (orderId, reviewStatus) => {
+    reviewMutation.mutate({ orderId, updates: { reviewStatus } })
+  }
+
+  const handleNoteBlur = (orderId, originalNote) => {
+    const draft = noteDrafts[orderId]
+    if (draft === undefined || draft === (originalNote || '')) return
+    reviewMutation.mutate({ orderId, updates: { note: draft } })
+  }
 
   const formatCurrency = (value) => new Intl.NumberFormat('vi-VN', {
     style: 'currency',
@@ -1843,7 +1885,7 @@ function OrderListModal({ adId, adName, title, profitOnly, fromDate, toDate, onC
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-4xl mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 mb-3">
           <div>
             <div className="text-sm font-semibold text-slate-800">{title} — {adName || adId}</div>
@@ -1868,8 +1910,9 @@ function OrderListModal({ adId, adName, title, profitOnly, fromDate, toDate, onC
                   <th className="px-2 py-2 text-left">SĐT</th>
                   <th className="px-2 py-2 text-left">Trạng thái</th>
                   <th className="px-2 py-2 text-right">Doanh số</th>
-                  <th className="px-2 py-2 text-right">Phí ship</th>
+                  <th className="px-2 py-2 text-right">Lợi Nhuận</th>
                   <th className="px-2 py-2 text-left">Ngày đặt</th>
+                  <th className="px-2 py-2 text-left">Ghi chú</th>
                 </tr>
               </thead>
               <tbody>
@@ -1878,10 +1921,30 @@ function OrderListModal({ adId, adName, title, profitOnly, fromDate, toDate, onC
                     <td className="px-2 py-2 font-mono text-xs text-slate-600">{o.orderId || '-'}</td>
                     <td className="px-2 py-2 text-slate-700">{o.customerName || '-'}</td>
                     <td className="px-2 py-2 text-slate-700">{o.customerPhone || '-'}</td>
-                    <td className="px-2 py-2 text-slate-600">{o.status || '-'}</td>
+                    <td className="px-2 py-2">
+                      <select
+                        value={o.reviewStatus || 'PENDING'}
+                        onChange={(e) => handleStatusChange(o.id, e.target.value)}
+                        className="text-xs border border-slate-200 rounded-lg px-1.5 py-1 bg-white text-slate-700"
+                      >
+                        {REVIEW_STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="px-2 py-2 text-right text-emerald-700 font-medium">{formatCurrency(o.revenue)}</td>
-                    <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(o.shippingFee)}</td>
+                    <td className="px-2 py-2 text-right text-slate-700">{formatCurrency(o.orderProfit)}</td>
                     <td className="px-2 py-2 text-slate-600 whitespace-nowrap">{o.orderTime ? new Date(o.orderTime).toLocaleDateString('vi-VN') : '-'}</td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="text"
+                        value={noteDrafts[o.id] ?? (o.note || '')}
+                        onChange={(e) => setNoteDrafts((prev) => ({ ...prev, [o.id]: e.target.value }))}
+                        onBlur={() => handleNoteBlur(o.id, o.note)}
+                        placeholder="Ghi chú..."
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1"
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>

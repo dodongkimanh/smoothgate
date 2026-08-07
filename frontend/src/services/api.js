@@ -75,6 +75,8 @@ export const getAccountSpend = (from, to) =>
 export const getOrders = (params) => api.get('/orders', { params })
 export const getOrdersByAd = (adId, from, to, profitOnly = false) =>
   api.get(`/orders/by-ad/${encodeURIComponent(adId)}`, { params: { from, to, profitOnly } })
+export const updateOrderReview = (orderId, updates) =>
+  api.post(`/orders/${orderId}/review`, updates)
 
 // Data Sources
 export const getDataSources = () => api.get('/datasources')
