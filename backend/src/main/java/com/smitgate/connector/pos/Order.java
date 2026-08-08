@@ -66,7 +66,7 @@ public class Order {
     @Column(name = "raw_json", columnDefinition = "TEXT")
     private String rawJson;
 
-    /** Manual operational tracking status, independent of the POS-synced `status` field. One of: PENDING, DONE, CANCELLED. */
+    /** Manual operational tracking status, independent of the POS-synced `status` field. One of: PENDING, SHIPPING, DONE, CANCELLED. */
     @Column(name = "review_status", length = 20)
     private String reviewStatus = "PENDING";
 

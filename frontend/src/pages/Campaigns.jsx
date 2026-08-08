@@ -1829,9 +1829,17 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
 
 const REVIEW_STATUS_OPTIONS = [
   { value: 'PENDING', label: 'Đang chờ' },
+  { value: 'SHIPPING', label: 'Đang Vận Chuyển' },
   { value: 'DONE', label: 'Hoàn Thành' },
   { value: 'CANCELLED', label: 'Hủy' },
 ]
+
+const REVIEW_STATUS_STYLES = {
+  PENDING: 'bg-white text-slate-700 border-slate-200',
+  SHIPPING: 'bg-orange-500 text-white border-orange-500',
+  DONE: 'bg-emerald-500 text-white border-emerald-500',
+  CANCELLED: 'bg-red-500 text-white border-red-500',
+}
 
 function OrderListModal({ adId, adName, title, profitOnly, fromDate, toDate, onClose }) {
   const queryClient = useQueryClient()
@@ -1925,7 +1933,7 @@ function OrderListModal({ adId, adName, title, profitOnly, fromDate, toDate, onC
                       <select
                         value={o.reviewStatus || 'PENDING'}
                         onChange={(e) => handleStatusChange(o.id, e.target.value)}
-                        className="text-xs border border-slate-200 rounded-lg px-1.5 py-1 bg-white text-slate-700"
+                        className={`text-xs border rounded-lg px-1.5 py-1 font-medium ${REVIEW_STATUS_STYLES[o.reviewStatus || 'PENDING'] || REVIEW_STATUS_STYLES.PENDING}`}
                       >
                         {REVIEW_STATUS_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>

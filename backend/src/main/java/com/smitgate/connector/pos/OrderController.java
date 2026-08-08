@@ -200,7 +200,7 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.ok(payload));
     }
 
-    private static final java.util.Set<String> VALID_REVIEW_STATUSES = java.util.Set.of("PENDING", "DONE", "CANCELLED");
+    private static final java.util.Set<String> VALID_REVIEW_STATUSES = java.util.Set.of("PENDING", "SHIPPING", "DONE", "CANCELLED");
 
     @PostMapping("/{id}/review")
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateOrderReview(
