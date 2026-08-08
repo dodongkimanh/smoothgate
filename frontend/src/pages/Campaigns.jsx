@@ -642,8 +642,9 @@ export default function Campaigns() {
       acc.totalProfitAfterAds += orderProfit - spend
       acc.totalPhoneCount += Number(row.phoneCount || 0)
       acc.totalOrderCount += Number(row.orderCount || 0)
+      acc.totalProfitOrderCount += Number(row.profitOrderCount || 0)
       return acc
-    }, { totalSpend: 0, totalSales: 0, totalOrderProfit: 0, totalProfitAfterAds: 0, totalPhoneCount: 0, totalOrderCount: 0 })
+    }, { totalSpend: 0, totalSales: 0, totalOrderProfit: 0, totalProfitAfterAds: 0, totalPhoneCount: 0, totalOrderCount: 0, totalProfitOrderCount: 0 })
     let totalMessageContacts = 0
     reportCampaigns.forEach((item) => {
       totalMessageContacts += Number(item.messageContacts || 0)
@@ -1579,12 +1580,13 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 sm:grid-cols-7 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-8 gap-2">
         <StatCard label="Chi phí QC" value={formatCurrency(totals.totalSpend)} color="text-slate-800" />
         <StatCard label="Doanh Số" value={formatCurrency(totals.totalSales)} color="text-emerald-700" />
         <StatCard label="Tin nhắn" value={formatNumber(totals.totalMessageContacts)} color="text-violet-700" />
         <StatCard label="SĐT mới" value={formatNumber(totals.totalPhoneCount)} color="text-teal-700" />
         <StatCard label="Đơn hàng" value={formatNumber(totals.totalOrderCount)} color="text-blue-700" />
+        <StatCard label="Đã gửi" value={formatNumber(totals.totalProfitOrderCount)} color="text-indigo-700" />
         <StatCard label="LN đã nhận" value={formatCurrency(totals.totalOrderProfit)} color="text-slate-800" />
         <StatCard label="LN sau QC" value={formatCurrency(totals.totalProfitAfterAds)} color="text-slate-800" />
       </div>
