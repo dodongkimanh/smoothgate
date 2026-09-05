@@ -134,6 +134,13 @@ export const toggleMetaStatus = (objectId, dataSourceId, status) =>
 export const updateMetaBudget = (objectId, dataSourceId, budgetCents, budgetType) =>
   api.post('/integrations/meta/update-budget', { objectId, dataSourceId, budgetCents, budgetType })
 
+// Campaign Drafts (nháp chiến dịch nội bộ, chưa đăng lên Meta)
+export const getCampaignDrafts = () => api.get('/campaign-drafts')
+export const getCampaignDraft = (id) => api.get(`/campaign-drafts/${id}`)
+export const createCampaignDraft = (data) => api.post('/campaign-drafts', data)
+export const updateCampaignDraft = (id, data) => api.put(`/campaign-drafts/${id}`, data)
+export const deleteCampaignDraft = (id) => api.delete(`/campaign-drafts/${id}`)
+
 // Agent
 export const triggerAgentAnalysis = () => api.post('/agent/analyze')
 export const getAgentSettings = () => api.get('/agent/settings')

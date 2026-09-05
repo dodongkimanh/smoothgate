@@ -8,6 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Campaigns from './pages/Campaigns'
+import CampaignDrafts from './pages/CampaignDrafts'
 import AdAccounts from './pages/AdAccounts'
 import Orders from './pages/Orders'
 import ConnectAds from './pages/ConnectAds'
@@ -162,6 +163,7 @@ function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
         <Route path="campaigns-list" element={<ErrorBoundary><Campaigns /></ErrorBoundary>} />
+        <Route path="campaign-drafts" element={<ErrorBoundary><CampaignDrafts /></ErrorBoundary>} />
         <Route path="campaigns" element={<Navigate to="/campaigns-list" replace />} />
         <Route path="ad-groups" element={<Navigate to="/campaigns-list" replace />} />
         <Route path="posts" element={<Navigate to="/campaigns-list" replace />} />

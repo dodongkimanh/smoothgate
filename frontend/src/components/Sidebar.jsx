@@ -2,6 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   Megaphone,
+  FolderKanban,
   ShoppingCart,
   Link2,
   Package,
@@ -13,6 +14,7 @@ import logoMark from '../assets/smoothgate-mark.svg'
 
 const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Tổng quan' },
+  { path: '/campaign-drafts', icon: FolderKanban, label: 'Chiến dịch' },
   { path: '/campaigns-list', icon: Megaphone, label: 'Trình quản lý QC' },
   { path: '/orders', icon: ShoppingCart, label: 'Đơn hàng' },
   { path: '/connect-ads', icon: Link2, label: 'Kết nối QC' },
