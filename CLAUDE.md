@@ -60,10 +60,10 @@ docker compose up -d    # MySQL + backend + frontend (nginx on port 80)
 ### Key architectural patterns
 - **Multi-tenant**: Every entity is scoped by `tenantId`; auth resolves tenant from the JWT user
 - **DataSource abstraction**: External connections (Meta Ads, Pancake POS) are managed as `DataSource` entities with lifecycle states (ACTIVE, ERROR, INACTIVE)
-- **Dual DB support**: MySQL for local dev (`application.yml`), PostgreSQL/Supabase for production (`application-prod.yml`, activated via `SPRING_PROFILES_ACTIVE=prod`)
+- **Dual DB support**: MySQL for local dev (`application.yml`), PostgreSQL for production (`application-prod.yml`, activated via `SPRING_PROFILES_ACTIVE=prod`) — self-hosted on the team's NAS via Docker, not a managed cloud DB
 - **Flyway migrations**: Separate migration paths — `db/migration/mysql/` and `db/migration/postgresql/`; versions are not aligned between the two
-- **Redis caching (prod only)**: Dev uses Spring's simple in-memory cache; prod uses Redis (Upstash) with `RedisCacheConfig` and `CacheInvalidationService`
-- **Spring Retry**: `@Retryable` on auth service for transient Supabase cold-start connection failures
+- **Caching**: `application-prod.yml` defaults `spring.cache.type` to `redis` with `RedisCacheConfig`/`CacheInvalidationService`, but the actual production deployment overrides this to `SPRING_CACHE_TYPE=simple` and excludes `RedisAutoConfiguration` — Redis is not actually running/used in production
+- **Spring Retry**: `@Retryable` on auth service for resilient reconnect on transient DB connection drops
 - **Scheduled sync with cache eviction cooldown**: `SyncScheduler` evicts report caches after data changes, but rate-limits eviction via `reportCacheEvictMinIntervalMs`
 - **DataSource self-healing**: `SyncScheduler` flips a `PANCAKE_POS`/`META_ADS` datasource from `ERROR` back to `ACTIVE` automatically on the next successful sync. Separately, `DataSourceService` handles stored-token decryption failures (e.g. after an `ENCRYPTION_SECRET` rotation) by re-encrypting the Poscake API key with a fallback key (`app.poscake.fallback-api-key`, falling back further to the `POSCAKE_FALLBACK_API_KEY` env var if the property isn't injected)
 
@@ -72,7 +72,8 @@ docker compose up -d    # MySQL + backend + frontend (nginx on port 80)
 - Default dev DB: MySQL on `localhost:3306/smitgate` (user `root`)
 - Env vars for secrets: `DB_PASSWORD`, `JWT_SECRET`, `ENCRYPTION_SECRET`, `FB_APP_ID`, `FB_APP_SECRET`, `FB_REDIRECT_URI`, `POSCAKE_FALLBACK_API_KEY`
 - AI agent env vars (all optional, feature is off unless `app.agent.enabled=true`): `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-- Production activates via `SPRING_PROFILES_ACTIVE=prod` (PostgreSQL, Redis, tuned HikariCP); `application-local.yml` is available for local overrides
+- Production activates via `SPRING_PROFILES_ACTIVE=prod` (PostgreSQL, tuned HikariCP); `application-local.yml` is available for local overrides
+- Production runs self-hosted on the team's Synology NAS via Docker Compose (`docker/Smoothgate/` on the NAS), exposed publicly through a Cloudflare Tunnel at `smoothgate-backend.kimanh-media.cloud`. Frontend deploys separately on Vercel and proxies `/api/*` to that URL via `frontend/vercel.json`. Not on Supabase/Render.
 - Frontend proxy: Vite dev server proxies `/api` requests to `http://localhost:8080`
 
 ## API Auth

@@ -1,4 +1,4 @@
-# Production profile — PostgreSQL / Supabase
+# Production profile — PostgreSQL (self-hosted on NAS)
 # Activate with: SPRING_PROFILES_ACTIVE=prod
 spring:
   cache:
@@ -28,16 +28,16 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
-      # Keep pool small for Supabase/PgBouncer session limits.
+      # Kept small/conservative from the original managed-Postgres tuning; still safe on self-hosted Postgres.
       maximum-pool-size: ${DB_POOL_MAX_SIZE:4}
       minimum-idle: ${DB_POOL_MIN_IDLE:0}
       connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:20000}
       initialization-fail-timeout: ${DB_POOL_INITIALIZATION_FAIL_TIMEOUT_MS:-1}
       transaction-isolation: ${DB_POOL_TRANSACTION_ISOLATION:TRANSACTION_READ_COMMITTED}
       validation-timeout: ${DB_POOL_VALIDATION_TIMEOUT_MS:3000}
-      # 3 min idle timeout keeps pool lean — Supabase may close idle sockets earlier than documented.
+      # 3 min idle timeout keeps pool lean.
       idle-timeout: ${DB_POOL_IDLE_TIMEOUT_MS:180000}
-      # 10 min lifetime retires connections well before Supabase server-side closes (~13min).
+      # 10 min lifetime periodically retires connections.
       max-lifetime: ${DB_POOL_MAX_LIFETIME_MS:600000}
       # 30s keepalive catches dead sockets more aggressively.
       keepalive-time: ${DB_POOL_KEEPALIVE_TIME_MS:30000}
@@ -98,7 +98,7 @@ app:
   bootstrap:
     data-initializer-enabled: ${DATA_INITIALIZER_ENABLED:false}
   db:
-    # Periodic heartbeat and self-healing settings for transient Supabase drops.
+    # Periodic heartbeat and self-healing settings for transient connection drops.
     heartbeat-enabled: ${DB_HEARTBEAT_ENABLED:true}
     heartbeat-interval-ms: ${DB_HEARTBEAT_INTERVAL_MS:30000}
     heartbeat-initial-delay-ms: ${DB_HEARTBEAT_INITIAL_DELAY_MS:20000}
@@ -107,7 +107,7 @@ app:
   poscake:
     timestamp-source-timezone: ${POSCAKE_TIMESTAMP_SOURCE_TIMEZONE:UTC}
   facebook:
-    redirect-uri: ${FB_REDIRECT_URI:https://smoothgate-backend.onrender.com/api/integrations/meta/oauth/callback}
+    redirect-uri: ${FB_REDIRECT_URI:https://smoothgate-backend.kimanh-media.cloud/api/integrations/meta/oauth/callback}
   sync:
     attribution:
       batch-size: ${SYNC_ATTRIBUTION_BATCH_SIZE:100}

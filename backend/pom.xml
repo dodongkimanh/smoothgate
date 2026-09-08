@@ -56,7 +56,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- PostgreSQL (production / Supabase) -->
+        <!-- PostgreSQL (production, self-hosted) -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -98,7 +98,7 @@
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
-        <!-- Spring Retry — used for resilient DB reconnect on login (Supabase cold-start / transient drop) -->
+        <!-- Spring Retry — used for resilient DB reconnect on login (transient connection drop) -->
         <dependency>
             <groupId>org.springframework.retry</groupId>
             <artifactId>spring-retry</artifactId>
