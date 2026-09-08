@@ -11,7 +11,7 @@ spring:
       username: ${REDIS_USERNAME:default}
       password: ${REDIS_PASSWORD:}
       ssl:
-        enabled: true
+        enabled: ${REDIS_SSL_ENABLED:true}
       timeout: 3000ms
       lettuce:
         pool:
@@ -47,7 +47,7 @@ spring:
       # which does a lightweight TCP-level check instead of a full SELECT 1 roundtrip.
       # This reduces PgBouncer transaction overhead on every connection borrow.
       data-source-properties:
-        sslmode: require
+        sslmode: ${DB_SSL_MODE:require}
         prepareThreshold: 0
         stringtype: unspecified
         preferQueryMode: simple
