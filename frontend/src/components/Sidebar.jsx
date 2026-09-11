@@ -14,8 +14,8 @@ import logoMark from '../assets/smoothgate-mark.svg'
 
 const navItems = [
   { path: '/dashboard', icon: LayoutDashboard, label: 'Tổng quan' },
-  { path: '/campaign-drafts', icon: FolderKanban, label: 'Chiến dịch' },
   { path: '/campaigns-list', icon: Megaphone, label: 'Trình quản lý QC' },
+  { path: '/campaign-drafts', icon: FolderKanban, label: 'Chiến dịch' },
   { path: '/orders', icon: ShoppingCart, label: 'Đơn hàng' },
   { path: '/connect-ads', icon: Link2, label: 'Kết nối QC' },
   { path: '/connect-poscake', icon: Package, label: 'Kết nối Poscake' },
