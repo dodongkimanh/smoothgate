@@ -30,6 +30,23 @@ const STATUS_OPTIONS = [
   { value: 'ENDED', label: 'Kết thúc' },
 ]
 
+// Static fallback page list — used until real Pancake POS pages are connected for this tenant.
+const STATIC_PAGES = [
+  'Kim Ánh Đúc Đỉnh Đồng Nam Định',
+  'Kim Ánh Đỉnh Đồng Nam Định',
+  'Tranh Đồng Kim Ánh Nam Định',
+  'Xưởng Chế Tác Đồ Thờ Kim Ánh',
+  'Xưởng Tranh Đồng Kim Ánh',
+  'Xưởng Đúc Đồng Kim Ánh',
+  'Xưởng Đúc Đồng Kim Ánh Gia Truyền Nam Đinh',
+  'Xưởng Đúc Đồng Nam Định',
+  'Xưởng Đồng Gia Truyền Nam Định',
+  'Xưởng Đồng Kim Ánh',
+  'Đúc Đồng Làng Nghề Truyền Thống Nam Định',
+  'Đồ Thủ Công Mỹ Nghệ Kim Ánh',
+  'Đồ Đồng Kim Ánh Nam Định',
+]
+
 const emptyAd = () => ({
   name: '',
   isDynamicCreative: false,
@@ -190,8 +207,8 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
     select: (res) => res.data?.data || [],
   })
   const pageOptions = useMemo(() => {
-    const names = Array.from(new Set((pancakeShops || []).map((s) => s.shopName).filter(Boolean)))
-    return names
+    const liveNames = (pancakeShops || []).map((s) => s.shopName).filter(Boolean)
+    return Array.from(new Set([...STATIC_PAGES, ...liveNames]))
   }, [pancakeShops])
 
   const setC = (key, value) => setPayload((p) => ({ ...p, campaign: { ...p.campaign, [key]: value } }))
