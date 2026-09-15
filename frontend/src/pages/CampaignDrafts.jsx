@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import {
   getCampaignDrafts, createCampaignDraft, updateCampaignDraft, deleteCampaignDraft,
+  getSelectedAdAccounts, getSelectedPancakeShops,
 } from '../services/api'
 
 const OBJECTIVES = [
@@ -66,6 +67,7 @@ const emptyAdGroup = () => ({
 
 const emptyPayload = () => ({
   campaign: {
+    adAccountId: '',
     budgetLevel: BUDGET_LEVELS[0],
     budgetStrategy: BUDGET_STRATEGIES[0],
     buyingType: BUYING_TYPES[0],
@@ -177,6 +179,21 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
     return { ...base, adGroups: getAdGroups(base) }
   })
 
+  const { data: adAccounts } = useQuery({
+    queryKey: ['selected-ad-accounts'],
+    queryFn: getSelectedAdAccounts,
+    select: (res) => res.data?.data || [],
+  })
+  const { data: pancakeShops } = useQuery({
+    queryKey: ['selected-pancake-shops'],
+    queryFn: getSelectedPancakeShops,
+    select: (res) => res.data?.data || [],
+  })
+  const pageOptions = useMemo(() => {
+    const names = Array.from(new Set((pancakeShops || []).map((s) => s.shopName).filter(Boolean)))
+    return names
+  }, [pancakeShops])
+
   const setC = (key, value) => setPayload((p) => ({ ...p, campaign: { ...p.campaign, [key]: value } }))
   const setG = (groupIndex, key, value) => setPayload((p) => {
     const adGroups = p.adGroups.map((g, i) => (i === groupIndex ? { ...g, [key]: value } : g))
@@ -215,6 +232,19 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input label="Tên chiến dịch" value={name} onChange={(e) => setName(e.target.value)} placeholder="VD: Chiến dịch tranh đối tượng thử nghiệm 1" />
+              <label className="block">
+                <span className="block text-xs font-medium text-gray-500 mb-1">Tài khoản QC</span>
+                <select
+                  value={payload.campaign.adAccountId || ''}
+                  onChange={(e) => setC('adAccountId', e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                >
+                  <option value="">-- Chọn tài khoản --</option>
+                  {(adAccounts || []).map((acc) => (
+                    <option key={acc.id} value={acc.id}>{acc.name || acc.externalAccountId}</option>
+                  ))}
+                </select>
+              </label>
               <Select label="Mục tiêu" value={objective} onChange={(e) => setObjective(e.target.value)} options={OBJECTIVES} />
               <Select label="Ngân sách chiến dịch" value={payload.campaign.budgetLevel} onChange={(e) => setC('budgetLevel', e.target.value)} options={BUDGET_LEVELS} />
               <Select label="Chiến lược ngân sách" value={payload.campaign.budgetStrategy} onChange={(e) => setC('budgetStrategy', e.target.value)} options={BUDGET_STRATEGIES} />
@@ -253,7 +283,22 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input label="Tên nhóm quảng cáo" value={group.name} onChange={(e) => setG(gi, 'name', e.target.value)} />
                 <Select label="Vị trí chuyển đổi" value={group.conversionLocation} onChange={(e) => setG(gi, 'conversionLocation', e.target.value)} options={CONVERSION_LOCATIONS} />
-                <Input label="Trang" value={group.page} onChange={(e) => setG(gi, 'page', e.target.value)} placeholder="Tên trang Facebook" />
+                <label className="block">
+                  <span className="block text-xs font-medium text-gray-500 mb-1">Trang</span>
+                  <select
+                    value={group.page || ''}
+                    onChange={(e) => setG(gi, 'page', e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                  >
+                    <option value="">-- Chọn trang --</option>
+                    {(group.page && !pageOptions.includes(group.page)) && (
+                      <option value={group.page}>{group.page}</option>
+                    )}
+                    {pageOptions.map((pageName) => (
+                      <option key={pageName} value={pageName}>{pageName}</option>
+                    ))}
+                  </select>
+                </label>
                 <Input label="Ngân sách hàng ngày (đ)" type="number" min="0" value={group.dailyBudget} onChange={(e) => setG(gi, 'dailyBudget', e.target.value)} />
                 <Input label="Ngày bắt đầu" type="datetime-local" value={group.startDate} onChange={(e) => setG(gi, 'startDate', e.target.value)} />
                 <Input label="Ngày kết thúc" type="datetime-local" value={group.endDate} onChange={(e) => setG(gi, 'endDate', e.target.value)} />
@@ -323,10 +368,19 @@ function DraftDetail({ draft }) {
   const c = p.campaign || {}
   const adGroups = getAdGroups(p)
   const m = p.metrics || {}
+
+  const { data: adAccounts } = useQuery({
+    queryKey: ['selected-ad-accounts'],
+    queryFn: getSelectedAdAccounts,
+    select: (res) => res.data?.data || [],
+  })
+  const accountName = (adAccounts || []).find((acc) => String(acc.id) === String(c.adAccountId))?.name
+
   return (
     <div className="space-y-4 mt-4">
       <DetailCard icon={Folder} breadcrumb="Chiến dịch" title={draft.name}>
         <Field label="Tên chiến dịch" value={draft.name} />
+        <Field label="Tài khoản QC" value={accountName} />
         <Field label="Mục tiêu" value={draft.objective} />
         <Field label="Ngân sách chiến dịch" value={c.budgetLevel} />
         <Field label="Chiến lược ngân sách" value={c.budgetStrategy} />
