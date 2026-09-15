@@ -74,6 +74,8 @@ const emptyAdGroup = () => ({
   ageSuggestion: '',
   gender: GENDERS[0],
   advantageAudience: true,
+  customAudiences: '',
+  detailedTargeting: '',
   placements: '',
   bidStrategy: BID_STRATEGIES[0],
   chargingEvent: CHARGING_EVENTS[0],
@@ -324,6 +326,8 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
                 <Input label="Độ tuổi tối thiểu" type="number" min="13" value={group.minAge} onChange={(e) => setG(gi, 'minAge', e.target.value)} />
                 <Input label="Gợi ý độ tuổi" value={group.ageSuggestion} onChange={(e) => setG(gi, 'ageSuggestion', e.target.value)} placeholder="VD: 55-65+" />
                 <Select label="Giới tính" value={group.gender} onChange={(e) => setG(gi, 'gender', e.target.value)} options={GENDERS} />
+                <TextArea label="Thêm những đối tượng tùy chỉnh" value={group.customAudiences} onChange={(e) => setG(gi, 'customAudiences', e.target.value)} placeholder="VD: Khách đã mua hàng, Khách tương tác Fanpage 90 ngày, Đối tượng tương tự 1%..." />
+                <TextArea label="Nhắm mục tiêu chi tiết" value={group.detailedTargeting} onChange={(e) => setG(gi, 'detailedTargeting', e.target.value)} placeholder="VD: Sở thích: Đồ thờ cúng, Phong thủy; Hành vi: Đã tương tác trang Facebook..." />
                 <Select label="Chiến lược giá thầu" value={group.bidStrategy} onChange={(e) => setG(gi, 'bidStrategy', e.target.value)} options={BID_STRATEGIES} />
                 <Select label="Thời điểm tính phí" value={group.chargingEvent} onChange={(e) => setG(gi, 'chargingEvent', e.target.value)} options={CHARGING_EVENTS} />
                 <Select label="Loại phân phối" value={group.deliveryType} onChange={(e) => setG(gi, 'deliveryType', e.target.value)} options={DELIVERY_TYPES} />
@@ -422,6 +426,8 @@ function DraftDetail({ draft }) {
               <Field label="Gợi ý độ tuổi" value={g.ageSuggestion} />
               <Field label="Giới tính" value={g.gender} />
               <Field label="Mở rộng nhắm mục tiêu" value={g.advantageAudience ? 'Có' : 'Không'} />
+              <Field label="Thêm những đối tượng tùy chỉnh" value={g.customAudiences} />
+              <Field label="Nhắm mục tiêu chi tiết" value={g.detailedTargeting} />
               <Field label="Vị trí quảng cáo" value={g.placements} />
               <Field label="Chiến lược giá thầu" value={g.bidStrategy} />
               <Field label="Thời điểm tính phí" value={g.chargingEvent} />
