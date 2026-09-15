@@ -24,6 +24,12 @@ const BID_STRATEGIES = ['Mức chi phí thấp nhất', 'Mức cao nhất', 'Gi�
 const CHARGING_EVENTS = ['Lượt hiển thị', 'Lượt nhấp chuột liên kết']
 const DELIVERY_TYPES = ['Tiêu chuẩn', 'Tăng tốc']
 const AD_SCHEDULING = ['Luôn chạy quảng cáo', 'Lên lịch cụ thể']
+const PERFORMANCE_GOALS = [
+  'Tối đa hóa số cuộc trò chuyện',
+  'Tối đa hóa số khách hàng tiềm năng qua tin nhắn',
+  'Tối đa hóa số lượt mua qua tin nhắn',
+  'Tối đa hóa giá trị của lượt mua qua tin nhắn',
+]
 const STATUS_OPTIONS = [
   { value: 'DRAFT', label: 'Nháp' },
   { value: 'RUNNING', label: 'Đang chạy' },
@@ -72,7 +78,7 @@ const emptyAdGroup = () => ({
   bidStrategy: BID_STRATEGIES[0],
   chargingEvent: CHARGING_EVENTS[0],
   deliveryType: DELIVERY_TYPES[0],
-  performanceGoal: '',
+  performanceGoal: PERFORMANCE_GOALS[2],
   ad: emptyAd(),
 })
 
@@ -258,9 +264,6 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
               </label>
               <Select label="Mục tiêu" value={objective} onChange={(e) => setObjective(e.target.value)} options={OBJECTIVES} />
               <Select label="Ngân sách chiến dịch" value={payload.campaign.budgetLevel} onChange={(e) => setC('budgetLevel', e.target.value)} options={BUDGET_LEVELS} />
-              <Select label="Chiến lược ngân sách" value={payload.campaign.budgetStrategy} onChange={(e) => setC('budgetStrategy', e.target.value)} options={BUDGET_STRATEGIES} />
-              <Select label="Cách mua" value={payload.campaign.buyingType} onChange={(e) => setC('buyingType', e.target.value)} options={BUYING_TYPES} />
-              <Select label="Hạng mục quảng cáo đặc biệt" value={payload.campaign.specialAdCategory} onChange={(e) => setC('specialAdCategory', e.target.value)} options={SPECIAL_CATEGORIES} />
               <label className="block">
                 <span className="block text-xs font-medium text-gray-500 mb-1">Trạng thái nội bộ</span>
                 <select
@@ -312,18 +315,12 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
                 </label>
                 <Input label="Ngân sách hàng ngày (đ)" type="number" min="0" value={group.dailyBudget} onChange={(e) => setG(gi, 'dailyBudget', e.target.value)} />
                 <Input label="Ngày bắt đầu" type="datetime-local" value={group.startDate} onChange={(e) => setG(gi, 'startDate', e.target.value)} />
-                <Input label="Ngày kết thúc" type="datetime-local" value={group.endDate} onChange={(e) => setG(gi, 'endDate', e.target.value)} />
-                <Select label="Lên lịch quảng cáo" value={group.adScheduling} onChange={(e) => setG(gi, 'adScheduling', e.target.value)} options={AD_SCHEDULING} />
                 <Input label="Vị trí (địa lý)" value={group.locations} onChange={(e) => setG(gi, 'locations', e.target.value)} />
-                <Input label="Độ tuổi tối thiểu" type="number" min="13" value={group.minAge} onChange={(e) => setG(gi, 'minAge', e.target.value)} />
                 <Input label="Gợi ý độ tuổi" value={group.ageSuggestion} onChange={(e) => setG(gi, 'ageSuggestion', e.target.value)} placeholder="VD: 55-65+" />
                 <Select label="Giới tính" value={group.gender} onChange={(e) => setG(gi, 'gender', e.target.value)} options={GENDERS} />
                 <TextArea label="Thêm những đối tượng tùy chỉnh" value={group.customAudiences} onChange={(e) => setG(gi, 'customAudiences', e.target.value)} placeholder="VD: Khách đã mua hàng, Khách tương tác Fanpage 90 ngày, Đối tượng tương tự 1%..." />
                 <TextArea label="Nhắm mục tiêu chi tiết" value={group.detailedTargeting} onChange={(e) => setG(gi, 'detailedTargeting', e.target.value)} placeholder="VD: Sở thích: Đồ thờ cúng, Phong thủy; Hành vi: Đã tương tác trang Facebook..." />
-                <Select label="Chiến lược giá thầu" value={group.bidStrategy} onChange={(e) => setG(gi, 'bidStrategy', e.target.value)} options={BID_STRATEGIES} />
-                <Select label="Thời điểm tính phí" value={group.chargingEvent} onChange={(e) => setG(gi, 'chargingEvent', e.target.value)} options={CHARGING_EVENTS} />
-                <Select label="Loại phân phối" value={group.deliveryType} onChange={(e) => setG(gi, 'deliveryType', e.target.value)} options={DELIVERY_TYPES} />
-                <Input label="Mục tiêu hiệu quả" value={group.performanceGoal} onChange={(e) => setG(gi, 'performanceGoal', e.target.value)} placeholder="VD: Tối đa hóa số lượt xem ThruPlay" />
+                <Select label="Mục tiêu hiệu quả" value={group.performanceGoal} onChange={(e) => setG(gi, 'performanceGoal', e.target.value)} options={PERFORMANCE_GOALS} />
                 <TextArea label="Vị trí quảng cáo" value={group.placements} onChange={(e) => setG(gi, 'placements', e.target.value)} placeholder="VD: Bảng feed, Reels, Marketplace, Tin..." />
                 <Toggle label="Mở rộng nhắm mục tiêu" checked={group.advantageAudience} onChange={(v) => setG(gi, 'advantageAudience', v)} />
                 <Toggle label="Lên lịch điều chỉnh ngân sách" checked={group.budgetScheduling} onChange={(v) => setG(gi, 'budgetScheduling', v)} />
@@ -388,9 +385,6 @@ function DraftDetail({ draft }) {
         <Field label="Tài khoản QC" value={accountName} />
         <Field label="Mục tiêu" value={draft.objective} />
         <Field label="Ngân sách chiến dịch" value={c.budgetLevel} />
-        <Field label="Chiến lược ngân sách" value={c.budgetStrategy} />
-        <Field label="Cách mua" value={c.buyingType} />
-        <Field label="Hạng mục quảng cáo đặc biệt" value={c.specialAdCategory} />
       </DetailCard>
 
       {adGroups.map((g, gi) => {
@@ -403,20 +397,14 @@ function DraftDetail({ draft }) {
               <Field label="Trang" value={g.page} />
               <Field label="Ngân sách" value={g.dailyBudget ? `Ngân sách hàng ngày ${Number(g.dailyBudget).toLocaleString('vi-VN')} đ` : ''} />
               <Field label="Ngày bắt đầu" value={g.startDate} />
-              <Field label="Ngày kết thúc" value={g.endDate || 'Chạy liên tục'} />
-              <Field label="Lên lịch quảng cáo" value={g.adScheduling} />
               <Field label="Vị trí" value={g.locations} />
-              <Field label="Độ tuổi tối thiểu" value={g.minAge} />
               <Field label="Gợi ý độ tuổi" value={g.ageSuggestion} />
               <Field label="Giới tính" value={g.gender} />
               <Field label="Mở rộng nhắm mục tiêu" value={g.advantageAudience ? 'Có' : 'Không'} />
               <Field label="Thêm những đối tượng tùy chỉnh" value={g.customAudiences} />
               <Field label="Nhắm mục tiêu chi tiết" value={g.detailedTargeting} />
-              <Field label="Vị trí quảng cáo" value={g.placements} />
-              <Field label="Chiến lược giá thầu" value={g.bidStrategy} />
-              <Field label="Thời điểm tính phí" value={g.chargingEvent} />
-              <Field label="Loại phân phối" value={g.deliveryType} />
               <Field label="Mục tiêu hiệu quả" value={g.performanceGoal} />
+              <Field label="Vị trí quảng cáo" value={g.placements} />
             </DetailCard>
 
             <DetailCard icon={FileText} breadcrumb={`Quảng cáo (${gi + 1}/${adGroups.length})`} title={a.name || '(Chưa đặt tên)'}>
