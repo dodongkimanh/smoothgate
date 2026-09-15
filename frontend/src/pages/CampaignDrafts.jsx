@@ -49,15 +49,7 @@ const STATIC_PAGES = [
 
 const emptyAd = () => ({
   name: '',
-  isDynamicCreative: false,
-  facebookPage: '',
-  identityDisplayFormat: '',
-  postText: '',
-  metaPixel: '',
-  offlineEvent: '',
-  advantageCreative: '',
-  multiAdvertiserAds: false,
-  imageUrl: '',
+  adId: '',
 })
 
 const emptyAdGroup = () => ({
@@ -343,15 +335,7 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input label="Tên quảng cáo" value={group.ad.name} onChange={(e) => setA(gi, 'name', e.target.value)} />
-                  <Input label="Trang Facebook" value={group.ad.facebookPage} onChange={(e) => setA(gi, 'facebookPage', e.target.value)} />
-                  <Input label="Định dạng hiển thị danh tính" value={group.ad.identityDisplayFormat} onChange={(e) => setA(gi, 'identityDisplayFormat', e.target.value)} />
-                  <Input label="Meta Pixel" value={group.ad.metaPixel} onChange={(e) => setA(gi, 'metaPixel', e.target.value)} />
-                  <Input label="Sự kiện offline" value={group.ad.offlineEvent} onChange={(e) => setA(gi, 'offlineEvent', e.target.value)} />
-                  <Input label="Nội dung Advantage+" value={group.ad.advantageCreative} onChange={(e) => setA(gi, 'advantageCreative', e.target.value)} />
-                  <Input label="Link ảnh/video minh họa" value={group.ad.imageUrl} onChange={(e) => setA(gi, 'imageUrl', e.target.value)} placeholder="https://..." />
-                  <Toggle label="Quảng cáo động (Dynamic Creative)" checked={group.ad.isDynamicCreative} onChange={(v) => setA(gi, 'isDynamicCreative', v)} />
-                  <Toggle label="Quảng cáo đa bên" checked={group.ad.multiAdvertiserAds} onChange={(v) => setA(gi, 'multiAdvertiserAds', v)} />
-                  <TextArea label="Nội dung bài viết" value={group.ad.postText} onChange={(e) => setA(gi, 'postText', e.target.value)} />
+                  <Input label="ID quảng cáo" value={group.ad.adId} onChange={(e) => setA(gi, 'adId', e.target.value)} />
                 </div>
               </div>
             </section>
@@ -437,20 +421,7 @@ function DraftDetail({ draft }) {
 
             <DetailCard icon={FileText} breadcrumb={`Quảng cáo (${gi + 1}/${adGroups.length})`} title={a.name || '(Chưa đặt tên)'}>
               <Field label="Tên quảng cáo" value={a.name} />
-              <Field label="Quảng cáo hợp tác" value={a.isDynamicCreative ? 'Đang bật' : 'Đang tắt'} />
-              <Field label="Trang Facebook" value={a.facebookPage} />
-              <Field label="Định dạng hiển thị danh tính" value={a.identityDisplayFormat} />
-              <Field label="Bài viết" value={a.postText} />
-              <Field label="Meta Pixel" value={a.metaPixel} />
-              <Field label="Sự kiện offline" value={a.offlineEvent} />
-              <Field label="Nội dung Advantage+" value={a.advantageCreative} />
-              <Field label="Quảng cáo đa bên" value={a.multiAdvertiserAds ? 'Bật' : 'Tắt'} />
-              {a.imageUrl && (
-                <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-1 sm:gap-4 py-2">
-                  <div className="text-sm font-medium text-gray-500">File phương tiện nguồn</div>
-                  <img src={a.imageUrl} alt="preview" className="w-32 h-32 object-cover rounded-lg border" />
-                </div>
-              )}
+              <Field label="ID quảng cáo" value={a.adId} />
             </DetailCard>
           </div>
         )
