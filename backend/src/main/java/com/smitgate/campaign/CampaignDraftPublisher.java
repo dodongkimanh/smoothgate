@@ -122,15 +122,18 @@ public class CampaignDraftPublisher {
                 result.put("metaAdSetId", metaAdSetId);
 
                 Map<String, Object> ad = (Map<String, Object>) group.computeIfAbsent("ad", k -> new LinkedHashMap<>());
-                String existingAdId = trimToNull(String.valueOf(ad.getOrDefault("adId", "")));
-                if (existingAdId == null) {
+                String existingPostId = trimToNull(String.valueOf(ad.getOrDefault("postId", "")));
+                if (existingPostId == null) {
                     result.put("status", "PARTIAL");
-                    result.put("warning", "Đã tạo nhóm quảng cáo nhưng chưa tạo quảng cáo vì thiếu ID quảng cáo mẫu để lấy nội dung");
+                    result.put("warning", "Đã tạo nhóm quảng cáo nhưng chưa tạo quảng cáo vì thiếu ID bài viết có sẵn");
                 } else {
-                    String creativeId = metaAdsConnector.fetchAdCreativeId(tenantId, adAccount.getDataSourceId(), existingAdId);
+                    String adName = String.valueOf(ad.getOrDefault("name", group.get("name")));
+                    String creativeId = metaAdsConnector.createAdCreativeFromExistingPost(
+                            tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(),
+                            pageId, existingPostId, adName);
                     String metaAdId = metaAdsConnector.createAd(
                             tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(), metaAdSetId,
-                            String.valueOf(ad.getOrDefault("name", group.get("name"))), creativeId);
+                            adName, creativeId);
                     ad.put("metaAdId", metaAdId);
                     result.put("metaAdId", metaAdId);
                     result.put("status", "SUCCESS");

@@ -1174,32 +1174,43 @@ public class MetaAdsConnector implements AdsConnector {
         }
     }
 
-    /** Looks up the creative attached to an existing ad, to be reused on a new ad. */
-    public String fetchAdCreativeId(Long tenantId, Long dataSourceId, String existingAdId) {
+    /**
+     * Creates an ad creative that reuses an existing Facebook Page post ("Use Existing Post" in
+     * Ads Manager), instead of building new ad content. object_story_id is Meta's "{page_id}_{post_id}" format.
+     */
+    public String createAdCreativeFromExistingPost(Long tenantId, Long dataSourceId, String adAccountId,
+                                                     String pageId, String postId, String creativeName) {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
         String token = dataSourceService.decryptSecret(ds);
+        String normalizedAccountId = normalizeAdAccountId(adAccountId);
 
-        URI uri = UriComponentsBuilder
-                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + existingAdId)
-                .queryParam("fields", "creative")
-                .queryParam("access_token", token)
-                .build().encode().toUri();
+        try {
+            URI uri = UriComponentsBuilder
+                    .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + normalizedAccountId + "/adcreatives")
+                    .queryParam("name", creativeName)
+                    .queryParam("object_story_id", pageId + "_" + postId)
+                    .queryParam("access_token", token)
+                    .build().encode().toUri();
 
-        JsonNode response = webClientBuilder.build()
-                .get().uri(uri)
-                .retrieve()
-                .onStatus(status -> status.is4xxClientError(),
-                        res -> res.bodyToMono(String.class)
-                                .flatMap(body -> Mono.error(new IllegalArgumentException(
-                                        "Không tìm thấy quảng cáo với ID " + existingAdId + " để lấy nội dung mẫu: " + body))))
-                .bodyToMono(JsonNode.class)
-                .block(Duration.ofSeconds(30));
+            JsonNode response = webClientBuilder.build()
+                    .post().uri(uri)
+                    .retrieve()
+                    .onStatus(status -> status.is4xxClientError(),
+                            res -> res.bodyToMono(String.class)
+                                    .flatMap(body -> Mono.error(new IllegalArgumentException(
+                                            "Không tìm thấy bài viết (ID " + postId + ") trên trang để tái sử dụng: " + body))))
+                    .bodyToMono(JsonNode.class)
+                    .block(Duration.ofSeconds(30));
 
-        String creativeId = response != null ? response.path("creative").path("id").asText(null) : null;
-        if (creativeId == null || creativeId.isBlank()) {
-            throw new RuntimeException("Quảng cáo mẫu (ID " + existingAdId + ") không có creative để tái sử dụng");
+            if (response == null || !response.has("id")) {
+                throw new RuntimeException("Meta không trả về ID nội dung quảng cáo (creative)");
+            }
+            return response.get("id").asText();
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Lỗi tạo nội dung quảng cáo từ bài viết có sẵn: " + e.getMessage());
         }
-        return creativeId;
     }
 
     /** Creates a real Meta ad reusing an existing creative. Always PAUSED. */

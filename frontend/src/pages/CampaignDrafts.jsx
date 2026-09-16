@@ -56,7 +56,7 @@ const STATIC_PAGES = [
 
 const emptyAd = () => ({
   name: '',
-  adId: '',
+  postId: '',
 })
 
 const emptyAdGroup = () => ({
@@ -346,9 +346,10 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
                 <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
                   <FileText size={16} /> Quảng cáo
                 </div>
+                <p className="text-xs text-gray-400 mb-3">Sử dụng bài viết có sẵn — nhập ID bài viết đã đăng trên Trang để tái sử dụng làm nội dung quảng cáo.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input label="Tên quảng cáo" value={group.ad.name} onChange={(e) => setA(gi, 'name', e.target.value)} />
-                  <Input label="ID quảng cáo" value={group.ad.adId} onChange={(e) => setA(gi, 'adId', e.target.value)} />
+                  <Input label="ID bài viết có sẵn" value={group.ad.postId} onChange={(e) => setA(gi, 'postId', e.target.value)} placeholder="VD: 122206016888743341" />
                 </div>
               </div>
             </section>
@@ -466,7 +467,7 @@ function DraftDetail({ draft, onPublish, isPublishing }) {
 
             <DetailCard icon={FileText} breadcrumb={`Quảng cáo (${gi + 1}/${adGroups.length})`} title={a.name || '(Chưa đặt tên)'}>
               <Field label="Tên quảng cáo" value={a.name} />
-              <Field label="ID quảng cáo" value={a.adId} />
+              <Field label="ID bài viết có sẵn" value={a.postId} />
             </DetailCard>
           </div>
         )
