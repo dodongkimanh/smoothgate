@@ -1083,6 +1083,9 @@ public class MetaAdsConnector implements AdsConnector {
                 .queryParam("objective", objective)
                 .queryParam("status", "PAUSED")
                 .queryParam("special_ad_categories", "[]")
+                // Meta now requires this explicitly: true = campaign-level shared budget
+                // (Advantage Campaign Budget / CBO), false = each ad set has its own budget.
+                .queryParam("is_adset_budget_sharing_enabled", dailyBudgetVnd != null ? "true" : "false")
                 .queryParam("access_token", token);
         if (dailyBudgetVnd != null) {
             builder.queryParam("daily_budget", dailyBudgetVnd.toString());
