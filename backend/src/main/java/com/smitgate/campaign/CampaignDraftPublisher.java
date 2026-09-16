@@ -5,6 +5,7 @@ import com.smitgate.connector.ads.AdAccount;
 import com.smitgate.connector.ads.AdAccountRepository;
 import com.smitgate.connector.ads.MetaAdsConnector;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -19,6 +20,7 @@ import java.util.Map;
  * tenant's already-connected Meta Ads OAuth token. Everything is created PAUSED — nothing
  * spends until a human activates it in Ads Manager.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CampaignDraftPublisher {
@@ -129,6 +131,8 @@ public class CampaignDraftPublisher {
                     result.put("status", "SUCCESS");
                 }
             } catch (Exception e) {
+                log.error("Publish failed for ad group '{}' of draft {} (tenant {}): {}",
+                        group.get("name"), draft.getId(), tenantId, e.getMessage());
                 result.put("status", "FAILED");
                 result.put("error", e.getMessage());
             }
