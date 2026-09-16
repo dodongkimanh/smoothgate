@@ -1112,7 +1112,8 @@ public class MetaAdsConnector implements AdsConnector {
      */
     public String createAdSet(Long tenantId, Long dataSourceId, String adAccountId, String campaignId,
                                String name, Long dailyBudgetVnd, int ageMin, Integer ageMax,
-                               String gendersOption, String pageId, String startTimeIso, boolean advantageAudience) {
+                               String gendersOption, String pageId, String startTimeIso, boolean advantageAudience,
+                               String optimizationGoal) {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
         String token = dataSourceService.decryptSecret(ds);
         String normalizedAccountId = normalizeAdAccountId(adAccountId);
@@ -1140,7 +1141,7 @@ public class MetaAdsConnector implements AdsConnector {
                     .queryParam("name", name)
                     .queryParam("campaign_id", campaignId)
                     .queryParam("billing_event", "IMPRESSIONS")
-                    .queryParam("optimization_goal", "CONVERSATIONS")
+                    .queryParam("optimization_goal", optimizationGoal)
                     .queryParam("destination_type", "MESSENGER")
                     .queryParam("bid_strategy", "LOWEST_COST_WITHOUT_CAP")
                     .queryParam("targeting", objectMapper.writeValueAsString(targeting))

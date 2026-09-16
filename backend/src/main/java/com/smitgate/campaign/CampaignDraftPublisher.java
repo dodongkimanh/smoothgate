@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -32,6 +34,16 @@ public class CampaignDraftPublisher {
             "Khách hàng tiềm năng", "OUTCOME_LEADS",
             "Lượt cài đặt ứng dụng", "OUTCOME_APP_PROMOTION",
             "Doanh số bán hàng", "OUTCOME_SALES"
+    );
+
+    // Maps the "Mục tiêu hiệu quả" dropdown label to Meta's optimization_goal enum for
+    // message-destination ad sets. The two purchase-related goals need Meta's dedicated
+    // messaging-purchase optimization goal, not the generic "Conversations" one.
+    private static final Map<String, String> OPTIMIZATION_GOAL_MAP = Map.of(
+            "Tối đa hóa số cuộc trò chuyện", "CONVERSATIONS",
+            "Tối đa hóa số khách hàng tiềm năng qua tin nhắn", "LEAD_GENERATION",
+            "Tối đa hóa số lượt mua qua tin nhắn", "MESSAGING_PURCHASE_CONVERSION",
+            "Tối đa hóa giá trị của lượt mua qua tin nhắn", "MESSAGING_PURCHASE_CONVERSION"
     );
 
     private final CampaignDraftService campaignDraftService;
@@ -114,10 +126,12 @@ public class CampaignDraftPublisher {
                 String startTimeIso = toMetaIsoTime(String.valueOf(group.getOrDefault("startDate", "")));
 
                 boolean advantageAudience = parseBool(group.get("advantageAudience"), true);
+                String optimizationGoal = OPTIMIZATION_GOAL_MAP.getOrDefault(
+                        String.valueOf(group.get("performanceGoal")), "CONVERSATIONS");
                 String metaAdSetId = metaAdsConnector.createAdSet(
                         tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(), metaCampaignId,
                         String.valueOf(group.getOrDefault("name", draft.getName())),
-                        adSetBudget, ageMin, ageMax, gendersOption, pageId, startTimeIso, advantageAudience);
+                        adSetBudget, ageMin, ageMax, gendersOption, pageId, startTimeIso, advantageAudience, optimizationGoal);
                 group.put("metaAdSetId", metaAdSetId);
                 result.put("metaAdSetId", metaAdSetId);
 
@@ -229,12 +243,21 @@ public class CampaignDraftPublisher {
     }
 
     /** Converts a `datetime-local` value ("2026-09-16T16:50") to Meta's ISO8601+offset format, or null if blank/past. */
+    private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+
+    /**
+     * The `datetime-local` value from the browser is wall-clock time in the user's own timezone
+     * (Vietnam), with no offset attached. Comparing it against LocalDateTime.now() would compare
+     * against the SERVER's default timezone (UTC in this container) — up to 7 hours off. Anchor
+     * both sides to Asia/Ho_Chi_Minh explicitly before comparing or formatting.
+     */
     private String toMetaIsoTime(String datetimeLocal) {
         if (datetimeLocal == null || datetimeLocal.isBlank()) return null;
         try {
             LocalDateTime dt = LocalDateTime.parse(datetimeLocal);
-            if (dt.isBefore(LocalDateTime.now())) return null;
-            return dt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")) + "+0700";
+            ZonedDateTime zoned = dt.atZone(VN_ZONE);
+            if (zoned.isBefore(ZonedDateTime.now(VN_ZONE))) return null;
+            return zoned.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXX"));
         } catch (Exception e) {
             return null;
         }
