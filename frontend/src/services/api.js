@@ -140,6 +140,7 @@ export const getCampaignDraft = (id) => api.get(`/campaign-drafts/${id}`)
 export const createCampaignDraft = (data) => api.post('/campaign-drafts', data)
 export const updateCampaignDraft = (id, data) => api.put(`/campaign-drafts/${id}`, data)
 export const deleteCampaignDraft = (id) => api.delete(`/campaign-drafts/${id}`)
+export const publishCampaignDraft = (id) => api.post(`/campaign-drafts/${id}/publish`)
 
 // Agent
 export const triggerAgentAnalysis = () => api.post('/agent/analyze')

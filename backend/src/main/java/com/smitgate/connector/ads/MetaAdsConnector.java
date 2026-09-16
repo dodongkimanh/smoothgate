@@ -1,6 +1,7 @@
 package com.smitgate.connector.ads;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smitgate.config.SystemSettingRepository;
 import com.smitgate.connector.pos.OrderRepository;
 import com.smitgate.connector.pos.OrderStatusClassifier;
@@ -47,6 +48,7 @@ public class MetaAdsConnector implements AdsConnector {
     private final SyncStateRepository syncStateRepository;
     private final SystemSettingRepository systemSettingRepository;
     private final OrderRepository orderRepository;
+    private final ObjectMapper objectMapper;
 
     // Fallback values from application.yml (used if DB settings not configured)
     @Value("${app.facebook.app-id}")
@@ -1062,6 +1064,174 @@ public class MetaAdsConnector implements AdsConnector {
                 .retrieve()
                 .bodyToMono(String.class)
                 .block(Duration.ofSeconds(30));
+    }
+
+    /**
+     * Creates a real Meta campaign. Always created PAUSED so nothing spends until a human
+     * activates it in Ads Manager. dailyBudgetVnd is only set when the campaign itself owns
+     * the budget (Campaign Budget Optimization) — pass null when budget lives on the ad sets.
+     */
+    public String createCampaign(Long tenantId, Long dataSourceId, String adAccountId,
+                                  String name, String objective, Long dailyBudgetVnd) {
+        DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
+        String token = dataSourceService.decryptSecret(ds);
+        String normalizedAccountId = normalizeAdAccountId(adAccountId);
+
+        UriComponentsBuilder builder = UriComponentsBuilder
+                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + normalizedAccountId + "/campaigns")
+                .queryParam("name", name)
+                .queryParam("objective", objective)
+                .queryParam("status", "PAUSED")
+                .queryParam("special_ad_categories", "[]")
+                .queryParam("access_token", token);
+        if (dailyBudgetVnd != null) {
+            builder.queryParam("daily_budget", dailyBudgetVnd.toString());
+        }
+
+        JsonNode response = webClientBuilder.build()
+                .post().uri(builder.build().encode().toUri())
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError(),
+                        res -> res.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new IllegalArgumentException("Meta lỗi khi tạo chiến dịch: " + body))))
+                .bodyToMono(JsonNode.class)
+                .block(Duration.ofSeconds(30));
+
+        if (response == null || !response.has("id")) {
+            throw new RuntimeException("Meta không trả về ID chiến dịch");
+        }
+        return response.get("id").asText();
+    }
+
+    /**
+     * Creates a real Meta ad set (targeting + budget + Messenger destination). Always PAUSED.
+     * Pass dailyBudgetVnd as null when the parent campaign owns the budget (CBO).
+     */
+    public String createAdSet(Long tenantId, Long dataSourceId, String adAccountId, String campaignId,
+                               String name, Long dailyBudgetVnd, int ageMin, Integer ageMax,
+                               String gendersOption, String pageId, String startTimeIso) {
+        DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
+        String token = dataSourceService.decryptSecret(ds);
+        String normalizedAccountId = normalizeAdAccountId(adAccountId);
+
+        Map<String, Object> targeting = new HashMap<>();
+        targeting.put("age_min", ageMin);
+        if (ageMax != null) {
+            targeting.put("age_max", ageMax);
+        }
+        if ("Nam".equals(gendersOption)) {
+            targeting.put("genders", List.of(1));
+        } else if ("Nữ".equals(gendersOption)) {
+            targeting.put("genders", List.of(2));
+        }
+        targeting.put("geo_locations", Map.of("countries", List.of("VN")));
+
+        Map<String, Object> promotedObject = Map.of("page_id", pageId);
+
+        try {
+            UriComponentsBuilder builder = UriComponentsBuilder
+                    .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + normalizedAccountId + "/adsets")
+                    .queryParam("name", name)
+                    .queryParam("campaign_id", campaignId)
+                    .queryParam("billing_event", "IMPRESSIONS")
+                    .queryParam("optimization_goal", "CONVERSATIONS")
+                    .queryParam("destination_type", "MESSENGER")
+                    .queryParam("bid_strategy", "LOWEST_COST_WITHOUT_CAP")
+                    .queryParam("targeting", objectMapper.writeValueAsString(targeting))
+                    .queryParam("promoted_object", objectMapper.writeValueAsString(promotedObject))
+                    .queryParam("status", "PAUSED")
+                    .queryParam("access_token", token);
+            if (dailyBudgetVnd != null) {
+                builder.queryParam("daily_budget", dailyBudgetVnd.toString());
+            }
+            if (startTimeIso != null && !startTimeIso.isBlank()) {
+                builder.queryParam("start_time", startTimeIso);
+            }
+
+            JsonNode response = webClientBuilder.build()
+                    .post().uri(builder.build().encode().toUri())
+                    .retrieve()
+                    .onStatus(status -> status.is4xxClientError(),
+                            res -> res.bodyToMono(String.class)
+                                    .flatMap(body -> Mono.error(new IllegalArgumentException("Meta lỗi khi tạo nhóm quảng cáo: " + body))))
+                    .bodyToMono(JsonNode.class)
+                    .block(Duration.ofSeconds(30));
+
+            if (response == null || !response.has("id")) {
+                throw new RuntimeException("Meta không trả về ID nhóm quảng cáo");
+            }
+            return response.get("id").asText();
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Lỗi xây dựng targeting cho nhóm quảng cáo: " + e.getMessage());
+        }
+    }
+
+    /** Looks up the creative attached to an existing ad, to be reused on a new ad. */
+    public String fetchAdCreativeId(Long tenantId, Long dataSourceId, String existingAdId) {
+        DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
+        String token = dataSourceService.decryptSecret(ds);
+
+        URI uri = UriComponentsBuilder
+                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + existingAdId)
+                .queryParam("fields", "creative")
+                .queryParam("access_token", token)
+                .build().encode().toUri();
+
+        JsonNode response = webClientBuilder.build()
+                .get().uri(uri)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError(),
+                        res -> res.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new IllegalArgumentException(
+                                        "Không tìm thấy quảng cáo với ID " + existingAdId + " để lấy nội dung mẫu: " + body))))
+                .bodyToMono(JsonNode.class)
+                .block(Duration.ofSeconds(30));
+
+        String creativeId = response != null ? response.path("creative").path("id").asText(null) : null;
+        if (creativeId == null || creativeId.isBlank()) {
+            throw new RuntimeException("Quảng cáo mẫu (ID " + existingAdId + ") không có creative để tái sử dụng");
+        }
+        return creativeId;
+    }
+
+    /** Creates a real Meta ad reusing an existing creative. Always PAUSED. */
+    public String createAd(Long tenantId, Long dataSourceId, String adAccountId, String adSetId,
+                            String name, String creativeId) {
+        DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
+        String token = dataSourceService.decryptSecret(ds);
+        String normalizedAccountId = normalizeAdAccountId(adAccountId);
+
+        try {
+            Map<String, Object> creative = Map.of("creative_id", creativeId);
+            URI uri = UriComponentsBuilder
+                    .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + normalizedAccountId + "/ads")
+                    .queryParam("name", name)
+                    .queryParam("adset_id", adSetId)
+                    .queryParam("creative", objectMapper.writeValueAsString(creative))
+                    .queryParam("status", "PAUSED")
+                    .queryParam("access_token", token)
+                    .build().encode().toUri();
+
+            JsonNode response = webClientBuilder.build()
+                    .post().uri(uri)
+                    .retrieve()
+                    .onStatus(status -> status.is4xxClientError(),
+                            res -> res.bodyToMono(String.class)
+                                    .flatMap(body -> Mono.error(new IllegalArgumentException("Meta lỗi khi tạo quảng cáo: " + body))))
+                    .bodyToMono(JsonNode.class)
+                    .block(Duration.ofSeconds(30));
+
+            if (response == null || !response.has("id")) {
+                throw new RuntimeException("Meta không trả về ID quảng cáo");
+            }
+            return response.get("id").asText();
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Lỗi xây dựng nội dung quảng cáo: " + e.getMessage());
+        }
     }
 
     /**

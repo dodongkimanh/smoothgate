@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 public class CampaignDraftController {
 
     private final CampaignDraftService campaignDraftService;
+    private final CampaignDraftPublisher campaignDraftPublisher;
     private final ObjectMapper objectMapper;
 
     @GetMapping
@@ -69,6 +70,17 @@ public class CampaignDraftController {
         Long tenantId = (Long) request.getAttribute("tenantId");
         campaignDraftService.delete(tenantId, id);
         return ResponseEntity.ok(ApiResponse.ok(null));
+    }
+
+    /**
+     * Publishes the draft as a real (PAUSED) campaign/ad-set/ad on Meta. Nothing spends
+     * until a human activates it in Ads Manager.
+     */
+    @PostMapping("/{id}/publish")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> publish(HttpServletRequest request, @PathVariable Long id) {
+        Long tenantId = (Long) request.getAttribute("tenantId");
+        Map<String, Object> result = campaignDraftPublisher.publish(tenantId, id);
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     private Map<String, Object> toView(CampaignDraft draft) {

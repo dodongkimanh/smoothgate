@@ -3,11 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {
   Plus, Pencil, Trash2, ChevronDown, ChevronUp, X, Loader2,
-  Folder, LayoutGrid, FileText, Megaphone,
+  Folder, LayoutGrid, FileText, Megaphone, Send, ExternalLink,
 } from 'lucide-react'
 import {
   getCampaignDrafts, createCampaignDraft, updateCampaignDraft, deleteCampaignDraft,
-  getSelectedAdAccounts, getSelectedPancakeShops,
+  getSelectedAdAccounts, getSelectedPancakeShops, publishCampaignDraft,
 } from '../services/api'
 
 const OBJECTIVES = [
@@ -37,20 +37,21 @@ const STATUS_OPTIONS = [
 ]
 
 // Static fallback page list — used until real Pancake POS pages are connected for this tenant.
+// id = real Facebook Page ID, required to actually publish to Meta (promoted_object.page_id).
 const STATIC_PAGES = [
-  'Kim Ánh Đúc Đỉnh Đồng Nam Định',
-  'Kim Ánh Đỉnh Đồng Nam Định',
-  'Tranh Đồng Kim Ánh Nam Định',
-  'Xưởng Chế Tác Đồ Thờ Kim Ánh',
-  'Xưởng Tranh Đồng Kim Ánh',
-  'Xưởng Đúc Đồng Kim Ánh',
-  'Xưởng Đúc Đồng Kim Ánh Gia Truyền Nam Đinh',
-  'Xưởng Đúc Đồng Nam Định',
-  'Xưởng Đồng Gia Truyền Nam Định',
-  'Xưởng Đồng Kim Ánh',
-  'Đúc Đồng Làng Nghề Truyền Thống Nam Định',
-  'Đồ Thủ Công Mỹ Nghệ Kim Ánh',
-  'Đồ Đồng Kim Ánh Nam Định',
+  { name: 'Kim Ánh Đúc Đỉnh Đồng Nam Định', id: '560584423798299' },
+  { name: 'Kim Ánh Đỉnh Đồng Nam Định', id: '585239897998547' },
+  { name: 'Tranh Đồng Kim Ánh Nam Định', id: '576414695535724' },
+  { name: 'Xưởng Chế Tác Đồ Thờ Kim Ánh', id: '516517308218764' },
+  { name: 'Xưởng Tranh Đồng Kim Ánh', id: '576614052193406' },
+  { name: 'Xưởng Đúc Đồng Kim Ánh', id: '647496405105905' },
+  { name: 'Xưởng Đúc Đồng Kim Ánh Gia Truyền Nam Đinh', id: '567376346452543' },
+  { name: 'Xưởng Đúc Đồng Nam Định', id: '134583069730624' },
+  { name: 'Xưởng Đồng Gia Truyền Nam Định', id: '101435218182393' },
+  { name: 'Xưởng Đồng Kim Ánh', id: '530886750113441' },
+  { name: 'Đúc Đồng Làng Nghề Truyền Thống Nam Định', id: '578286328693026' },
+  { name: 'Đồ Thủ Công Mỹ Nghệ Kim Ánh', id: '529265010273776' },
+  { name: 'Đồ Đồng Kim Ánh Nam Định', id: '110027362001260' },
 ]
 
 const emptyAd = () => ({
@@ -62,6 +63,7 @@ const emptyAdGroup = () => ({
   name: '',
   conversionLocation: CONVERSION_LOCATIONS[0],
   page: '',
+  pageId: '',
   dailyBudget: '',
   budgetScheduling: false,
   startDate: '',
@@ -69,6 +71,7 @@ const emptyAdGroup = () => ({
   adScheduling: AD_SCHEDULING[0],
   locations: 'VN',
   minAge: 18,
+  maxAge: '',
   ageSuggestion: '',
   gender: GENDERS[0],
   advantageAudience: true,
@@ -207,13 +210,21 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
     select: (res) => res.data?.data || [],
   })
   const pageOptions = useMemo(() => {
-    const liveNames = (pancakeShops || []).map((s) => s.shopName).filter(Boolean)
-    return Array.from(new Set([...STATIC_PAGES, ...liveNames]))
+    const live = (pancakeShops || [])
+      .filter((s) => s.shopName && s.externalShopId)
+      .map((s) => ({ name: s.shopName, id: s.externalShopId }))
+    const byId = new Map()
+    for (const p of [...STATIC_PAGES, ...live]) byId.set(p.id, p)
+    return Array.from(byId.values())
   }, [pancakeShops])
 
   const setC = (key, value) => setPayload((p) => ({ ...p, campaign: { ...p.campaign, [key]: value } }))
   const setG = (groupIndex, key, value) => setPayload((p) => {
     const adGroups = p.adGroups.map((g, i) => (i === groupIndex ? { ...g, [key]: value } : g))
+    return { ...p, adGroups }
+  })
+  const setGMulti = (groupIndex, patch) => setPayload((p) => {
+    const adGroups = p.adGroups.map((g, i) => (i === groupIndex ? { ...g, ...patch } : g))
     return { ...p, adGroups }
   })
   const setA = (groupIndex, key, value) => setPayload((p) => {
@@ -300,23 +311,28 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
                 <label className="block">
                   <span className="block text-xs font-medium text-gray-500 mb-1">Trang</span>
                   <select
-                    value={group.page || ''}
-                    onChange={(e) => setG(gi, 'page', e.target.value)}
+                    value={group.pageId || ''}
+                    onChange={(e) => {
+                      const found = pageOptions.find((p) => p.id === e.target.value)
+                      setGMulti(gi, { pageId: e.target.value, page: found?.name || '' })
+                    }}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
                   >
                     <option value="">-- Chọn trang --</option>
-                    {(group.page && !pageOptions.includes(group.page)) && (
-                      <option value={group.page}>{group.page}</option>
+                    {(group.page && !pageOptions.some((p) => p.id === group.pageId)) && (
+                      <option value={group.pageId || group.page}>{group.page}</option>
                     )}
-                    {pageOptions.map((pageName) => (
-                      <option key={pageName} value={pageName}>{pageName}</option>
+                    {pageOptions.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
                 </label>
                 <Input label="Ngân sách hàng ngày (đ)" type="number" min="0" value={group.dailyBudget} onChange={(e) => setG(gi, 'dailyBudget', e.target.value)} />
                 <Input label="Ngày bắt đầu" type="datetime-local" value={group.startDate} onChange={(e) => setG(gi, 'startDate', e.target.value)} />
                 <Input label="Vị trí (địa lý)" value={group.locations} onChange={(e) => setG(gi, 'locations', e.target.value)} />
-                <Input label="Gợi ý độ tuổi" value={group.ageSuggestion} onChange={(e) => setG(gi, 'ageSuggestion', e.target.value)} placeholder="VD: 55-65+" />
+                <Input label="Độ tuổi tối thiểu" type="number" min="13" max="65" value={group.minAge} onChange={(e) => setG(gi, 'minAge', e.target.value)} />
+                <Input label="Độ tuổi tối đa" type="number" min="18" max="65" value={group.maxAge} onChange={(e) => setG(gi, 'maxAge', e.target.value)} placeholder="Để trống = không giới hạn" />
+                <Input label="Gợi ý độ tuổi (ghi chú)" value={group.ageSuggestion} onChange={(e) => setG(gi, 'ageSuggestion', e.target.value)} placeholder="VD: 55-65+" />
                 <Select label="Giới tính" value={group.gender} onChange={(e) => setG(gi, 'gender', e.target.value)} options={GENDERS} />
                 <TextArea label="Thêm những đối tượng tùy chỉnh" value={group.customAudiences} onChange={(e) => setG(gi, 'customAudiences', e.target.value)} placeholder="VD: Khách đã mua hàng, Khách tương tác Fanpage 90 ngày, Đối tượng tương tự 1%..." />
                 <TextArea label="Nhắm mục tiêu chi tiết" value={group.detailedTargeting} onChange={(e) => setG(gi, 'detailedTargeting', e.target.value)} placeholder="VD: Sở thích: Đồ thờ cúng, Phong thủy; Hành vi: Đã tương tác trang Facebook..." />
@@ -365,7 +381,7 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
   )
 }
 
-function DraftDetail({ draft }) {
+function DraftDetail({ draft, onPublish, isPublishing }) {
   const p = draft.payload || emptyPayload()
   const c = p.campaign || {}
   const adGroups = getAdGroups(p)
@@ -378,8 +394,48 @@ function DraftDetail({ draft }) {
   })
   const accountName = (adAccounts || []).find((acc) => String(acc.id) === String(c.adAccountId))?.name
 
+  const isPublished = Boolean(c.metaCampaignId)
+  const adsManagerUrl = isPublished
+    ? `https://business.facebook.com/adsmanager/manage/campaigns?act=${String(c.metaAdAccountExternalId || '').replace('act_', '')}&selected_campaign_ids=${c.metaCampaignId}`
+    : null
+
   return (
     <div className="space-y-4 mt-4">
+      {onPublish && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+          <div className="text-sm text-blue-800">
+            {isPublished ? (
+              <>
+                <span className="font-medium">Đã đăng lên Meta</span> (trạng thái Tạm dừng — vào Ads Manager để bật chạy).
+              </>
+            ) : (
+              'Đăng chiến dịch này lên Meta ở trạng thái Tạm dừng (không tự tiêu ngân sách).'
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {isPublished && (
+              <a
+                href={adsManagerUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                Mở trong Ads Manager <ExternalLink size={14} />
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => onPublish(draft)}
+              disabled={isPublishing}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+            >
+              {isPublishing ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+              {isPublished ? 'Đăng lại' : 'Đăng lên Meta'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <DetailCard icon={Folder} breadcrumb="Chiến dịch" title={draft.name}>
         <Field label="Tên chiến dịch" value={draft.name} />
         <Field label="Tài khoản QC" value={accountName} />
@@ -398,6 +454,7 @@ function DraftDetail({ draft }) {
               <Field label="Ngân sách" value={g.dailyBudget ? `Ngân sách hàng ngày ${Number(g.dailyBudget).toLocaleString('vi-VN')} đ` : ''} />
               <Field label="Ngày bắt đầu" value={g.startDate} />
               <Field label="Vị trí" value={g.locations} />
+              <Field label="Độ tuổi" value={g.minAge ? `${g.minAge} - ${g.maxAge || '65+'}` : ''} />
               <Field label="Gợi ý độ tuổi" value={g.ageSuggestion} />
               <Field label="Giới tính" value={g.gender} />
               <Field label="Mở rộng nhắm mục tiêu" value={g.advantageAudience ? 'Có' : 'Không'} />
@@ -482,7 +539,7 @@ function useDraftMetrics(draft, onSave) {
   return { metrics, setM, commit, handleStatusChange }
 }
 
-function DraftCard({ draft, isExpanded, onToggle, onEdit, onDelete, onSave }) {
+function DraftCard({ draft, isExpanded, onToggle, onEdit, onDelete, onSave, onPublish, isPublishing }) {
   const { metrics, setM, commit, handleStatusChange } = useDraftMetrics(draft, onSave)
 
   return (
@@ -542,12 +599,12 @@ function DraftCard({ draft, isExpanded, onToggle, onEdit, onDelete, onSave }) {
         />
       </label>
 
-      {isExpanded && <DraftDetail draft={draft} />}
+      {isExpanded && <DraftDetail draft={draft} onPublish={onPublish} isPublishing={isPublishing} />}
     </div>
   )
 }
 
-function DraftRow({ draft, isExpanded, onToggle, onEdit, onDelete, onSave }) {
+function DraftRow({ draft, isExpanded, onToggle, onEdit, onDelete, onSave, onPublish, isPublishing }) {
   const { metrics, setM, commit, handleStatusChange } = useDraftMetrics(draft, onSave)
 
   return (
@@ -597,7 +654,7 @@ function DraftRow({ draft, isExpanded, onToggle, onEdit, onDelete, onSave }) {
       {isExpanded && (
         <tr>
           <td colSpan={9} className="px-5 pb-5 bg-gray-50/50">
-            <DraftDetail draft={draft} />
+            <DraftDetail draft={draft} onPublish={onPublish} isPublishing={isPublishing} />
           </td>
         </tr>
       )}
@@ -657,6 +714,30 @@ export default function CampaignDrafts() {
     onError: (err) => toast.error(err.response?.data?.message || 'Không thể xóa chiến dịch'),
   })
 
+  const publishMutation = useMutation({
+    mutationFn: publishCampaignDraft,
+    onSuccess: (res) => {
+      const data = res.data?.data || {}
+      const results = data.results || []
+      const failed = results.filter((r) => r.status === 'FAILED')
+      const partial = results.filter((r) => r.status === 'PARTIAL')
+      if (failed.length === 0 && partial.length === 0) {
+        toast.success('Đã đăng lên Meta (trạng thái Tạm dừng) — vào Ads Manager để kiểm tra và bật chạy.')
+      } else if (failed.length === results.length) {
+        toast.error('Tạo chiến dịch trên Meta thành công nhưng tất cả nhóm quảng cáo đều lỗi: ' + failed.map((f) => f.error).join('; '))
+      } else {
+        toast(
+          `Đăng một phần: ${results.length - failed.length}/${results.length} nhóm thành công.` +
+          (partial.length ? ` ${partial.length} nhóm thiếu ID quảng cáo mẫu nên chưa tạo quảng cáo.` : '') +
+          (failed.length ? ` Lỗi: ${failed.map((f) => f.error).join('; ')}` : ''),
+          { icon: '⚠️', duration: 8000 }
+        )
+      }
+      invalidate()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Không thể đăng chiến dịch lên Meta'),
+  })
+
   const handleSubmit = (payload) => {
     if (editingDraft) {
       updateMutation.mutate({ id: editingDraft.id, data: payload })
@@ -668,6 +749,14 @@ export default function CampaignDrafts() {
   const handleDelete = (draft) => {
     if (window.confirm(`Xóa chiến dịch "${draft.name}"? Hành động này không thể hoàn tác.`)) {
       deleteMutation.mutate(draft.id)
+    }
+  }
+
+  const handlePublish = (draft) => {
+    if (window.confirm(
+      `Đăng "${draft.name}" lên Meta?\n\nSẽ tạo THẬT chiến dịch/nhóm quảng cáo/quảng cáo trên tài khoản Meta đã chọn, ở trạng thái Tạm dừng (không tự tiêu ngân sách). Bạn cần vào Meta Ads Manager để kiểm tra và bật chạy thủ công.`
+    )) {
+      publishMutation.mutate(draft.id)
     }
   }
 
@@ -737,6 +826,8 @@ export default function CampaignDrafts() {
                     onEdit={(d) => { setEditingDraft(d); setIsFormOpen(true) }}
                     onDelete={handleDelete}
                     onSave={handleInlineSave}
+                    onPublish={handlePublish}
+                    isPublishing={publishMutation.isPending && publishMutation.variables === draft.id}
                   />
                 ))}
               </tbody>
@@ -753,6 +844,8 @@ export default function CampaignDrafts() {
                 onEdit={(d) => { setEditingDraft(d); setIsFormOpen(true) }}
                 onDelete={handleDelete}
                 onSave={handleInlineSave}
+                onPublish={handlePublish}
+                isPublishing={publishMutation.isPending && publishMutation.variables === draft.id}
               />
             ))}
           </div>

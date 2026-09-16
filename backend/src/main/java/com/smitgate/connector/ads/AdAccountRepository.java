@@ -11,6 +11,8 @@ public interface AdAccountRepository extends JpaRepository<AdAccount, Long> {
 
     List<AdAccount> findByTenantIdAndDataSourceId(Long tenantId, Long dataSourceId);
 
+    Optional<AdAccount> findByIdAndTenantId(Long id, Long tenantId);
+
     Optional<AdAccount> findByTenantIdAndPlatformAndExternalAccountId(
             Long tenantId, AdAccount.Platform platform, String externalAccountId);
 }
