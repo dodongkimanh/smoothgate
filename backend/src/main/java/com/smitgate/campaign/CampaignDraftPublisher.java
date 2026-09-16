@@ -113,10 +113,11 @@ public class CampaignDraftPublisher {
 
                 String startTimeIso = toMetaIsoTime(String.valueOf(group.getOrDefault("startDate", "")));
 
+                boolean advantageAudience = parseBool(group.get("advantageAudience"), true);
                 String metaAdSetId = metaAdsConnector.createAdSet(
                         tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(), metaCampaignId,
                         String.valueOf(group.getOrDefault("name", draft.getName())),
-                        adSetBudget, ageMin, ageMax, gendersOption, pageId, startTimeIso);
+                        adSetBudget, ageMin, ageMax, gendersOption, pageId, startTimeIso, advantageAudience);
                 group.put("metaAdSetId", metaAdSetId);
                 result.put("metaAdSetId", metaAdSetId);
 
@@ -213,6 +214,15 @@ public class CampaignDraftPublisher {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private boolean parseBool(Object value, boolean fallback) {
+        if (value instanceof Boolean b) return b;
+        if (value == null) return fallback;
+        String s = String.valueOf(value).trim();
+        if ("true".equalsIgnoreCase(s)) return true;
+        if ("false".equalsIgnoreCase(s)) return false;
+        return fallback;
     }
 
     /** Converts a `datetime-local` value ("2026-09-16T16:50") to Meta's ISO8601+offset format, or null if blank/past. */
