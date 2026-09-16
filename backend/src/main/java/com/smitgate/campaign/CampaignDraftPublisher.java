@@ -273,13 +273,24 @@ public class CampaignDraftPublisher {
      * both sides to Asia/Ho_Chi_Minh explicitly before comparing or formatting.
      */
     private String toMetaIsoTime(String datetimeLocal) {
-        if (datetimeLocal == null || datetimeLocal.isBlank()) return null;
+        if (datetimeLocal == null || datetimeLocal.isBlank()) {
+            log.info("toMetaIsoTime: input blank/null, no start_time will be sent (raw='{}')", datetimeLocal);
+            return null;
+        }
         try {
             LocalDateTime dt = LocalDateTime.parse(datetimeLocal);
             ZonedDateTime zoned = dt.atZone(VN_ZONE);
-            if (zoned.isBefore(ZonedDateTime.now(VN_ZONE))) return null;
-            return zoned.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXX"));
+            ZonedDateTime now = ZonedDateTime.now(VN_ZONE);
+            if (zoned.isBefore(now)) {
+                log.info("toMetaIsoTime: raw='{}' parsed to {} which is BEFORE now={} -> dropping start_time",
+                        datetimeLocal, zoned, now);
+                return null;
+            }
+            String result = zoned.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXX"));
+            log.info("toMetaIsoTime: raw='{}' -> sending start_time='{}'", datetimeLocal, result);
+            return result;
         } catch (Exception e) {
+            log.warn("toMetaIsoTime: failed to parse raw='{}': {}", datetimeLocal, e.toString());
             return null;
         }
     }
