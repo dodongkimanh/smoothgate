@@ -20,6 +20,7 @@ const BUDGET_STRATEGIES = ['Tắt', 'Giới hạn chi tiêu thấp nhất', 'Gi�
 const BUYING_TYPES = ['Đấu giá', 'Đặt trước']
 const CONVERSION_LOCATIONS = ['Trên quảng cáo của bạn', 'Website', 'Ứng dụng', 'Cuộc gọi điện thoại', 'Tin nhắn']
 const GENDERS = ['Tất cả', 'Nam', 'Nữ']
+const DEVICE_PLATFORMS = ['Tất cả', 'Di động', 'Máy tính']
 const BID_STRATEGIES = ['Mức chi phí thấp nhất', 'Mức cao nhất', 'Giới hạn giá thầu', 'Giới hạn chi phí']
 const CHARGING_EVENTS = ['Lượt hiển thị', 'Lượt nhấp chuột liên kết']
 const DELIVERY_TYPES = ['Tiêu chuẩn', 'Tăng tốc']
@@ -76,6 +77,8 @@ const emptyAdGroup = () => ({
   gender: GENDERS[0],
   advantageAudience: true,
   customAudiences: '',
+  customAudienceIds: '',
+  devicePlatform: DEVICE_PLATFORMS[0],
   detailedTargeting: '',
   placements: '',
   bidStrategy: BID_STRATEGIES[0],
@@ -334,7 +337,9 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
                 <Input label="Độ tuổi tối đa" type="number" min="18" max="65" value={group.maxAge} onChange={(e) => setG(gi, 'maxAge', e.target.value)} placeholder="Để trống = không giới hạn" />
                 <Input label="Gợi ý độ tuổi (ghi chú)" value={group.ageSuggestion} onChange={(e) => setG(gi, 'ageSuggestion', e.target.value)} placeholder="VD: 55-65+" />
                 <Select label="Giới tính" value={group.gender} onChange={(e) => setG(gi, 'gender', e.target.value)} options={GENDERS} />
-                <TextArea label="Thêm những đối tượng tùy chỉnh" value={group.customAudiences} onChange={(e) => setG(gi, 'customAudiences', e.target.value)} placeholder="VD: Khách đã mua hàng, Khách tương tác Fanpage 90 ngày, Đối tượng tương tự 1%..." />
+                <Select label="Thiết bị" value={group.devicePlatform} onChange={(e) => setG(gi, 'devicePlatform', e.target.value)} options={DEVICE_PLATFORMS} />
+                <TextArea label="Thêm những đối tượng tùy chỉnh (ghi chú)" value={group.customAudiences} onChange={(e) => setG(gi, 'customAudiences', e.target.value)} placeholder="VD: Khách đã mua hàng, Khách tương tác Fanpage 90 ngày, Đối tượng tương tự 1%..." />
+                <Input label="ID đối tượng tùy chỉnh thật (cách nhau bởi dấu phẩy)" value={group.customAudienceIds} onChange={(e) => setG(gi, 'customAudienceIds', e.target.value)} placeholder="VD: 120211234567890, 120219876543210" />
                 <TextArea label="Nhắm mục tiêu chi tiết" value={group.detailedTargeting} onChange={(e) => setG(gi, 'detailedTargeting', e.target.value)} placeholder="VD: Sở thích: Đồ thờ cúng, Phong thủy; Hành vi: Đã tương tác trang Facebook..." />
                 <Select label="Mục tiêu hiệu quả" value={group.performanceGoal} onChange={(e) => setG(gi, 'performanceGoal', e.target.value)} options={PERFORMANCE_GOALS} />
                 <TextArea label="Vị trí quảng cáo" value={group.placements} onChange={(e) => setG(gi, 'placements', e.target.value)} placeholder="VD: Bảng feed, Reels, Marketplace, Tin..." />
@@ -458,8 +463,10 @@ function DraftDetail({ draft, onPublish, isPublishing }) {
               <Field label="Độ tuổi" value={g.minAge ? `${g.minAge} - ${g.maxAge || '65+'}` : ''} />
               <Field label="Gợi ý độ tuổi" value={g.ageSuggestion} />
               <Field label="Giới tính" value={g.gender} />
+              <Field label="Thiết bị" value={g.devicePlatform} />
               <Field label="Mở rộng nhắm mục tiêu" value={g.advantageAudience ? 'Có' : 'Không'} />
               <Field label="Thêm những đối tượng tùy chỉnh" value={g.customAudiences} />
+              <Field label="ID đối tượng tùy chỉnh thật" value={g.customAudienceIds} />
               <Field label="Nhắm mục tiêu chi tiết" value={g.detailedTargeting} />
               <Field label="Mục tiêu hiệu quả" value={g.performanceGoal} />
               <Field label="Vị trí quảng cáo" value={g.placements} />

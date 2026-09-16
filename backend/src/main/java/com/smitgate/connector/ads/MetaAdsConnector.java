@@ -1113,7 +1113,7 @@ public class MetaAdsConnector implements AdsConnector {
     public String createAdSet(Long tenantId, Long dataSourceId, String adAccountId, String campaignId,
                                String name, Long dailyBudgetVnd, int ageMin, Integer ageMax,
                                String gendersOption, String pageId, String startTimeIso, boolean advantageAudience,
-                               String optimizationGoal) {
+                               String optimizationGoal, String devicePlatformOption, List<String> customAudienceIds) {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
         String token = dataSourceService.decryptSecret(ds);
         String normalizedAccountId = normalizeAdAccountId(adAccountId);
@@ -1129,6 +1129,18 @@ public class MetaAdsConnector implements AdsConnector {
             targeting.put("genders", List.of(2));
         }
         targeting.put("geo_locations", Map.of("countries", List.of("VN")));
+        if ("Di động".equals(devicePlatformOption)) {
+            targeting.put("device_platforms", List.of("mobile"));
+        } else if ("Máy tính".equals(devicePlatformOption)) {
+            targeting.put("device_platforms", List.of("desktop"));
+        }
+        if (customAudienceIds != null && !customAudienceIds.isEmpty()) {
+            List<Map<String, String>> audiences = new ArrayList<>();
+            for (String id : customAudienceIds) {
+                audiences.add(Map.of("id", id));
+            }
+            targeting.put("custom_audiences", audiences);
+        }
         // Meta now requires this explicitly on every ad set: 1 = let Meta broaden targeting
         // beyond what's specified (Advantage Audience), 0 = use only the specified targeting.
         targeting.put("targeting_automation", Map.of("advantage_audience", advantageAudience ? 1 : 0));

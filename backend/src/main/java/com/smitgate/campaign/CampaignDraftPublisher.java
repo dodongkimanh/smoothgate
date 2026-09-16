@@ -128,10 +128,13 @@ public class CampaignDraftPublisher {
                 boolean advantageAudience = parseBool(group.get("advantageAudience"), true);
                 String optimizationGoal = OPTIMIZATION_GOAL_MAP.getOrDefault(
                         String.valueOf(group.get("performanceGoal")), "CONVERSATIONS");
+                String devicePlatformOption = String.valueOf(group.getOrDefault("devicePlatform", "Tất cả"));
+                List<String> customAudienceIds = parseCustomAudienceIds(group.get("customAudienceIds"));
                 String metaAdSetId = metaAdsConnector.createAdSet(
                         tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(), metaCampaignId,
                         String.valueOf(group.getOrDefault("name", draft.getName())),
-                        adSetBudget, ageMin, ageMax, gendersOption, pageId, startTimeIso, advantageAudience, optimizationGoal);
+                        adSetBudget, ageMin, ageMax, gendersOption, pageId, startTimeIso, advantageAudience,
+                        optimizationGoal, devicePlatformOption, customAudienceIds);
                 group.put("metaAdSetId", metaAdSetId);
                 result.put("metaAdSetId", metaAdSetId);
 
@@ -240,6 +243,24 @@ public class CampaignDraftPublisher {
         if ("true".equalsIgnoreCase(s)) return true;
         if ("false".equalsIgnoreCase(s)) return false;
         return fallback;
+    }
+
+    /** Parses a comma-separated list of real Meta custom audience IDs, ignoring blanks. */
+    private List<String> parseCustomAudienceIds(Object value) {
+        if (value == null) return List.of();
+        String raw = String.valueOf(value).trim();
+        if (raw.isEmpty() || "null".equals(raw)) return List.of();
+        List<String> ids = new ArrayList<>();
+        for (String part : raw.split(",")) {
+            String id = part.trim();
+            if (!id.isEmpty()) {
+                if (!id.matches("\\d+")) {
+                    throw new IllegalArgumentException("ID đối tượng tùy chỉnh không hợp lệ: \"" + id + "\" (phải là số)");
+                }
+                ids.add(id);
+            }
+        }
+        return ids;
     }
 
     /** Converts a `datetime-local` value ("2026-09-16T16:50") to Meta's ISO8601+offset format, or null if blank/past. */
