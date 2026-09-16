@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -286,9 +285,10 @@ public class CampaignDraftPublisher {
                         datetimeLocal, zoned, now);
                 return null;
             }
-            // Meta's Graph API expects a colon in the UTC offset ("+07:00"), not "+0700" —
-            // a bare "+0700" appears to be silently ignored rather than rejected with an error.
-            String result = zoned.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX"));
+            // Meta's start_time rejects ISO8601 offset strings outright ("Must be a unixtime or
+            // a date/time representation parseable by strtotime()") — send a plain Unix timestamp
+            // (seconds) instead, which is unambiguous and always accepted.
+            String result = String.valueOf(zoned.toEpochSecond());
             log.info("toMetaIsoTime: raw='{}' -> sending start_time='{}'", datetimeLocal, result);
             return result;
         } catch (Exception e) {
