@@ -286,7 +286,9 @@ public class CampaignDraftPublisher {
                         datetimeLocal, zoned, now);
                 return null;
             }
-            String result = zoned.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXX"));
+            // Meta's Graph API expects a colon in the UTC offset ("+07:00"), not "+0700" —
+            // a bare "+0700" appears to be silently ignored rather than rejected with an error.
+            String result = zoned.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX"));
             log.info("toMetaIsoTime: raw='{}' -> sending start_time='{}'", datetimeLocal, result);
             return result;
         } catch (Exception e) {
