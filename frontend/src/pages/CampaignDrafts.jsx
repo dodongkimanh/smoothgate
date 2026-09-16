@@ -311,16 +311,16 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
                 <label className="block">
                   <span className="block text-xs font-medium text-gray-500 mb-1">Trang</span>
                   <select
-                    value={group.pageId || ''}
+                    value={group.pageId || pageOptions.find((p) => p.name === group.page)?.id || ''}
                     onChange={(e) => {
                       const found = pageOptions.find((p) => p.id === e.target.value)
-                      setGMulti(gi, { pageId: e.target.value, page: found?.name || '' })
+                      setGMulti(gi, { pageId: e.target.value, page: found?.name || group.page })
                     }}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
                   >
                     <option value="">-- Chọn trang --</option>
-                    {(group.page && !pageOptions.some((p) => p.id === group.pageId)) && (
-                      <option value={group.pageId || group.page}>{group.page}</option>
+                    {(group.page && !pageOptions.some((p) => p.name === group.page)) && (
+                      <option value={group.page}>{group.page} (chưa có ID — chọn lại trang thật ở dưới)</option>
                     )}
                     {pageOptions.map((p) => (
                       <option key={p.id} value={p.id}>{p.name}</option>

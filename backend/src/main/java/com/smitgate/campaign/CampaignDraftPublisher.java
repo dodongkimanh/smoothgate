@@ -95,6 +95,10 @@ public class CampaignDraftPublisher {
                 if (pageId == null) {
                     throw new IllegalArgumentException("Chưa chọn Trang (cần Facebook Page ID) cho nhóm này");
                 }
+                if (!pageId.matches("\\d+")) {
+                    throw new IllegalArgumentException(
+                            "Trang đã chọn chưa có ID Facebook hợp lệ (\"" + pageId + "\") — mở lại form, chọn lại Trang từ danh sách rồi lưu.");
+                }
                 int ageMin = parseInt(group.get("minAge"), 18);
                 Integer ageMax = parseIntOrNull(group.get("maxAge"));
                 String gendersOption = String.valueOf(group.getOrDefault("gender", "Tất cả"));
