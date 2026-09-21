@@ -36,7 +36,7 @@ const ADS_PAGE_SIZE = 50
 const ADSET_PAGE_SIZE = 50
 
 const DATE_PRESETS = [
-  { id: 'LIFETIME', label: 'Trọn đời' },
+  { id: 'LIFETIME', label: 'Tối đa' },
   { id: 'TODAY', label: 'Hôm nay' },
   { id: 'YESTERDAY', label: 'Hôm qua' },
   { id: 'LAST_3_DAYS', label: '3 ngày qua' },
@@ -271,6 +271,7 @@ export default function Campaigns() {
   const hasInitializedAccounts = useRef(false)
   const queryClient = useQueryClient()
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [activeAdRowKey, setActiveAdRowKey] = useState(null)
 
   const handleRefreshData = useCallback(async () => {
     setIsRefreshing(true)
@@ -1022,6 +1023,8 @@ export default function Campaigns() {
                 sortField={adsSort.sortField}
                 sortDir={adsSort.sortDir}
                 onSortToggle={(field) => { adsSort.toggle(field); setAdsPage(1) }}
+                activeRowKey={activeAdRowKey}
+                onActiveRowKeyChange={setActiveAdRowKey}
               />
             </StateWrapper>
           )}
@@ -1508,13 +1511,12 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
   )
 }
 
-function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate, toDate, selectedCampaign, currentPage, totalPages, onPageChange, pageSize, sortField, sortDir, onSortToggle }) {
+function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate, toDate, selectedCampaign, currentPage, totalPages, onPageChange, pageSize, sortField, sortDir, onSortToggle, activeRowKey, onActiveRowKeyChange }) {
   const [debugData, setDebugData] = useState(null)
   const [debugLoading, setDebugLoading] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
   const [selectedAdIds, setSelectedAdIds] = useState([])
   const [orderModal, setOrderModal] = useState(null)
-  const [activeRowKey, setActiveRowKey] = useState(null)
 
   const toggleAd = (key) => setSelectedAdIds(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])
   const allAdsChecked = rows.length > 0 && rows.every(r => selectedAdIds.includes(r._rowKey))
@@ -1688,7 +1690,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                   return (
                     <tr
                       key={row._rowKey}
-                      onClick={() => setActiveRowKey(prev => prev === row._rowKey ? null : row._rowKey)}
+                      onClick={() => onActiveRowKeyChange(prev => prev === row._rowKey ? null : row._rowKey)}
                       className={`border-b border-slate-100 hover:bg-cyan-50/40 transition-colors cursor-pointer ${isActive ? 'bg-amber-200/80 hover:bg-amber-200/80' : isChecked ? 'bg-blue-50/70' : ''}`}
                     >
                       <td className="px-4 py-2.5 align-top">

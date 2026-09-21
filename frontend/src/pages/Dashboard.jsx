@@ -65,7 +65,7 @@ function buildDateRange(fromDate, toDate) {
 }
 
 const DATE_PRESETS = [
-  { id: 'LIFETIME', label: 'Trọn đời' },
+  { id: 'LIFETIME', label: 'Tối đa' },
   { id: 'TODAY', label: 'Hôm nay' },
   { id: 'YESTERDAY', label: 'Hôm qua' },
   { id: 'LAST_7_DAYS', label: '7 ngày qua' },
