@@ -14,7 +14,7 @@ import {
   updateOrderReview,
 } from '../services/api'
 import toast from 'react-hot-toast'
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bug, ChevronDown, ChevronRight, DollarSign, Eye, Layers3, Megaphone, Network, Phone, RefreshCw, Search, ShoppingCart, TrendingUp, Users } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bug, ChevronDown, ChevronRight, DollarSign, Eye, Layers3, Megaphone, Network, Palette, Phone, RefreshCw, Search, ShoppingCart, TrendingUp, Users } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const TABS = [
@@ -271,7 +271,10 @@ export default function Campaigns() {
   const hasInitializedAccounts = useRef(false)
   const queryClient = useQueryClient()
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [activeAdRowKey, setActiveAdRowKey] = useState(null)
+  const [highlightedAdRowKeys, setHighlightedAdRowKeys] = useState([])
+  const toggleHighlightedAdRow = useCallback((key) => {
+    setHighlightedAdRowKeys(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
+  }, [])
 
   const handleRefreshData = useCallback(async () => {
     setIsRefreshing(true)
@@ -1023,8 +1026,8 @@ export default function Campaigns() {
                 sortField={adsSort.sortField}
                 sortDir={adsSort.sortDir}
                 onSortToggle={(field) => { adsSort.toggle(field); setAdsPage(1) }}
-                activeRowKey={activeAdRowKey}
-                onActiveRowKeyChange={setActiveAdRowKey}
+                highlightedRowKeys={highlightedAdRowKeys}
+                onToggleHighlight={toggleHighlightedAdRow}
               />
             </StateWrapper>
           )}
@@ -1511,7 +1514,7 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
   )
 }
 
-function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate, toDate, selectedCampaign, currentPage, totalPages, onPageChange, pageSize, sortField, sortDir, onSortToggle, activeRowKey, onActiveRowKeyChange }) {
+function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate, toDate, selectedCampaign, currentPage, totalPages, onPageChange, pageSize, sortField, sortDir, onSortToggle, highlightedRowKeys, onToggleHighlight }) {
   const [debugData, setDebugData] = useState(null)
   const [debugLoading, setDebugLoading] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
@@ -1640,6 +1643,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
               <col style={{ width: 48 }} />
               <col style={{ width: 56 }} />
               {columns.map((c) => <col key={c.field} style={{ width: widths[c.field] }} />)}
+              <col style={{ width: 48 }} />
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-100 text-slate-600">
@@ -1665,12 +1669,15 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                     onResizeStart={startResize}
                   />
                 ))}
+                <th className="w-12 px-2 py-2.5 border-b border-slate-200 text-center text-xs uppercase tracking-wide font-semibold" title="Đánh dấu hàng">
+                  <Palette size={14} className="inline-block text-slate-400" />
+                </th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={20} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={22} className="px-4 py-10 text-center text-gray-400">
                     Không có dữ liệu quảng cáo theo bộ lọc hiện tại
                   </td>
                 </tr>
@@ -1686,12 +1693,11 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                   const costPerPhone = phones > 0 ? spend / phones : 0
                   const phoneRate = messages > 0 ? (phones / messages) * 100 : 0
                   const isChecked = selectedAdIds.includes(row._rowKey)
-                  const isActive = activeRowKey === row._rowKey
+                  const isHighlighted = highlightedRowKeys.includes(row._rowKey)
                   return (
                     <tr
                       key={row._rowKey}
-                      onClick={() => onActiveRowKeyChange(prev => prev === row._rowKey ? null : row._rowKey)}
-                      className={`border-b border-slate-100 hover:bg-cyan-50/40 transition-colors cursor-pointer ${isActive ? 'bg-amber-200/80 hover:bg-amber-200/80' : isChecked ? 'bg-blue-50/70' : ''}`}
+                      className={`border-b border-slate-100 hover:bg-cyan-50/40 transition-colors ${isHighlighted ? 'bg-amber-200/80 hover:bg-amber-200/80' : isChecked ? 'bg-blue-50/70' : ''}`}
                     >
                       <td className="px-4 py-2.5 align-top">
                         <input
@@ -1786,6 +1792,16 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                       <td className="px-4 py-2.5 text-right text-orange-700 align-top font-medium">{Number(row.orderCount || 0) > 0 ? formatCurrency(spend / Number(row.orderCount)) : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(profitAfterAds)}</td>
                       <td className="px-4 py-2.5 text-slate-700 align-top font-mono text-xs">{row.postId || '-'}</td>
+                      <td className="px-2 py-2.5 align-top text-center">
+                        <button
+                          type="button"
+                          title={isHighlighted ? 'Bỏ đánh dấu hàng' : 'Đánh dấu hàng (tô vàng)'}
+                          onClick={() => onToggleHighlight(row._rowKey)}
+                          className={`p-1.5 rounded-lg border transition-colors ${isHighlighted ? 'bg-amber-400 border-amber-500 text-white' : 'border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600'}`}
+                        >
+                          <Palette size={14} />
+                        </button>
+                      </td>
                     </tr>
                   )
                 })
