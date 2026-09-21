@@ -1514,6 +1514,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
   const [showDebug, setShowDebug] = useState(false)
   const [selectedAdIds, setSelectedAdIds] = useState([])
   const [orderModal, setOrderModal] = useState(null)
+  const [activeRowKey, setActiveRowKey] = useState(null)
 
   const toggleAd = (key) => setSelectedAdIds(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])
   const allAdsChecked = rows.length > 0 && rows.every(r => selectedAdIds.includes(r._rowKey))
@@ -1683,8 +1684,13 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                   const costPerPhone = phones > 0 ? spend / phones : 0
                   const phoneRate = messages > 0 ? (phones / messages) * 100 : 0
                   const isChecked = selectedAdIds.includes(row._rowKey)
+                  const isActive = activeRowKey === row._rowKey
                   return (
-                    <tr key={row._rowKey} className={`border-b border-slate-100 hover:bg-cyan-50/40 transition-colors ${isChecked ? 'bg-blue-50/70' : ''}`}>
+                    <tr
+                      key={row._rowKey}
+                      onClick={() => setActiveRowKey(prev => prev === row._rowKey ? null : row._rowKey)}
+                      className={`border-b border-slate-100 hover:bg-cyan-50/40 transition-colors cursor-pointer ${isActive ? 'bg-amber-200/80 hover:bg-amber-200/80' : isChecked ? 'bg-blue-50/70' : ''}`}
+                    >
                       <td className="px-4 py-2.5 align-top">
                         <input
                           type="checkbox"
