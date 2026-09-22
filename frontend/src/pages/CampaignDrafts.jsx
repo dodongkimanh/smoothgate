@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import {
   Plus, Pencil, Trash2, ChevronDown, ChevronUp, X, Loader2,
-  Folder, LayoutGrid, FileText, Megaphone, Send, ExternalLink,
+  Folder, LayoutGrid, FileText, Megaphone, Send, ExternalLink, Copy,
 } from 'lucide-react'
 import {
   getCampaignDrafts, createCampaignDraft, updateCampaignDraft, deleteCampaignDraft,
@@ -547,17 +547,28 @@ function useDraftMetrics(draft, onSave) {
   return { metrics, setM, commit, handleStatusChange }
 }
 
-function DraftCard({ draft, isExpanded, onToggle, onEdit, onDelete, onSave, onPublish, isPublishing }) {
+function DraftCard({ draft, isExpanded, onToggle, onEdit, onDelete, onDuplicate, onSave, onPublish, isPublishing, isSelected, onToggleSelect }) {
   const { metrics, setM, commit, handleStatusChange } = useDraftMetrics(draft, onSave)
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+    <div className={`bg-white rounded-xl border p-4 space-y-3 ${isSelected ? 'border-blue-300 bg-blue-50/40' : 'border-gray-200'}`}>
       <div className="flex items-start justify-between gap-2">
-        <button onClick={() => onToggle(draft.id)} className="text-left flex-1 min-w-0">
-          <div className="font-medium text-gray-800 truncate">{draft.name}</div>
-          <div className="text-xs text-gray-400 mt-0.5">{draft.objective}</div>
-        </button>
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onToggleSelect(draft.id)}
+            className="w-4 h-4 rounded mt-1 shrink-0"
+          />
+          <button onClick={() => onToggle(draft.id)} className="text-left flex-1 min-w-0">
+            <div className="font-medium text-gray-800 truncate">{draft.name}</div>
+            <div className="text-xs text-gray-400 mt-0.5">{draft.objective}</div>
+          </button>
+        </div>
         <div className="flex items-center gap-1 shrink-0">
+          <button onClick={() => onDuplicate(draft)} className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg" title="Sao chép">
+            <Copy size={16} />
+          </button>
           <button onClick={() => onEdit(draft)} className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg" title="Chỉnh sửa">
             <Pencil size={16} />
           </button>
@@ -612,13 +623,21 @@ function DraftCard({ draft, isExpanded, onToggle, onEdit, onDelete, onSave, onPu
   )
 }
 
-function DraftRow({ draft, isExpanded, onToggle, onEdit, onDelete, onSave, onPublish, isPublishing }) {
+function DraftRow({ draft, isExpanded, onToggle, onEdit, onDelete, onDuplicate, onSave, onPublish, isPublishing, isSelected, onToggleSelect }) {
   const { metrics, setM, commit, handleStatusChange } = useDraftMetrics(draft, onSave)
 
   return (
     <>
-      <tr className="hover:bg-gray-50 transition-colors">
-        <td className="pl-4 py-3 w-8">
+      <tr className={`hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50/60' : ''}`}>
+        <td className="pl-4 py-3 w-8" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onToggleSelect(draft.id)}
+            className="w-4 h-4 rounded"
+          />
+        </td>
+        <td className="pl-2 py-3 w-8">
           <button onClick={() => onToggle(draft.id)} className="text-gray-400 hover:text-gray-600">
             {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </button>
@@ -650,6 +669,9 @@ function DraftRow({ draft, isExpanded, onToggle, onEdit, onDelete, onSave, onPub
         </td>
         <td className="px-3 py-3">
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => onDuplicate(draft)} className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg" title="Sao chép">
+              <Copy size={16} />
+            </button>
             <button onClick={() => onEdit(draft)} className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg" title="Chỉnh sửa">
               <Pencil size={16} />
             </button>
@@ -661,7 +683,7 @@ function DraftRow({ draft, isExpanded, onToggle, onEdit, onDelete, onSave, onPub
       </tr>
       {isExpanded && (
         <tr>
-          <td colSpan={9} className="px-5 pb-5 bg-gray-50/50">
+          <td colSpan={11} className="px-5 pb-5 bg-gray-50/50">
             <DraftDetail draft={draft} onPublish={onPublish} isPublishing={isPublishing} />
           </td>
         </tr>
@@ -675,6 +697,7 @@ export default function CampaignDrafts() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingDraft, setEditingDraft] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
+  const [selectedIds, setSelectedIds] = useState([])
 
   const { data, isLoading } = useQuery({
     queryKey: ['campaign-drafts'],
@@ -722,6 +745,11 @@ export default function CampaignDrafts() {
     onError: (err) => toast.error(err.response?.data?.message || 'Không thể xóa chiến dịch'),
   })
 
+  const duplicateMutation = useMutation({
+    mutationFn: createCampaignDraft,
+    onError: (err) => toast.error(err.response?.data?.message || 'Không thể sao chép chiến dịch'),
+  })
+
   const publishMutation = useMutation({
     mutationFn: publishCampaignDraft,
     onSuccess: (res) => {
@@ -753,6 +781,48 @@ export default function CampaignDrafts() {
       createMutation.mutate(payload)
     }
   }
+
+  const buildDuplicatePayload = (draft) => {
+    const p = draft.payload || emptyPayload()
+    const { metaCampaignId, metaAdAccountExternalId, ...campaign } = p.campaign || {}
+    const adGroups = getAdGroups(p).map((g) => {
+      const { metaAdSetId, ad, ...group } = g
+      const { metaAdId, ...restAd } = ad || {}
+      return { ...group, ad: restAd }
+    })
+    return {
+      name: `${draft.name} (Bản sao)`,
+      objective: draft.objective,
+      status: 'DRAFT',
+      payload: { ...p, campaign, adGroups },
+    }
+  }
+
+  const handleDuplicate = (draft) => {
+    duplicateMutation.mutate(buildDuplicatePayload(draft), {
+      onSuccess: () => {
+        toast.success(`Đã sao chép chiến dịch "${draft.name}"`)
+        invalidate()
+      },
+    })
+  }
+
+  const handleDuplicateSelected = async () => {
+    const targets = drafts.filter((d) => selectedIds.includes(d.id))
+    if (targets.length === 0) return
+    try {
+      await Promise.all(targets.map((d) => duplicateMutation.mutateAsync(buildDuplicatePayload(d))))
+      toast.success(`Đã sao chép ${targets.length} chiến dịch`)
+      setSelectedIds([])
+      invalidate()
+    } catch {
+      invalidate()
+    }
+  }
+
+  const toggleSelect = (id) => setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+  const allSelected = drafts.length > 0 && drafts.every((d) => selectedIds.includes(d.id))
+  const someSelected = selectedIds.length > 0
 
   const handleDelete = (draft) => {
     if (window.confirm(`Xóa chiến dịch "${draft.name}"? Hành động này không thể hoàn tác.`)) {
@@ -797,6 +867,28 @@ export default function CampaignDrafts() {
         </button>
       </div>
 
+      {someSelected && (
+        <div className="flex items-center gap-3 mb-3 px-4 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
+          <span className="text-sm font-medium text-blue-700">Đã chọn {selectedIds.length} chiến dịch</span>
+          <button
+            type="button"
+            onClick={handleDuplicateSelected}
+            disabled={duplicateMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 bg-white text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+          >
+            {duplicateMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />}
+            Sao chép
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100"
+          >
+            Bỏ chọn
+          </button>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 size={28} className="animate-spin text-blue-500" />
@@ -812,6 +904,14 @@ export default function CampaignDrafts() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-xs uppercase border-b border-gray-200">
+                  <th className="w-8 pl-4">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={() => allSelected ? setSelectedIds([]) : setSelectedIds(drafts.map((d) => d.id))}
+                      className="w-4 h-4 rounded"
+                    />
+                  </th>
                   <th className="w-8"></th>
                   <th className="text-left px-3 py-3 font-medium">Chiến dịch</th>
                   <th className="text-right px-3 py-3 font-medium">CPM</th>
@@ -833,9 +933,12 @@ export default function CampaignDrafts() {
                     onToggle={(id) => setExpandedId(expandedId === id ? null : id)}
                     onEdit={(d) => { setEditingDraft(d); setIsFormOpen(true) }}
                     onDelete={handleDelete}
+                    onDuplicate={handleDuplicate}
                     onSave={handleInlineSave}
                     onPublish={handlePublish}
                     isPublishing={publishMutation.isPending && publishMutation.variables === draft.id}
+                    isSelected={selectedIds.includes(draft.id)}
+                    onToggleSelect={toggleSelect}
                   />
                 ))}
               </tbody>
@@ -851,9 +954,12 @@ export default function CampaignDrafts() {
                 onToggle={(id) => setExpandedId(expandedId === id ? null : id)}
                 onEdit={(d) => { setEditingDraft(d); setIsFormOpen(true) }}
                 onDelete={handleDelete}
+                onDuplicate={handleDuplicate}
                 onSave={handleInlineSave}
                 onPublish={handlePublish}
                 isPublishing={publishMutation.isPending && publishMutation.variables === draft.id}
+                isSelected={selectedIds.includes(draft.id)}
+                onToggleSelect={toggleSelect}
               />
             ))}
           </div>
