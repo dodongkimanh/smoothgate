@@ -39,8 +39,10 @@ public class CampaignMonitorService {
 
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
+    // Checked frequently; each tenant only actually runs once its own configured interval has elapsed,
+    // so this controls granularity of that check, not the notification cadence itself.
     @Scheduled(
-            fixedDelayString = "${app.agent.analysis-interval-ms:3600000}",
+            fixedDelayString = "${app.agent.check-interval-ms:300000}",
             initialDelayString = "${app.agent.analysis-initial-delay-ms:120000}")
     public void analyzeAllTenants() {
         if (!agentEnabled) {
@@ -52,7 +54,17 @@ public class CampaignMonitorService {
 
         for (Long tenantId : tenantIds) {
             try {
-                analyzeForTenant(tenantId);
+                AgentSettingsService.AgentSettings settings = agentSettingsService.getSettings(tenantId);
+                if (!settings.enabled()) {
+                    continue;
+                }
+                Long lastRunAt = agentSettingsService.getLastRunAt(tenantId);
+                long intervalMs = settings.intervalMinutes() * 60_000L;
+                if (lastRunAt != null && System.currentTimeMillis() - lastRunAt < intervalMs) {
+                    continue;
+                }
+                analyzeForTenant(tenantId, settings);
+                agentSettingsService.markRunNow(tenantId);
             } catch (Exception e) {
                 log.error("Agent analysis failed for tenant {}: {}", tenantId, e.getMessage());
             }
@@ -60,8 +72,10 @@ public class CampaignMonitorService {
     }
 
     public String analyzeForTenant(Long tenantId) {
-        AgentSettingsService.AgentSettings settings = agentSettingsService.getSettings(tenantId);
+        return analyzeForTenant(tenantId, agentSettingsService.getSettings(tenantId));
+    }
 
+    private String analyzeForTenant(Long tenantId, AgentSettingsService.AgentSettings settings) {
         LocalDate today = LocalDate.now(VIETNAM_ZONE);
         LocalDate from = today.minusDays(settings.analysisWindowDays() - 1L);
 

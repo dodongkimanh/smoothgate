@@ -21,6 +21,18 @@ const DEFAULT_SETTINGS = {
   costPerOrderThreshold: 3000000,
   lossAfterAdsThreshold: 5000000,
   analysisWindowDays: 3,
+  enabled: true,
+  intervalMinutes: 60,
+}
+
+const formatInterval = (minutes) => {
+  const m = Number(minutes || 0)
+  if (m <= 0) return '-'
+  if (m % 60 === 0) {
+    const h = m / 60
+    return `${h} giờ`
+  }
+  return `${m} phút`
 }
 
 export default function Agent() {
@@ -41,6 +53,8 @@ export default function Agent() {
         costPerOrderThreshold: Number(settingsData.costPerOrderThreshold),
         lossAfterAdsThreshold: Number(settingsData.lossAfterAdsThreshold),
         analysisWindowDays: Number(settingsData.analysisWindowDays),
+        enabled: settingsData.enabled !== undefined ? Boolean(settingsData.enabled) : true,
+        intervalMinutes: Number(settingsData.intervalMinutes) || 60,
       })
     }
   }, [settingsData])
@@ -58,10 +72,10 @@ export default function Agent() {
   })
 
   const saveSettingsMutation = useMutation({
-    mutationFn: () => saveAgentSettings(form),
+    mutationFn: (payload) => saveAgentSettings(payload),
     onSuccess: (res) => {
       queryClient.setQueryData(['agent-settings'], res.data?.data)
-      toast.success('Đã lưu cấu hình ngưỡng cảnh báo')
+      toast.success('Đã lưu cấu hình')
     },
     onError: (err) => {
       toast.error(err.response?.data?.message || 'Không thể lưu cấu hình')
@@ -72,20 +86,29 @@ export default function Agent() {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  const toggleEnabled = () => {
+    const next = { ...form, enabled: !form.enabled }
+    setForm(next)
+    saveSettingsMutation.mutate(next)
+  }
+
   const formatCurrency = (value) => new Intl.NumberFormat('vi-VN', {
     style: 'currency', currency: 'VND', maximumFractionDigits: 0,
   }).format(Number(value || 0))
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-          <Bot size={24} className="text-blue-600" />
-          Agent AI — Phân tích quảng cáo
-        </h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Claude AI tự động phân tích các quảng cáo đang chạy theo dữ liệu CRM (không đọc trực tiếp từ Meta) và gửi cảnh báo qua Telegram
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <Bot size={24} className="text-blue-600" />
+            Agent AI — Phân tích quảng cáo
+          </h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Claude AI tự động phân tích các quảng cáo đang chạy theo dữ liệu CRM (không đọc trực tiếp từ Meta) và gửi cảnh báo qua Telegram
+          </p>
+        </div>
+        <EnabledToggle enabled={form.enabled} onToggle={toggleEnabled} pending={saveSettingsMutation.isPending} />
       </div>
 
       {/* Status Cards */}
@@ -108,8 +131,8 @@ export default function Agent() {
           icon={Clock}
           title="Khung dữ liệu"
           value={`${form.analysisWindowDays} ngày gần nhất`}
-          desc="Chạy tự động mỗi 1 giờ"
-          color="text-emerald-600 bg-emerald-50"
+          desc={form.enabled ? `Chạy tự động mỗi ${formatInterval(form.intervalMinutes)}` : 'Đang tắt — không tự chạy'}
+          color={form.enabled ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400 bg-gray-100'}
         />
       </div>
 
@@ -154,21 +177,36 @@ export default function Agent() {
             />
           </div>
 
-          <div>
-            <label className="text-xs font-medium text-gray-600 mb-1.5 block">Số ngày phân tích gần nhất</label>
-            <input
-              type="number"
-              min="1"
-              max="30"
-              value={form.analysisWindowDays}
-              onChange={(e) => updateField('analysisWindowDays', e.target.value === '' ? '' : Number(e.target.value))}
-              className="w-32 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-            />
-            <span className="ml-2 text-xs text-gray-500">ngày</span>
+          <div className="flex flex-wrap gap-6">
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1.5 block">Số ngày phân tích gần nhất</label>
+              <input
+                type="number"
+                min="1"
+                max="30"
+                value={form.analysisWindowDays}
+                onChange={(e) => updateField('analysisWindowDays', e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-32 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+              />
+              <span className="ml-2 text-xs text-gray-500">ngày</span>
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-gray-600 mb-1.5 block">Tần suất chạy tự động</label>
+              <input
+                type="number"
+                min="5"
+                step="5"
+                value={form.intervalMinutes}
+                onChange={(e) => updateField('intervalMinutes', e.target.value === '' ? '' : Number(e.target.value))}
+                className="w-32 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+              />
+              <span className="ml-2 text-xs text-gray-500">phút (mỗi {formatInterval(form.intervalMinutes)})</span>
+            </div>
           </div>
 
           <button
-            onClick={() => saveSettingsMutation.mutate()}
+            onClick={() => saveSettingsMutation.mutate(form)}
             disabled={saveSettingsMutation.isPending}
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl font-medium text-sm
                        hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -232,7 +270,9 @@ APP_AGENT_ENABLED=true`}
               <FeatureItem
                 icon={Clock}
                 title="Chạy định kỳ"
-                desc={`Mỗi 1 giờ tự động phân tích dữ liệu ${form.analysisWindowDays} ngày gần nhất`}
+                desc={form.enabled
+                  ? `Mỗi ${formatInterval(form.intervalMinutes)} tự động phân tích dữ liệu ${form.analysisWindowDays} ngày gần nhất`
+                  : 'Đang tắt — bật ở nút góc trên để chạy tự động'}
               />
               <FeatureItem
                 icon={Bot}
@@ -320,6 +360,35 @@ function ThresholdField({ label, value, onChange, preview }) {
       />
       <div className="text-xs text-gray-400 mt-1">{preview}</div>
     </div>
+  )
+}
+
+function EnabledToggle({ enabled, onToggle, pending }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={pending}
+      className={`inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+        enabled
+          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+          : 'bg-gray-50 border-gray-200 text-gray-500'
+      }`}
+      title={enabled ? 'Nhấn để tắt chạy tự động' : 'Nhấn để bật chạy tự động'}
+    >
+      <span
+        className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+          enabled ? 'bg-emerald-500' : 'bg-gray-300'
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+            enabled ? 'translate-x-4' : 'translate-x-0.5'
+          }`}
+        />
+      </span>
+      {enabled ? 'Đang bật — chạy tự động' : 'Đang tắt — chỉ chạy thủ công'}
+    </button>
   )
 }
 

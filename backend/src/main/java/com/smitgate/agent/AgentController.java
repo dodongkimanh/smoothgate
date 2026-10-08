@@ -43,7 +43,9 @@ public class AgentController {
                 toBigDecimal(body.get("costPerPhoneThreshold"), AgentSettingsService.DEFAULT_COST_PER_PHONE),
                 toBigDecimal(body.get("costPerOrderThreshold"), AgentSettingsService.DEFAULT_COST_PER_ORDER),
                 toBigDecimal(body.get("lossAfterAdsThreshold"), AgentSettingsService.DEFAULT_LOSS_AFTER_ADS),
-                toInt(body.get("analysisWindowDays"), AgentSettingsService.DEFAULT_ANALYSIS_WINDOW_DAYS)
+                toInt(body.get("analysisWindowDays"), AgentSettingsService.DEFAULT_ANALYSIS_WINDOW_DAYS),
+                toBoolean(body.get("enabled"), AgentSettingsService.DEFAULT_ENABLED),
+                toInt(body.get("intervalMinutes"), AgentSettingsService.DEFAULT_INTERVAL_MINUTES)
         );
         agentSettingsService.saveSettings(tenantId, settings);
         return ResponseEntity.ok(ApiResponse.ok(agentSettingsService.getSettings(tenantId)));
@@ -56,6 +58,12 @@ public class AgentController {
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    private boolean toBoolean(Object value, boolean fallback) {
+        if (value == null) return fallback;
+        if (value instanceof Boolean b) return b;
+        return Boolean.parseBoolean(value.toString());
     }
 
     private int toInt(Object value, int fallback) {
