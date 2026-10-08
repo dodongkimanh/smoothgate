@@ -696,6 +696,9 @@ export default function Campaigns() {
         case 'profitOrderCount': return Number(row.profitOrderCount || 0)
         case 'orderProfit': return Number(row.orderProfit || 0)
         case 'spend': return Number(row.spend || 0)
+        case 'cpm': { const i = Number(row.impressions || 0); return i > 0 ? Number(row.spend || 0) / i * 1000 : 0 }
+        case 'ctr': { const i = Number(row.impressions || 0); return i > 0 ? Number(row.clicks || 0) / i * 100 : 0 }
+        case 'frequency': { const r = Number(row.reach || 0); return r > 0 ? Number(row.impressions || 0) / r : 0 }
         case 'costPerOrder': { const o = Number(row.orderCount || 0); return o > 0 ? Number(row.spend || 0) / o : 0 }
         case 'profitAfterAds': return Number(row.orderProfit || 0) - Number(row.spend || 0)
         case 'postId': return (row.postId || '').toLowerCase()
@@ -1568,6 +1571,9 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
     { field: 'delivery', label: 'Phân phối', align: 'left', defaultWidth: 130 },
     { field: 'budget', label: 'Ngân sách', defaultWidth: 130 },
     { field: 'spend', label: 'Số tiền đã chi tiêu', defaultWidth: 150 },
+    { field: 'cpm', label: 'CPM', defaultWidth: 100 },
+    { field: 'ctr', label: 'CTR', defaultWidth: 90 },
+    { field: 'frequency', label: 'Tần suất', defaultWidth: 100 },
     { field: 'comments', label: 'Bình luận', defaultWidth: 100 },
     { field: 'messageContacts', label: 'Tin nhắn mới', defaultWidth: 110 },
     { field: 'costPerMessage', label: 'Chi phí tin nhắn mới', defaultWidth: 150 },
@@ -1677,7 +1683,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={22} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={25} className="px-4 py-10 text-center text-gray-400">
                     Không có dữ liệu quảng cáo theo bộ lọc hiện tại
                   </td>
                 </tr>
@@ -1751,6 +1757,9 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                         />
                       </td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(spend)}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-700 align-top">{Number(row.impressions || 0) > 0 ? formatCurrency(spend / Number(row.impressions) * 1000) : '-'}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-700 align-top">{Number(row.impressions || 0) > 0 ? (Number(row.clicks || 0) / Number(row.impressions) * 100).toFixed(2) + '%' : '-'}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-700 align-top">{Number(row.reach || 0) > 0 ? (Number(row.impressions || 0) / Number(row.reach)).toFixed(2) : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(row.comments)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(messages)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{messages > 0 ? formatCurrency(costPerMessage) : '-'}</td>
