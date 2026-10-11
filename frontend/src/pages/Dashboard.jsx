@@ -14,6 +14,8 @@ import {
   AlertCircle,
   Phone,
   MessageCircle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import {
   Chart as ChartJS,
@@ -135,8 +137,21 @@ function getPresetRange(presetId) {
   }
 }
 
+const MONTH_LABELS_VI = [
+  'Th 1', 'Th 2', 'Th 3', 'Th 4', 'Th 5', 'Th 6',
+  'Th 7', 'Th 8', 'Th 9', 'Th 10', 'Th 11', 'Th 12',
+]
+
+function monthRange(year, monthIndex0) {
+  const from = `${year}-${String(monthIndex0 + 1).padStart(2, '0')}-01`
+  const lastDay = new Date(year, monthIndex0 + 1, 0).getDate()
+  const to = `${year}-${String(monthIndex0 + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  return { from, to }
+}
+
 export default function Dashboard() {
   const [selectedCampaignId, setSelectedCampaignId] = useState(null)
+  const [profitYear, setProfitYear] = useState(new Date().getFullYear())
   const todayDate = new Date()
   const defaultTo = dateKey(todayDate)
   const defaultFrom = dateKey(todayDate)
@@ -159,6 +174,23 @@ export default function Dashboard() {
   const { data: accountSpendData = [] } = useQuery({
     queryKey: ['account-spend', fromDate, toDate],
     queryFn: () => getAccountSpend(fromDate, toDate).then((r) => r.data?.data || []),
+    staleTime: 60_000,
+  })
+
+  const { data: yearlyProfitData = [], isLoading: loadingYearlyProfit } = useQuery({
+    queryKey: ['yearly-profit', profitYear],
+    queryFn: async () => {
+      const results = await Promise.all(
+        Array.from({ length: 12 }, (_, monthIndex0) => {
+          const { from, to } = monthRange(profitYear, monthIndex0)
+          return getOverview(from, to).then((r) => r.data?.data || null)
+        })
+      )
+      return results.map((r, i) => ({
+        month: i + 1,
+        profit: Number(r?.totalOrderProfit || 0) - Number(r?.totalSpend || 0),
+      }))
+    },
     staleTime: 60_000,
   })
 
@@ -398,6 +430,58 @@ export default function Dashboard() {
     },
   }
 
+  const compactMoney = (v) => {
+    const abs = Math.abs(Number(v || 0))
+    const sign = Number(v || 0) < 0 ? '-' : ''
+    if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M`
+    if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(0)}K`
+    return `${sign}${abs}`
+  }
+
+  const yearlyProfitChart = {
+    labels: MONTH_LABELS_VI,
+    datasets: [
+      {
+        label: 'Lợi nhuận sau chi phí QC',
+        data: yearlyProfitData.map((d) => d.profit),
+        backgroundColor: yearlyProfitData.map((d) => (d.profit >= 0 ? 'rgba(16, 185, 129, 0.85)' : 'rgba(239, 68, 68, 0.85)')),
+        borderRadius: 4,
+        barThickness: 26,
+      },
+    ],
+  }
+
+  const yearlyProfitOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: (ctx) => formatCurrency(ctx.raw) } },
+      datalabels: {
+        anchor: (ctx) => (ctx.dataset.data[ctx.dataIndex] >= 0 ? 'end' : 'start'),
+        align: (ctx) => (ctx.dataset.data[ctx.dataIndex] >= 0 ? 'end' : 'start'),
+        color: '#334155',
+        font: { weight: '600', size: 11 },
+        formatter: (v) => compactMoney(v),
+      },
+    },
+    layout: { padding: { top: 24, bottom: 24 } },
+    scales: {
+      x: {
+        grid: { display: false },
+      },
+      y: {
+        grid: {
+          color: (ctx) => (ctx.tick.value === 0 ? '#94A3B8' : '#EEF2FF'),
+          lineWidth: (ctx) => (ctx.tick.value === 0 ? 2 : 1),
+        },
+        ticks: {
+          callback: (v) => compactMoney(v),
+        },
+      },
+    },
+  }
+
   const applyPreset = (presetId) => {
     const range = getPresetRange(presetId)
     setFromDate(range.from)
@@ -595,6 +679,52 @@ export default function Dashboard() {
         <h3 className="font-semibold text-gray-800 mb-4">Đơn hàng theo ngày</h3>
         <div className="h-[250px]">
           <Bar data={ordersChart} options={ordersChartOptions} />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-800">Lợi nhuận sau chi phí quảng cáo theo năm</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Tháng lãi hiển thị cột xanh phía trên mức 0, tháng lỗ hiển thị cột đỏ phía dưới mức 0.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Lãi
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block ml-2" /> Lỗ
+            </div>
+            <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-1.5 py-1">
+              <button
+                type="button"
+                onClick={() => setProfitYear((y) => y - 1)}
+                className="p-1 rounded-md text-gray-500 hover:bg-white hover:text-gray-800 transition-colors"
+                aria-label="Năm trước"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="text-sm font-semibold text-gray-800 w-12 text-center">{profitYear}</span>
+              <button
+                type="button"
+                onClick={() => setProfitYear((y) => y + 1)}
+                disabled={profitYear >= new Date().getFullYear()}
+                className="p-1 rounded-md text-gray-500 hover:bg-white hover:text-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Năm sau"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="p-6">
+          {loadingYearlyProfit ? (
+            <div className="h-[300px] flex items-center justify-center text-sm text-gray-400">Đang tải dữ liệu...</div>
+          ) : (
+            <div className="h-[300px]">
+              <Bar plugins={[ChartDataLabels]} data={yearlyProfitChart} options={yearlyProfitOptions} />
+            </div>
+          )}
         </div>
       </div>
 
