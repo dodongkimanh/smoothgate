@@ -733,52 +733,6 @@ export default function Dashboard() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-semibold text-gray-800">Lợi nhuận sau chi phí quảng cáo theo năm</h3>
-            <p className="text-xs text-gray-500 mt-1">
-              Tháng lãi hiển thị cột xanh phía trên mức 0, tháng lỗ hiển thị cột đỏ phía dưới mức 0.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Lãi
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block ml-2" /> Lỗ
-            </div>
-            <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-1.5 py-1">
-              <button
-                type="button"
-                onClick={() => setProfitYear((y) => y - 1)}
-                className="p-1 rounded-md text-gray-500 hover:bg-white hover:text-gray-800 transition-colors"
-                aria-label="Năm trước"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <span className="text-sm font-semibold text-gray-800 w-12 text-center">{profitYear}</span>
-              <button
-                type="button"
-                onClick={() => setProfitYear((y) => y + 1)}
-                disabled={profitYear >= new Date().getFullYear()}
-                className="p-1 rounded-md text-gray-500 hover:bg-white hover:text-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                aria-label="Năm sau"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="p-6">
-          {loadingYearlyProfit ? (
-            <div className="h-[300px] flex items-center justify-center text-sm text-gray-400">Đang tải dữ liệu...</div>
-          ) : (
-            <div className="h-[300px]">
-              <Bar plugins={[ChartDataLabels]} data={yearlyProfitChart} options={yearlyProfitOptions} />
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
-          <div>
             <h3 className="font-semibold text-gray-800">Lợi nhuận sau chi phí quảng cáo theo tài khoản</h3>
             <p className="text-xs text-gray-500 mt-1">
               Chọn tài khoản quảng cáo để xem lợi nhuận (đã trừ chi phí QC) theo từng tháng trong năm.
@@ -829,6 +783,52 @@ export default function Dashboard() {
           ) : (
             <div className="h-[300px]">
               <Bar plugins={[ChartDataLabels]} data={accountProfitChart} options={yearlyProfitOptions} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-800">Lợi nhuận sau chi phí quảng cáo theo năm</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Tháng lãi hiển thị cột xanh phía trên mức 0, tháng lỗ hiển thị cột đỏ phía dưới mức 0.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Lãi
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block ml-2" /> Lỗ
+            </div>
+            <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-1.5 py-1">
+              <button
+                type="button"
+                onClick={() => setProfitYear((y) => y - 1)}
+                className="p-1 rounded-md text-gray-500 hover:bg-white hover:text-gray-800 transition-colors"
+                aria-label="Năm trước"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="text-sm font-semibold text-gray-800 w-12 text-center">{profitYear}</span>
+              <button
+                type="button"
+                onClick={() => setProfitYear((y) => y + 1)}
+                disabled={profitYear >= new Date().getFullYear()}
+                className="p-1 rounded-md text-gray-500 hover:bg-white hover:text-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Năm sau"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="p-6">
+          {loadingYearlyProfit ? (
+            <div className="h-[300px] flex items-center justify-center text-sm text-gray-400">Đang tải dữ liệu...</div>
+          ) : (
+            <div className="h-[300px]">
+              <Bar plugins={[ChartDataLabels]} data={yearlyProfitChart} options={yearlyProfitOptions} />
             </div>
           )}
         </div>
