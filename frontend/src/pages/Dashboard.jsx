@@ -438,15 +438,29 @@ export default function Dashboard() {
     return `${sign}${abs}`
   }
 
+  const PROFIT_GREEN = '#10B981'
+  const PROFIT_RED = '#EF4444'
+  const PROFIT_GREEN_FILL = 'rgba(16, 185, 129, 0.18)'
+  const PROFIT_RED_FILL = 'rgba(239, 68, 68, 0.18)'
+
   const yearlyProfitChart = {
     labels: MONTH_LABELS_VI,
     datasets: [
       {
         label: 'Lợi nhuận sau chi phí QC',
         data: yearlyProfitData.map((d) => d.profit),
-        backgroundColor: yearlyProfitData.map((d) => (d.profit >= 0 ? 'rgba(16, 185, 129, 0.85)' : 'rgba(239, 68, 68, 0.85)')),
-        borderRadius: 4,
-        barThickness: 26,
+        borderWidth: 2.5,
+        tension: 0.4,
+        fill: { target: 'origin' },
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBorderWidth: 2,
+        pointBorderColor: '#fff',
+        pointBackgroundColor: yearlyProfitData.map((d) => (d.profit >= 0 ? PROFIT_GREEN : PROFIT_RED)),
+        segment: {
+          borderColor: (ctx) => (ctx.p0.parsed.y >= 0 && ctx.p1.parsed.y >= 0 ? PROFIT_GREEN : PROFIT_RED),
+          backgroundColor: (ctx) => (ctx.p0.parsed.y >= 0 && ctx.p1.parsed.y >= 0 ? PROFIT_GREEN_FILL : PROFIT_RED_FILL),
+        },
       },
     ],
   }
@@ -460,12 +474,13 @@ export default function Dashboard() {
       datalabels: {
         anchor: (ctx) => (ctx.dataset.data[ctx.dataIndex] >= 0 ? 'end' : 'start'),
         align: (ctx) => (ctx.dataset.data[ctx.dataIndex] >= 0 ? 'end' : 'start'),
+        offset: 8,
         color: '#334155',
         font: { weight: '600', size: 11 },
         formatter: (v) => compactMoney(v),
       },
     },
-    layout: { padding: { top: 24, bottom: 24 } },
+    layout: { padding: { top: 28, bottom: 28 } },
     scales: {
       x: {
         grid: { display: false },
@@ -687,7 +702,7 @@ export default function Dashboard() {
           <div>
             <h3 className="font-semibold text-gray-800">Lợi nhuận sau chi phí quảng cáo theo năm</h3>
             <p className="text-xs text-gray-500 mt-1">
-              Tháng lãi hiển thị cột xanh phía trên mức 0, tháng lỗ hiển thị cột đỏ phía dưới mức 0.
+              Đường cong lượn quanh mức 0: tháng lãi nhô lên màu xanh, tháng lỗ chìm xuống màu đỏ.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -722,7 +737,7 @@ export default function Dashboard() {
             <div className="h-[300px] flex items-center justify-center text-sm text-gray-400">Đang tải dữ liệu...</div>
           ) : (
             <div className="h-[300px]">
-              <Bar plugins={[ChartDataLabels]} data={yearlyProfitChart} options={yearlyProfitOptions} />
+              <Line plugins={[ChartDataLabels]} data={yearlyProfitChart} options={yearlyProfitOptions} />
             </div>
           )}
         </div>
