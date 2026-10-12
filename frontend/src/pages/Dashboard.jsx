@@ -203,6 +203,7 @@ export default function Dashboard() {
       return results.map((r, i) => ({
         month: i + 1,
         profit: Number(r?.totalOrderProfit || 0) - Number(r?.totalSpend || 0),
+        spend: Number(r?.totalSpend || 0),
       }))
     },
     staleTime: 60_000,
@@ -237,7 +238,7 @@ export default function Dashboard() {
         const filtered = campaigns.filter((c) => String(c.adAccountId) === String(selectedAccountId))
         const spend = filtered.reduce((s, c) => s + Number(c.totalSpend || 0), 0)
         const orderProfit = filtered.reduce((s, c) => s + Number(c.totalOrderProfit || 0), 0)
-        return { month: i + 1, profit: orderProfit - spend }
+        return { month: i + 1, profit: orderProfit - spend, spend }
       })
     },
     staleTime: 60_000,
@@ -487,6 +488,24 @@ export default function Dashboard() {
     return `${sign}${abs}`
   }
 
+  const spendLineDataset = (monthlyData) => ({
+    type: 'line',
+    label: 'Tổng chi phí quảng cáo',
+    data: monthlyData.map((d) => d.spend),
+    borderColor: '#2563EB',
+    backgroundColor: '#2563EB',
+    borderWidth: 2,
+    tension: 0.35,
+    pointRadius: 3,
+    pointHoverRadius: 5,
+    pointBackgroundColor: '#2563EB',
+    pointBorderColor: '#fff',
+    pointBorderWidth: 1.5,
+    fill: false,
+    order: 0,
+    datalabels: { display: false },
+  })
+
   const yearlyProfitChart = {
     labels: MONTH_LABELS_VI,
     datasets: [
@@ -496,7 +515,9 @@ export default function Dashboard() {
         backgroundColor: yearlyProfitData.map((d) => (d.profit >= 0 ? 'rgba(16, 185, 129, 0.85)' : 'rgba(239, 68, 68, 0.85)')),
         borderRadius: 4,
         barThickness: 26,
+        order: 1,
       },
+      spendLineDataset(yearlyProfitData),
     ],
   }
 
@@ -509,7 +530,9 @@ export default function Dashboard() {
         backgroundColor: accountProfitData.map((d) => (d.profit >= 0 ? 'rgba(16, 185, 129, 0.85)' : 'rgba(239, 68, 68, 0.85)')),
         borderRadius: 4,
         barThickness: 26,
+        order: 1,
       },
+      spendLineDataset(accountProfitData),
     ],
   }
 
@@ -785,6 +808,11 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 text-xs text-gray-500">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Lãi
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block ml-2" /> Lỗ
+              <span className="w-3 h-0.5 bg-blue-600 inline-block ml-2" /> Chi phí QC
+            </div>
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
@@ -846,6 +874,7 @@ export default function Dashboard() {
             <div className="flex items-center gap-1 text-xs text-gray-500">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Lãi
               <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block ml-2" /> Lỗ
+              <span className="w-3 h-0.5 bg-blue-600 inline-block ml-2" /> Chi phí QC
             </div>
             <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-1.5 py-1">
               <button
