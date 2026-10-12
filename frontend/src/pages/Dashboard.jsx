@@ -149,6 +149,20 @@ function monthRange(year, monthIndex0) {
   return { from, to }
 }
 
+const MONTH_QUICK_OPTIONS = (() => {
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth() + 1
+  const opts = []
+  for (const y of [currentYear, currentYear - 1]) {
+    for (let m = 12; m >= 1; m--) {
+      if (y === currentYear && m > currentMonth) continue
+      opts.push({ value: `${y}-${String(m).padStart(2, '0')}`, label: `Tháng ${m}/${y}` })
+    }
+  }
+  return opts
+})()
+
 export default function Dashboard() {
   const [selectedCampaignId, setSelectedCampaignId] = useState(null)
   const [profitYear, setProfitYear] = useState(new Date().getFullYear())
@@ -537,6 +551,28 @@ export default function Dashboard() {
     setActivePreset(presetId)
   }
 
+  const monthSelectValue = useMemo(() => {
+    if (!fromDate || !toDate) return ''
+    const f = new Date(`${fromDate}T00:00:00`)
+    const t = new Date(`${toDate}T00:00:00`)
+    if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime())) return ''
+    const lastDayOfMonth = new Date(f.getFullYear(), f.getMonth() + 1, 0).getDate()
+    const isFullMonth = f.getDate() === 1
+      && t.getFullYear() === f.getFullYear()
+      && t.getMonth() === f.getMonth()
+      && t.getDate() === lastDayOfMonth
+    return isFullMonth ? `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}` : ''
+  }, [fromDate, toDate])
+
+  const applyMonth = (value) => {
+    if (!value) return
+    const [y, m] = value.split('-').map(Number)
+    const { from, to } = monthRange(y, m - 1)
+    setFromDate(from)
+    setToDate(to)
+    setActivePreset('CUSTOM')
+  }
+
   const isLoading = loadingOverview || loadingCampaigns
 
   return (
@@ -574,6 +610,16 @@ export default function Dashboard() {
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
             />
           </div>
+          <select
+            value={monthSelectValue}
+            onChange={(e) => applyMonth(e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+          >
+            <option value="">Xem nhanh theo tháng</option>
+            {MONTH_QUICK_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
         </div>
         <div className="flex flex-wrap gap-2">
           {DATE_PRESETS.map((preset) => (
