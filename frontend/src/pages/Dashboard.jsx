@@ -194,6 +194,41 @@ export default function Dashboard() {
     staleTime: 60_000,
   })
 
+  const [accountProfitYear, setAccountProfitYear] = useState(new Date().getFullYear())
+  const [selectedAccountId, setSelectedAccountId] = useState('')
+
+  const { data: allAccountsList = [] } = useQuery({
+    queryKey: ['all-accounts-list'],
+    queryFn: () => getAccountSpend('2000-01-01', dateKey(new Date())).then((r) => r.data?.data || []),
+    staleTime: 5 * 60_000,
+  })
+
+  useEffect(() => {
+    if (!selectedAccountId && allAccountsList.length > 0) {
+      setSelectedAccountId(String(allAccountsList[0].adAccountId))
+    }
+  }, [allAccountsList, selectedAccountId])
+
+  const { data: accountProfitData = [], isLoading: loadingAccountProfit } = useQuery({
+    queryKey: ['account-yearly-profit', accountProfitYear, selectedAccountId],
+    enabled: Boolean(selectedAccountId),
+    queryFn: async () => {
+      const results = await Promise.all(
+        Array.from({ length: 12 }, (_, monthIndex0) => {
+          const { from, to } = monthRange(accountProfitYear, monthIndex0)
+          return getCampaignPerformance(from, to).then((r) => r.data?.data || [])
+        })
+      )
+      return results.map((campaigns, i) => {
+        const filtered = campaigns.filter((c) => String(c.adAccountId) === String(selectedAccountId))
+        const spend = filtered.reduce((s, c) => s + Number(c.totalSpend || 0), 0)
+        const orderProfit = filtered.reduce((s, c) => s + Number(c.totalOrderProfit || 0), 0)
+        return { month: i + 1, profit: orderProfit - spend }
+      })
+    },
+    staleTime: 60_000,
+  })
+
   const overview = overviewData || {
     totalSpend: 0,
     totalRevenue: 0,
@@ -445,6 +480,19 @@ export default function Dashboard() {
         label: 'Lợi nhuận sau chi phí QC',
         data: yearlyProfitData.map((d) => d.profit),
         backgroundColor: yearlyProfitData.map((d) => (d.profit >= 0 ? 'rgba(16, 185, 129, 0.85)' : 'rgba(239, 68, 68, 0.85)')),
+        borderRadius: 4,
+        barThickness: 26,
+      },
+    ],
+  }
+
+  const accountProfitChart = {
+    labels: MONTH_LABELS_VI,
+    datasets: [
+      {
+        label: 'Lợi nhuận sau chi phí QC',
+        data: accountProfitData.map((d) => d.profit),
+        backgroundColor: accountProfitData.map((d) => (d.profit >= 0 ? 'rgba(16, 185, 129, 0.85)' : 'rgba(239, 68, 68, 0.85)')),
         borderRadius: 4,
         barThickness: 26,
       },
@@ -723,6 +771,64 @@ export default function Dashboard() {
           ) : (
             <div className="h-[300px]">
               <Bar plugins={[ChartDataLabels]} data={yearlyProfitChart} options={yearlyProfitOptions} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-800">Lợi nhuận sau chi phí quảng cáo theo tài khoản</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Chọn tài khoản quảng cáo để xem lợi nhuận (đã trừ chi phí QC) theo từng tháng trong năm.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={selectedAccountId}
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+              className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            >
+              {allAccountsList.length === 0 && <option value="">Không có tài khoản</option>}
+              {allAccountsList.map((a) => (
+                <option key={a.adAccountId} value={a.adAccountId}>
+                  {a.adAccountName || `#${a.adAccountId}`}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-1.5 py-1">
+              <button
+                type="button"
+                onClick={() => setAccountProfitYear((y) => y - 1)}
+                className="p-1 rounded-md text-gray-500 hover:bg-white hover:text-gray-800 transition-colors"
+                aria-label="Năm trước"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="text-sm font-semibold text-gray-800 w-12 text-center">{accountProfitYear}</span>
+              <button
+                type="button"
+                onClick={() => setAccountProfitYear((y) => y + 1)}
+                disabled={accountProfitYear >= new Date().getFullYear()}
+                className="p-1 rounded-md text-gray-500 hover:bg-white hover:text-gray-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Năm sau"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="p-6">
+          {!selectedAccountId ? (
+            <div className="h-[300px] rounded-xl border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-500 text-sm gap-2">
+              <AlertCircle size={16} /> Chưa có tài khoản quảng cáo để hiển thị
+            </div>
+          ) : loadingAccountProfit ? (
+            <div className="h-[300px] flex items-center justify-center text-sm text-gray-400">Đang tải dữ liệu...</div>
+          ) : (
+            <div className="h-[300px]">
+              <Bar plugins={[ChartDataLabels]} data={accountProfitChart} options={yearlyProfitOptions} />
             </div>
           )}
         </div>

@@ -19,6 +19,8 @@ public class CampaignPerfResponse implements Serializable {
     private String campaignName;
     private String platform;
     private String status;
+    private Long adAccountId;
+    private String adAccountName;
     private BigDecimal totalSpend;
     private int totalOrders;
     private int validOrders;

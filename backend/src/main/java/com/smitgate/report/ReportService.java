@@ -137,6 +137,10 @@ public class ReportService {
                     m.getMessageContacts() != null ? m.getMessageContacts() : 0L, Long::sum);
         }
 
+        Map<Long, com.smitgate.connector.ads.AdAccount> accountMap =
+                adAccountRepository.findByTenantId(tenantId).stream()
+                        .collect(Collectors.toMap(com.smitgate.connector.ads.AdAccount::getId, a -> a));
+
         List<Long> campaignIds = campaigns.stream().map(Campaign::getId).toList();
 
         LocalDateTime fromDt = from.atStartOfDay();
@@ -227,9 +231,13 @@ public class ReportService {
                 ));
             }
 
+            com.smitgate.connector.ads.AdAccount account = accountMap.get(campaign.getAdAccountId());
+
             results.add(new CampaignPerfResponse(
                     campaign.getId(), campaign.getExternalCampaignId(), campaign.getName(), campaign.getPlatform().name(),
-                    campaign.getStatus(), totalSpend, validOrders, validOrders, newContacts, msgContacts, totalRevenue,
+                    campaign.getStatus(), campaign.getAdAccountId(),
+                    account != null ? account.getName() : null,
+                    totalSpend, validOrders, validOrders, newContacts, msgContacts, totalRevenue,
                     totalOrderProfit, roas, cpo, dailyData));
         }
 
