@@ -175,6 +175,19 @@ function SortIcon({ field, sortField, sortDir }) {
 }
 
 const MIN_COLUMN_WIDTH = 70
+const RESIZE_EDGE_ZONE = 60
+const RESIZE_EDGE_SPEED = 18
+
+function findScrollParent(el) {
+  let node = el instanceof Element ? el.parentElement : null
+  while (node && node !== document.body) {
+    const style = window.getComputedStyle(node)
+    const canScrollX = (style.overflowX === 'auto' || style.overflowX === 'scroll') && node.scrollWidth > node.clientWidth
+    if (canScrollX) return node
+    node = node.parentElement
+  }
+  return null
+}
 
 function useResizableColumns(storageKey, fields) {
   const defaults = useMemo(() => Object.fromEntries(fields.map((f) => [f.field, f.defaultWidth])), [fields])
@@ -189,17 +202,57 @@ function useResizableColumns(storageKey, fields) {
   })
 
   const dragRef = useRef(null)
+  const rafRef = useRef(null)
 
   useEffect(() => {
+    const recomputeWidth = () => {
+      const drag = dragRef.current
+      if (!drag) return
+      const next = Math.max(
+        MIN_COLUMN_WIDTH,
+        drag.startWidth + (drag.lastClientX - drag.startX) + drag.scrollAccum
+      )
+      setWidths((prev) => (prev[drag.field] === next ? prev : { ...prev, [drag.field]: next }))
+    }
+
+    // While the cursor sits near the edge of the scrollable table container,
+    // auto-scroll it so a column can keep growing past the visible viewport
+    // instead of the drag feeling capped at the screen edge.
+    const autoScrollTick = () => {
+      const drag = dragRef.current
+      if (!drag || !drag.scrollParent) {
+        rafRef.current = null
+        return
+      }
+      let delta = 0
+      if (drag.lastClientX > window.innerWidth - RESIZE_EDGE_ZONE) delta = RESIZE_EDGE_SPEED
+      else if (drag.lastClientX < RESIZE_EDGE_ZONE) delta = -RESIZE_EDGE_SPEED
+
+      if (delta !== 0) {
+        const el = drag.scrollParent
+        const maxScroll = el.scrollWidth - el.clientWidth
+        const nextScroll = Math.min(maxScroll, Math.max(0, el.scrollLeft + delta))
+        drag.scrollAccum += nextScroll - el.scrollLeft
+        el.scrollLeft = nextScroll
+        recomputeWidth()
+      }
+      rafRef.current = requestAnimationFrame(autoScrollTick)
+    }
+
     const onMouseMove = (e) => {
       const drag = dragRef.current
       if (!drag) return
-      const next = Math.max(MIN_COLUMN_WIDTH, drag.startWidth + (e.clientX - drag.startX))
-      setWidths((prev) => (prev[drag.field] === next ? prev : { ...prev, [drag.field]: next }))
+      drag.lastClientX = e.clientX
+      recomputeWidth()
+      if (!rafRef.current) rafRef.current = requestAnimationFrame(autoScrollTick)
     }
     const onMouseUp = () => {
       if (!dragRef.current) return
       dragRef.current = null
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
       setWidths((prev) => {
@@ -212,13 +265,21 @@ function useResizableColumns(storageKey, fields) {
     return () => {
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('mouseup', onMouseUp)
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
   }, [storageKey])
 
   const startResize = useCallback((field) => (e) => {
     e.preventDefault()
     e.stopPropagation()
-    dragRef.current = { field, startX: e.clientX, startWidth: widths[field] || defaults[field] || 140 }
+    dragRef.current = {
+      field,
+      startX: e.clientX,
+      lastClientX: e.clientX,
+      startWidth: widths[field] || defaults[field] || 140,
+      scrollParent: findScrollParent(e.currentTarget),
+      scrollAccum: 0,
+    }
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
   }, [widths, defaults])
