@@ -1869,8 +1869,8 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                           name={row.adName}
                         />
                       </td>
-                      <td className="px-4 py-2.5 text-slate-700 align-top">
-                        <div className="flex items-center gap-2.5">
+                      <td className="px-4 py-2.5 text-slate-700 align-top overflow-hidden">
+                        <div className="flex items-center gap-2.5 min-w-0">
                           {row.thumbnailUrl ? (
                             <img
                               src={row.thumbnailUrl}
@@ -1883,15 +1883,15 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                               <Megaphone size={14} className="text-slate-300" />
                             </div>
                           )}
-                          <div className="min-w-0">
-                            <div className="font-medium text-slate-800 truncate">{row.adName || '-'}</div>
-                            <div className="text-xs text-slate-400 font-mono mt-0.5">{row.adId || '-'}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium text-slate-800 truncate" title={row.adName || ''}>{row.adName || '-'}</div>
+                            <div className="text-xs text-slate-400 font-mono mt-0.5 truncate">{row.adId || '-'}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-700 align-top">
-                        <div className="font-medium text-slate-800">{row.adAccountName || '-'}</div>
-                        <div className="font-mono text-xs text-slate-500 mt-0.5">{row.adAccountId || '-'}</div>
+                      <td className="px-4 py-2.5 text-slate-700 align-top overflow-hidden">
+                        <div className="font-medium text-slate-800 truncate" title={row.adAccountName || ''}>{row.adAccountName || '-'}</div>
+                        <div className="font-mono text-xs text-slate-500 mt-0.5 truncate">{row.adAccountId || '-'}</div>
                       </td>
                       <td className="px-4 py-2.5 text-slate-700 align-top whitespace-nowrap">
                         {row.createdDate ? new Date(row.createdDate).toLocaleDateString('vi-VN') : '-'}
