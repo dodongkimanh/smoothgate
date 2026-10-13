@@ -182,8 +182,11 @@ function findScrollParent(el) {
   let node = el instanceof Element ? el.parentElement : null
   while (node && node !== document.body) {
     const style = window.getComputedStyle(node)
-    const canScrollX = (style.overflowX === 'auto' || style.overflowX === 'scroll') && node.scrollWidth > node.clientWidth
-    if (canScrollX) return node
+    // Match on the overflow-x-auto container itself, not on whether it's
+    // ALREADY overflowing — at the start of a resize drag the table often
+    // still fits exactly, so scrollWidth === clientWidth and a stricter
+    // check here would silently disable auto-scroll for the entire drag.
+    if (style.overflowX === 'auto' || style.overflowX === 'scroll') return node
     node = node.parentElement
   }
   return null
@@ -292,7 +295,7 @@ function ColumnResizeHandle({ onMouseDown }) {
     <div
       onMouseDown={onMouseDown}
       onClick={(e) => e.stopPropagation()}
-      className="absolute top-0 right-0 h-full w-2 cursor-col-resize select-none z-10 hover:bg-blue-400/40 active:bg-blue-500/60"
+      className="absolute top-0 right-0 h-full w-3 cursor-col-resize select-none z-10 hover:bg-blue-400/40 active:bg-blue-500/60"
     />
   )
 }
