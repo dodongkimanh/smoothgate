@@ -218,36 +218,40 @@ function useResizableColumns(storageKey, fields) {
       setWidths((prev) => (prev[drag.field] === next ? prev : { ...prev, [drag.field]: next }))
     }
 
-    // While the cursor sits near the edge of the scrollable table container,
-    // auto-scroll it so a column can keep growing past the visible viewport
-    // instead of the drag feeling capped at the screen edge.
-    const autoScrollTick = () => {
+    // Driven once per animation frame rather than on every raw mousemove —
+    // a 50-row table re-renders on each width change, so recomputing
+    // synchronously per event (which can fire 100+/sec) made the drag feel
+    // like it stalled whenever a row's content made that re-render heavier
+    // (e.g. a long, previously-unclipped ad name). Also auto-scrolls the
+    // table container while the cursor sits near its edge, so a column can
+    // keep growing past the visible viewport instead of feeling capped.
+    const frameTick = () => {
       const drag = dragRef.current
-      if (!drag || !drag.scrollParent) {
+      if (!drag) {
         rafRef.current = null
         return
       }
-      let delta = 0
-      if (drag.lastClientX > window.innerWidth - RESIZE_EDGE_ZONE) delta = RESIZE_EDGE_SPEED
-      else if (drag.lastClientX < RESIZE_EDGE_ZONE) delta = -RESIZE_EDGE_SPEED
-
-      if (delta !== 0) {
-        const el = drag.scrollParent
-        const maxScroll = el.scrollWidth - el.clientWidth
-        const nextScroll = Math.min(maxScroll, Math.max(0, el.scrollLeft + delta))
-        drag.scrollAccum += nextScroll - el.scrollLeft
-        el.scrollLeft = nextScroll
-        recomputeWidth()
+      if (drag.scrollParent) {
+        let delta = 0
+        if (drag.lastClientX > window.innerWidth - RESIZE_EDGE_ZONE) delta = RESIZE_EDGE_SPEED
+        else if (drag.lastClientX < RESIZE_EDGE_ZONE) delta = -RESIZE_EDGE_SPEED
+        if (delta !== 0) {
+          const el = drag.scrollParent
+          const maxScroll = el.scrollWidth - el.clientWidth
+          const nextScroll = Math.min(maxScroll, Math.max(0, el.scrollLeft + delta))
+          drag.scrollAccum += nextScroll - el.scrollLeft
+          el.scrollLeft = nextScroll
+        }
       }
-      rafRef.current = requestAnimationFrame(autoScrollTick)
+      recomputeWidth()
+      rafRef.current = requestAnimationFrame(frameTick)
     }
 
     const onMouseMove = (e) => {
       const drag = dragRef.current
       if (!drag) return
       drag.lastClientX = e.clientX
-      recomputeWidth()
-      if (!rafRef.current) rafRef.current = requestAnimationFrame(autoScrollTick)
+      if (!rafRef.current) rafRef.current = requestAnimationFrame(frameTick)
     }
     const onMouseUp = () => {
       if (!dragRef.current) return
@@ -1702,6 +1706,11 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
     { field: 'postId', label: 'ID Bài viết', defaultWidth: 150 },
   ]
   const { widths, startResize } = useResizableColumns('smitgate-col-widths-ads', columns)
+  // table-fixed with an implicit (auto) table width can still let the browser's
+  // shrink-to-fit sizing fight back against a very long cell's content on some
+  // engines. Pin the table to the exact sum of its column widths so resizing is
+  // never influenced by what's inside a row.
+  const adsTableWidth = 48 + 56 + columns.reduce((sum, c) => sum + (widths[c.field] || c.defaultWidth), 0) + 48 + 48
 
   return (
     <div className="space-y-3">
@@ -1788,7 +1797,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
           )}
         </div>
         <div className="overflow-x-auto">
-          <table className="text-sm table-fixed">
+          <table className="text-sm table-fixed" style={{ width: adsTableWidth, minWidth: adsTableWidth }}>
             <colgroup>
               <col style={{ width: 48 }} />
               <col style={{ width: 56 }} />
