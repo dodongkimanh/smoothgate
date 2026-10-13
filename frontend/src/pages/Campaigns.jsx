@@ -15,9 +15,12 @@ import {
   getAdNotes,
   getAdNoteCounts,
   addAdNote,
+  getAdSavedViews,
+  createAdSavedView,
+  deleteAdSavedView,
 } from '../services/api'
 import toast from 'react-hot-toast'
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bug, ChevronDown, ChevronRight, DollarSign, Eye, Layers3, Megaphone, Network, Palette, Phone, RefreshCw, Search, ShoppingCart, StickyNote, TrendingUp, Users } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bookmark, Bug, ChevronDown, ChevronRight, DollarSign, Eye, Layers3, Megaphone, Network, Palette, Phone, RefreshCw, Search, ShoppingCart, StickyNote, Trash2, TrendingUp, Users, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const TABS = [
@@ -275,6 +278,7 @@ export default function Campaigns() {
   const queryClient = useQueryClient()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [highlightedAdRowKeys, setHighlightedAdRowKeys] = useState([])
+  const [activeAdView, setActiveAdView] = useState(null)
   const toggleHighlightedAdRow = useCallback((key) => {
     setHighlightedAdRowKeys(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key])
   }, [])
@@ -636,8 +640,11 @@ export default function Campaigns() {
         return selectedAdSetIds.includes(adSetKey)
       })
     }
+    if (activeAdView) {
+      ads = ads.filter(ad => activeAdView.adKeys.includes(ad._rowKey))
+    }
     return ads
-  }, [filteredAdsPerformance, selectedAdSetIds])
+  }, [filteredAdsPerformance, selectedAdSetIds, activeAdView])
 
   const effectiveAdsTotals = useMemo(() => {
     const base = effectiveAdsForDisplay.reduce((acc, row) => {
@@ -1034,6 +1041,9 @@ export default function Campaigns() {
                 onSortToggle={(field) => { adsSort.toggle(field); setAdsPage(1) }}
                 highlightedRowKeys={highlightedAdRowKeys}
                 onToggleHighlight={toggleHighlightedAdRow}
+                activeAdView={activeAdView}
+                onApplyView={setActiveAdView}
+                onClearView={() => setActiveAdView(null)}
               />
             </StateWrapper>
           )}
@@ -1520,13 +1530,14 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
   )
 }
 
-function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate, toDate, selectedCampaign, currentPage, totalPages, onPageChange, pageSize, sortField, sortDir, onSortToggle, highlightedRowKeys, onToggleHighlight }) {
+function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate, toDate, selectedCampaign, currentPage, totalPages, onPageChange, pageSize, sortField, sortDir, onSortToggle, highlightedRowKeys, onToggleHighlight, activeAdView, onApplyView, onClearView }) {
   const [debugData, setDebugData] = useState(null)
   const [debugLoading, setDebugLoading] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
   const [selectedAdIds, setSelectedAdIds] = useState([])
   const [orderModal, setOrderModal] = useState(null)
   const [noteModal, setNoteModal] = useState(null)
+  const [viewModalOpen, setViewModalOpen] = useState(false)
 
   const toggleAd = (key) => setSelectedAdIds(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])
   const allAdsChecked = rows.length > 0 && rows.every(r => selectedAdIds.includes(r._rowKey))
@@ -1538,6 +1549,32 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
     queryFn: () => getAdNoteCounts(adIdsOnPage).then((r) => r.data?.data || {}),
     enabled: adIdsOnPage.length > 0,
     staleTime: 30_000,
+  })
+
+  const queryClient = useQueryClient()
+  const { data: savedViews = [] } = useQuery({
+    queryKey: ['ad-saved-views'],
+    queryFn: () => getAdSavedViews().then((r) => r.data?.data || []),
+    staleTime: 30_000,
+  })
+
+  const createViewMutation = useMutation({
+    mutationFn: ({ name, adKeys }) => createAdSavedView(name, adKeys),
+    onSuccess: (res) => {
+      queryClient.setQueryData(['ad-saved-views'], (old) => [res.data?.data, ...(old || [])])
+      toast.success('Đã lưu chế độ xem')
+    },
+    onError: () => toast.error('Không thể lưu chế độ xem'),
+  })
+
+  const deleteViewMutation = useMutation({
+    mutationFn: (id) => deleteAdSavedView(id),
+    onSuccess: (_res, id) => {
+      queryClient.setQueryData(['ad-saved-views'], (old) => (old || []).filter((v) => v.id !== id))
+      if (activeAdView?.id === id) onClearView()
+      toast.success('Đã xóa chế độ xem')
+    },
+    onError: () => toast.error('Không thể xóa chế độ xem'),
   })
 
   const formatCurrency = (value) => new Intl.NumberFormat('vi-VN', {
@@ -1642,7 +1679,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
       )}
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3 bg-slate-50/80">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3 bg-slate-50/80 flex-wrap">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
             <Megaphone size={16} />
             <span>Bảng hiệu suất quảng cáo chi tiết</span>
@@ -1654,6 +1691,37 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
           )}
           <button type="button" onClick={() => setSelectedAdIds(rows.map(r => r._rowKey))} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100">Chọn tất cả</button>
           {someAdsChecked && <button type="button" onClick={() => setSelectedAdIds([])} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100">Bỏ chọn</button>}
+
+          <span className="w-px h-5 bg-slate-200 mx-1" />
+
+          <button
+            type="button"
+            onClick={() => setViewModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100"
+          >
+            <Bookmark size={13} /> Chế độ xem
+          </button>
+
+          {activeAdView && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+              Đang xem: {activeAdView.name}
+              <button type="button" onClick={onClearView} className="text-blue-400 hover:text-blue-700" title="Bỏ lọc">
+                <X size={12} />
+              </button>
+            </span>
+          )}
+
+          <div className="flex-1" />
+
+          {someAdsChecked && (
+            <button
+              type="button"
+              onClick={() => setViewModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+            >
+              <Bookmark size={13} /> Lưu thành chế độ xem
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="text-sm table-fixed">
@@ -1897,6 +1965,19 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
           onClose={() => setNoteModal(null)}
         />
       )}
+
+      {viewModalOpen && (
+        <AdViewModal
+          savedViews={savedViews}
+          selectedAdIds={selectedAdIds}
+          activeAdView={activeAdView}
+          onApply={(view) => { onApplyView(view); setSelectedAdIds(view.adKeys); setViewModalOpen(false) }}
+          onSave={(name) => createViewMutation.mutate({ name, adKeys: selectedAdIds })}
+          onDelete={(id) => deleteViewMutation.mutate(id)}
+          isSaving={createViewMutation.isPending}
+          onClose={() => setViewModalOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -2125,6 +2206,102 @@ function AdNoteModal({ adId, adName, onClose }) {
                 <div key={n.id} className="border border-slate-100 rounded-lg px-3 py-2 bg-slate-50/60">
                   <div className="text-sm text-slate-700 whitespace-pre-wrap">
                     <span className="text-slate-400">{formatTime(n.createdAt)}:</span> {n.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AdViewModal({ savedViews, selectedAdIds, activeAdView, onApply, onSave, onDelete, isSaving, onClose }) {
+  const [name, setName] = useState('')
+
+  const handleSave = (e) => {
+    e.preventDefault()
+    const trimmed = name.trim()
+    if (!trimmed || selectedAdIds.length === 0) return
+    onSave(trimmed)
+    setName('')
+  }
+
+  const formatTime = (value) => {
+    if (!value) return ''
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+            <Bookmark size={16} className="text-blue-600" />
+            Chế độ xem tùy chỉnh
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">×</button>
+        </div>
+
+        <form onSubmit={handleSave} className="mb-4">
+          <label className="text-xs font-medium text-gray-600 mb-1.5 block">
+            Lưu {selectedAdIds.length} quảng cáo đang chọn thành chế độ xem mới
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ví dụ: Tùy chọn xem 1"
+              className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+            />
+            <button
+              type="submit"
+              disabled={!name.trim() || selectedAdIds.length === 0 || isSaving}
+              className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Lưu
+            </button>
+          </div>
+          {selectedAdIds.length === 0 && (
+            <div className="text-xs text-amber-600 mt-1.5">Hãy tích chọn quảng cáo ở bảng trước khi lưu.</div>
+          )}
+        </form>
+
+        <div className="text-xs font-medium text-gray-600 mb-2">Các chế độ xem đã lưu</div>
+        <div className="overflow-auto flex-1 -mx-2 px-2">
+          {savedViews.length === 0 ? (
+            <div className="text-center text-slate-400 py-8 text-sm">Chưa có chế độ xem nào được lưu</div>
+          ) : (
+            <div className="space-y-2">
+              {savedViews.map((v) => (
+                <div
+                  key={v.id}
+                  className={`flex items-center justify-between gap-2 border rounded-lg px-3 py-2 ${activeAdView?.id === v.id ? 'border-blue-300 bg-blue-50/60' : 'border-slate-100 bg-slate-50/60'}`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-800 truncate">{v.name}</div>
+                    <div className="text-xs text-slate-400">{v.adKeys.length} quảng cáo · {formatTime(v.createdAt)}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onApply(v)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                      Áp dụng
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(v.id)}
+                      title="Xóa chế độ xem"
+                      className="p-1.5 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               ))}

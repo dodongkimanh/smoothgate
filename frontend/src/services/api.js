@@ -86,6 +86,12 @@ export const getAdNoteCounts = (adIds) =>
 export const addAdNote = (adId, content) =>
   api.post('/ad-notes', { adId, content })
 
+// Ad saved views (custom checkbox selections saved by name)
+export const getAdSavedViews = () => api.get('/ad-saved-views')
+export const createAdSavedView = (name, adKeys) =>
+  api.post('/ad-saved-views', { name, adKeys })
+export const deleteAdSavedView = (id) => api.delete(`/ad-saved-views/${id}`)
+
 // Data Sources
 export const getDataSources = () => api.get('/datasources')
 export const createDataSource = (data) => api.post('/datasources', data)
