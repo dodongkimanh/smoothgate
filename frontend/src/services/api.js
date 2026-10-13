@@ -78,6 +78,14 @@ export const getOrdersByAd = (adId, from, to, profitOnly = false) =>
 export const updateOrderReview = (orderId, updates) =>
   api.post(`/orders/${orderId}/review`, updates)
 
+// Ad notes
+export const getAdNotes = (adId) =>
+  api.get('/ad-notes', { params: { adId } })
+export const getAdNoteCounts = (adIds) =>
+  api.get('/ad-notes/counts', { params: { adIds: adIds.join(',') } })
+export const addAdNote = (adId, content) =>
+  api.post('/ad-notes', { adId, content })
+
 // Data Sources
 export const getDataSources = () => api.get('/datasources')
 export const createDataSource = (data) => api.post('/datasources', data)
