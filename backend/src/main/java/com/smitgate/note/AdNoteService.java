@@ -14,7 +14,7 @@ public class AdNoteService {
     private final AdNoteRepository adNoteRepository;
 
     public List<AdNote> listNotes(Long tenantId, String adId) {
-        return adNoteRepository.findByTenantIdAndAdIdOrderByCreatedAtDesc(tenantId, adId);
+        return adNoteRepository.findByTenantIdAndAdIdOrderByCreatedAtAsc(tenantId, adId);
     }
 
     public AdNote addNote(Long tenantId, String adId, String content, String author) {

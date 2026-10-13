@@ -2054,7 +2054,7 @@ function AdNoteModal({ adId, adName, onClose }) {
     onSuccess: (res) => {
       const newNote = res.data?.data
       if (newNote) {
-        queryClient.setQueryData(queryKey, (old) => [newNote, ...(old || [])])
+        queryClient.setQueryData(queryKey, (old) => [...(old || []), newNote])
       }
       queryClient.invalidateQueries({ queryKey: ['ad-note-counts'] })
       setDraft('')
@@ -2073,7 +2073,12 @@ function AdNoteModal({ adId, adName, onClose }) {
     if (!value) return ''
     const d = new Date(value)
     if (Number.isNaN(d.getTime())) return ''
-    return d.toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mo = String(d.getMonth() + 1).padStart(2, '0')
+    const yyyy = d.getFullYear()
+    return `${hh}:${mm} ${dd}/${mo}/${yyyy}`
   }
 
   return (
@@ -2118,11 +2123,9 @@ function AdNoteModal({ adId, adName, onClose }) {
             <div className="space-y-3">
               {notes.map((n) => (
                 <div key={n.id} className="border border-slate-100 rounded-lg px-3 py-2 bg-slate-50/60">
-                  <div className="flex items-center justify-between gap-2 text-xs text-slate-400 mb-1">
-                    <span>{n.author || 'Không rõ người dùng'}</span>
-                    <span>{formatTime(n.createdAt)}</span>
+                  <div className="text-sm text-slate-700 whitespace-pre-wrap">
+                    <span className="text-slate-400">{formatTime(n.createdAt)}:</span> {n.content}
                   </div>
-                  <div className="text-sm text-slate-700 whitespace-pre-wrap">{n.content}</div>
                 </div>
               ))}
             </div>
