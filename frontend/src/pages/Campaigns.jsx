@@ -2484,7 +2484,7 @@ function AdChartModal({ adId, adName, dataSourceId, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-6xl mx-4 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <div className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
@@ -2523,7 +2523,7 @@ function AdChartModal({ adId, adName, dataSourceId, onClose }) {
           )}
         </div>
 
-        <div className="flex-1 min-h-[320px]">
+        <div className="flex-1 min-h-[420px]">
           {isLoading ? (
             <div className="h-full flex items-center justify-center text-slate-400 text-sm">Đang tải dữ liệu...</div>
           ) : error ? (
