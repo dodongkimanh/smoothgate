@@ -168,6 +168,19 @@ public class MetaAdsController {
         ));
     }
 
+    @GetMapping("/ads/{adId}/daily")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> adDailyMetrics(
+            HttpServletRequest request,
+            @PathVariable String adId,
+            @RequestParam Long dataSourceId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        Long tenantId = (Long) request.getAttribute("tenantId");
+        return ResponseEntity.ok(ApiResponse.ok(
+                metaAdsConnector.getAdDailyMetrics(tenantId, dataSourceId, adId, from, to)
+        ));
+    }
+
     /**
      * Debug endpoint: returns RAW Meta API insights at both campaign-level and ad-level
      * so we can compare exactly what Meta returns vs what we display.

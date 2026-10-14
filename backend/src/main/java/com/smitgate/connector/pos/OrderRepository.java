@@ -364,4 +364,32 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT o.status, COUNT(o) FROM Order o WHERE o.tenantId = :tenantId " +
             "GROUP BY o.status")
     List<Object[]> countByStatus(@Param("tenantId") Long tenantId);
+
+    @Query("SELECT FUNCTION('DATE', o.createdAtExternal), COUNT(o), COALESCE(SUM(o.revenue), 0), COALESCE(SUM(o.shippingFee), 0), " +
+            "SUM(CASE WHEN o.shippingFee > 0 THEN 1 ELSE 0 END) " +
+            "FROM Order o WHERE o.tenantId = :tenantId " +
+            "AND o.clickId = :clickId " +
+            "AND o.createdAtExternal BETWEEN :from AND :to " +
+            "AND LOWER(o.status) IN :validStatuses " +
+            "GROUP BY FUNCTION('DATE', o.createdAtExternal)")
+    List<Object[]> aggregateDailyRevenueAndOrderCountByClickId(
+            @Param("tenantId") Long tenantId,
+            @Param("clickId") String clickId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("validStatuses") List<String> validStatuses);
+
+    @Query("SELECT FUNCTION('DATE', o.createdAtExternal), COUNT(DISTINCT o.customerPhone) " +
+            "FROM Order o WHERE o.tenantId = :tenantId " +
+            "AND o.clickId = :clickId " +
+            "AND o.createdAtExternal BETWEEN :from AND :to " +
+            "AND o.customerPhone IS NOT NULL AND o.customerPhone <> '' " +
+            "AND LOWER(o.status) IN :leadStatuses " +
+            "GROUP BY FUNCTION('DATE', o.createdAtExternal)")
+    List<Object[]> aggregateDailyDistinctPhonesByClickId(
+            @Param("tenantId") Long tenantId,
+            @Param("clickId") String clickId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("leadStatuses") List<String> leadStatuses);
 }

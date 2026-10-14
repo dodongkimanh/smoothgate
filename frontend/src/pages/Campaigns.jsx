@@ -18,10 +18,24 @@ import {
   getAdSavedViews,
   createAdSavedView,
   deleteAdSavedView,
+  getMetaAdDaily,
 } from '../services/api'
 import toast from 'react-hot-toast'
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bookmark, Bug, ChevronDown, ChevronRight, DollarSign, Eye, Layers3, Megaphone, Network, Palette, Phone, RefreshCw, Search, ShoppingCart, StickyNote, Trash2, TrendingUp, Users, X } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bookmark, Bug, ChevronDown, ChevronRight, DollarSign, Eye, Layers3, LineChart as LineChartIcon, Megaphone, Network, Palette, Phone, RefreshCw, Search, ShoppingCart, StickyNote, Trash2, TrendingUp, Users, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js'
+import { Line } from 'react-chartjs-2'
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler)
 
 const TABS = [
   { id: 'accounts', label: 'Tài khoản quảng cáo' },
@@ -1605,6 +1619,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
   const [selectedAdIds, setSelectedAdIds] = useState([])
   const [orderModal, setOrderModal] = useState(null)
   const [noteModal, setNoteModal] = useState(null)
+  const [chartModal, setChartModal] = useState(null)
   const [viewModalOpen, setViewModalOpen] = useState(false)
 
   const toggleAd = (key) => setSelectedAdIds(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])
@@ -1710,7 +1725,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
   // shrink-to-fit sizing fight back against a very long cell's content on some
   // engines. Pin the table to the exact sum of its column widths so resizing is
   // never influenced by what's inside a row.
-  const adsTableWidth = 48 + 56 + columns.reduce((sum, c) => sum + (widths[c.field] || c.defaultWidth), 0) + 48 + 48
+  const adsTableWidth = 48 + 56 + columns.reduce((sum, c) => sum + (widths[c.field] || c.defaultWidth), 0) + 48 + 48 + 48
 
   return (
     <div className="space-y-3">
@@ -1804,6 +1819,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
               {columns.map((c) => <col key={c.field} style={{ width: widths[c.field] }} />)}
               <col style={{ width: 48 }} />
               <col style={{ width: 48 }} />
+              <col style={{ width: 48 }} />
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-100 text-slate-600">
@@ -1835,12 +1851,15 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                 <th className="w-12 px-2 py-2.5 border-b border-slate-200 text-center text-xs uppercase tracking-wide font-semibold" title="Đánh dấu hàng">
                   <Palette size={14} className="inline-block text-slate-400" />
                 </th>
+                <th className="w-12 px-2 py-2.5 border-b border-slate-200 text-center text-xs uppercase tracking-wide font-semibold" title="Biểu đồ chỉ số">
+                  <LineChartIcon size={14} className="inline-block text-slate-400" />
+                </th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={26} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={27} className="px-4 py-10 text-center text-gray-400">
                     Không có dữ liệu quảng cáo theo bộ lọc hiện tại
                   </td>
                 </tr>
@@ -1983,6 +2002,16 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                           <Palette size={14} />
                         </button>
                       </td>
+                      <td className="px-2 py-2.5 align-top text-center">
+                        <button
+                          type="button"
+                          title="Xem biểu đồ chỉ số"
+                          onClick={() => setChartModal({ adId: row.adId, adName: row.adName, dataSourceId: row.dataSourceId })}
+                          className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                        >
+                          <LineChartIcon size={14} />
+                        </button>
+                      </td>
                     </tr>
                   )
                 })
@@ -2036,6 +2065,15 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
           adId={noteModal.adId}
           adName={noteModal.adName}
           onClose={() => setNoteModal(null)}
+        />
+      )}
+
+      {chartModal && (
+        <AdChartModal
+          adId={chartModal.adId}
+          adName={chartModal.adName}
+          dataSourceId={chartModal.dataSourceId}
+          onClose={() => setChartModal(null)}
         />
       )}
 
@@ -2283,6 +2321,217 @@ function AdNoteModal({ adId, adName, onClose }) {
                 </div>
               ))}
             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const AD_CHART_METRICS = [
+  { key: 'spend', label: 'Số tiền đã chi tiêu', type: 'currency' },
+  { key: 'cpm', label: 'CPM', type: 'currency' },
+  { key: 'ctr', label: 'CTR', type: 'percent' },
+  { key: 'frequency', label: 'Tần suất', type: 'decimal' },
+  { key: 'comments', label: 'Bình luận', type: 'number' },
+  { key: 'messageContacts', label: 'Tin nhắn', type: 'number' },
+  { key: 'costPerMessage', label: 'Chi phí tin nhắn', type: 'currency' },
+  { key: 'phoneCount', label: 'Số điện thoại', type: 'number' },
+  { key: 'costPerPhone', label: 'Chi phí số điện thoại', type: 'currency' },
+  { key: 'phoneRate', label: 'Tỷ lệ ra số', type: 'percent' },
+  { key: 'orderCount', label: 'Số đơn', type: 'number' },
+  { key: 'orderProfit', label: 'Lợi nhuận', type: 'currency' },
+]
+
+function buildAdChartMonthOptions() {
+  const now = new Date()
+  const opts = []
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    opts.push({
+      value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+      label: `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`,
+    })
+  }
+  return opts
+}
+
+function deriveAdChartDay(day) {
+  const spend = Number(day?.spend || 0)
+  const impressions = Number(day?.impressions || 0)
+  const clicks = Number(day?.clicks || 0)
+  const reach = Number(day?.reach || 0)
+  const comments = Number(day?.comments || 0)
+  const messageContacts = Number(day?.messageContacts || 0)
+  const phoneCount = Number(day?.phoneCount || 0)
+  const orderCount = Number(day?.orderCount || 0)
+  const orderProfit = Number(day?.orderProfit || 0)
+  return {
+    spend,
+    cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
+    ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+    frequency: reach > 0 ? impressions / reach : 0,
+    comments,
+    messageContacts,
+    costPerMessage: messageContacts > 0 ? spend / messageContacts : 0,
+    phoneCount,
+    costPerPhone: phoneCount > 0 ? spend / phoneCount : 0,
+    phoneRate: messageContacts > 0 ? (phoneCount / messageContacts) * 100 : 0,
+    orderCount,
+    orderProfit,
+  }
+}
+
+function AdChartModal({ adId, adName, dataSourceId, onClose }) {
+  const monthOptions = useMemo(() => buildAdChartMonthOptions(), [])
+  const [selectedMonth, setSelectedMonth] = useState(monthOptions[0]?.value || '')
+  const [selectedMetric, setSelectedMetric] = useState('spend')
+
+  const { from, to } = useMemo(() => {
+    const [year, month] = selectedMonth.split('-').map(Number)
+    if (!year || !month) return { from: '', to: '' }
+    const pad = (n) => String(n).padStart(2, '0')
+    const today = new Date()
+    const isCurrentMonth = year === today.getFullYear() && month === today.getMonth() + 1
+    const lastDay = isCurrentMonth ? today.getDate() : new Date(year, month, 0).getDate()
+    return {
+      from: `${year}-${pad(month)}-01`,
+      to: `${year}-${pad(month)}-${pad(lastDay)}`,
+    }
+  }, [selectedMonth])
+
+  const { data: dailyRaw = [], isLoading, error } = useQuery({
+    queryKey: ['ad-daily-metrics', adId, dataSourceId, from, to],
+    queryFn: () => getMetaAdDaily(adId, dataSourceId, from, to).then((r) => r.data?.data || []),
+    enabled: !!adId && !!dataSourceId && !!from && !!to,
+  })
+
+  const formatCurrency = (value) => new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0))
+
+  const formatMetricValue = (metric, value) => {
+    const num = Number(value || 0)
+    if (metric.type === 'currency') return formatCurrency(num)
+    if (metric.type === 'percent') return `${num.toFixed(2)}%`
+    if (metric.type === 'decimal') return num.toFixed(2)
+    return new Intl.NumberFormat('vi-VN').format(num)
+  }
+
+  const activeMetric = AD_CHART_METRICS.find((m) => m.key === selectedMetric) || AD_CHART_METRICS[0]
+
+  const { labels, values } = useMemo(() => {
+    const byDate = new Map(dailyRaw.map((d) => [d.date, deriveAdChartDay(d)]))
+    const [year, month] = selectedMonth.split('-').map(Number)
+    if (!year || !month) return { labels: [], values: [] }
+    const pad = (n) => String(n).padStart(2, '0')
+    const today = new Date()
+    const isCurrentMonth = year === today.getFullYear() && month === today.getMonth() + 1
+    const lastDay = isCurrentMonth ? today.getDate() : new Date(year, month, 0).getDate()
+    const lbls = []
+    const vals = []
+    for (let day = 1; day <= lastDay; day++) {
+      const dateStr = `${year}-${pad(month)}-${pad(day)}`
+      lbls.push(String(day))
+      vals.push(Number(byDate.get(dateStr)?.[activeMetric.key] || 0))
+    }
+    return { labels: lbls, values: vals }
+  }, [dailyRaw, selectedMonth, activeMetric])
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        label: activeMetric.label,
+        data: values,
+        borderColor: '#2563EB',
+        backgroundColor: 'rgba(37, 99, 235, 0.12)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+        borderWidth: 2,
+      },
+    ],
+  }
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => formatMetricValue(activeMetric, ctx.parsed.y),
+        },
+      },
+    },
+    scales: {
+      x: { grid: { display: false } },
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: (value) => formatMetricValue(activeMetric, value),
+        },
+      },
+    },
+  }
+
+  const total = values.reduce((sum, v) => sum + v, 0)
+  const avg = values.length > 0 ? total / values.length : 0
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <div className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+              <LineChartIcon size={16} className="text-blue-600" />
+              Biểu đồ chỉ số — {adName || adId}
+            </div>
+            <div className="text-xs text-slate-400 font-mono mt-0.5">{adId}</div>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">×</button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <select
+            value={selectedMetric}
+            onChange={(e) => setSelectedMetric(e.target.value)}
+            className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+          >
+            {AD_CHART_METRICS.map((m) => (
+              <option key={m.key} value={m.key}>{m.label}</option>
+            ))}
+          </select>
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
+          >
+            {monthOptions.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          {values.length > 0 && (
+            <div className="ml-auto text-xs text-slate-500 flex items-center gap-3">
+              <span>Tổng: <strong className="text-slate-700">{formatMetricValue(activeMetric, total)}</strong></span>
+              <span>TB/ngày: <strong className="text-slate-700">{formatMetricValue(activeMetric, avg)}</strong></span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 min-h-[320px]">
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center text-slate-400 text-sm">Đang tải dữ liệu...</div>
+          ) : error ? (
+            <div className="h-full flex items-center justify-center text-red-500 text-sm">Không thể tải dữ liệu biểu đồ</div>
+          ) : values.every((v) => v === 0) ? (
+            <div className="h-full flex items-center justify-center text-slate-400 text-sm">Không có dữ liệu trong tháng này</div>
+          ) : (
+            <Line data={chartData} options={chartOptions} />
           )}
         </div>
       </div>

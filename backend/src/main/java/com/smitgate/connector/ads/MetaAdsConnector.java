@@ -863,6 +863,119 @@ public class MetaAdsConnector implements AdsConnector {
         }
     }
 
+    /**
+     * Per-day breakdown for a single ad, for the "chart" popup on the ads table.
+     * Returns raw counters only (spend/impressions/clicks/reach/comments/messageContacts/
+     * phoneCount/orderCount/sales/orderProfit/profitOrderCount) — derived metrics (CPM, CTR,
+     * tần suất, chi phí/tin nhắn, chi phí/SĐT, tỷ lệ ra SĐT, lợi nhuận sau QC) are computed by
+     * the frontend with the exact same formulas already used for the main ads table.
+     */
+    public List<Map<String, Object>> getAdDailyMetrics(
+            Long tenantId,
+            Long dataSourceId,
+            String adId,
+            LocalDate from,
+            LocalDate to) {
+        DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
+        String token = dataSourceService.decryptSecret(ds);
+
+        LocalDate safeFrom = from != null ? from : LocalDate.now().withDayOfMonth(1);
+        LocalDate safeTo = to != null ? to : safeFrom;
+        if (safeTo.isBefore(safeFrom)) {
+            LocalDate tmp = safeFrom;
+            safeFrom = safeTo;
+            safeTo = tmp;
+        }
+
+        String fields = String.join(",", "spend", "impressions", "clicks", "reach", "actions", "date_start");
+
+        URI uri = UriComponentsBuilder
+                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + adId + "/insights")
+                .queryParam("fields", fields)
+                .queryParam("time_increment", "1")
+                .queryParam("time_range", String.format("{'since':'%s','until':'%s'}", safeFrom, safeTo))
+                .queryParam("limit", "500")
+                .queryParam("access_token", token)
+                .build().encode().toUri();
+
+        JsonNode response = webClientBuilder.build()
+                .get()
+                .uri(uri)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        res -> res.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new RuntimeException("Meta API lỗi lấy dữ liệu theo ngày: " + body))))
+                .bodyToMono(JsonNode.class)
+                .block(Duration.ofSeconds(60));
+
+        Map<String, Map<String, Object>> byDate = new HashMap<>();
+        JsonNode dataNode = response != null ? response.path("data") : null;
+        if (dataNode != null && dataNode.isArray()) {
+            for (JsonNode day : dataNode) {
+                String date = day.path("date_start").asText("");
+                if (date.isBlank()) {
+                    continue;
+                }
+                JsonNode actions = day.path("actions");
+                Map<String, Object> item = blankDailyItem(date);
+                item.put("spend", parseInsightDecimal(day, "spend"));
+                item.put("impressions", parseInsightLong(day, "impressions"));
+                item.put("clicks", parseInsightLong(day, "clicks"));
+                item.put("reach", parseInsightLong(day, "reach"));
+                item.put("comments", sumActionValues(actions, "comment", "post_comment"));
+                item.put("messageContacts", sumActionValues(actions, "onsite_conversion.messaging_first_reply"));
+                byDate.put(date, item);
+            }
+        }
+
+        LocalDateTime fromDateTime = safeFrom.atStartOfDay();
+        LocalDateTime toDateTime = safeTo.atTime(LocalTime.MAX);
+
+        for (Object[] row : orderRepository.aggregateDailyRevenueAndOrderCountByClickId(
+                tenantId, adId, fromDateTime, toDateTime, OrderStatusClassifier.validStatusesForAggregation())) {
+            String date = row[0] != null ? row[0].toString() : "";
+            if (date.isBlank()) {
+                continue;
+            }
+            Map<String, Object> item = byDate.computeIfAbsent(date, this::blankDailyItem);
+            item.put("orderCount", toLong(row[1]));
+            item.put("sales", toDecimal(row[2]));
+            item.put("orderProfit", toDecimal(row[3]));
+            item.put("profitOrderCount", toLong(row[4]));
+        }
+
+        for (Object[] row : orderRepository.aggregateDailyDistinctPhonesByClickId(
+                tenantId, adId, fromDateTime, toDateTime, OrderStatusClassifier.leadStatusesForAggregation())) {
+            String date = row[0] != null ? row[0].toString() : "";
+            if (date.isBlank()) {
+                continue;
+            }
+            Map<String, Object> item = byDate.computeIfAbsent(date, this::blankDailyItem);
+            item.put("phoneCount", toLong(row[1]));
+        }
+
+        List<Map<String, Object>> result = new ArrayList<>(byDate.values());
+        result.sort((a, b) -> String.valueOf(a.get("date")).compareTo(String.valueOf(b.get("date"))));
+        return result;
+    }
+
+    private Map<String, Object> blankDailyItem(Object date) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("date", date);
+        item.put("spend", BigDecimal.ZERO);
+        item.put("impressions", 0L);
+        item.put("clicks", 0L);
+        item.put("reach", 0L);
+        item.put("comments", BigDecimal.ZERO);
+        item.put("messageContacts", BigDecimal.ZERO);
+        item.put("phoneCount", 0L);
+        item.put("orderCount", 0L);
+        item.put("sales", BigDecimal.ZERO);
+        item.put("orderProfit", BigDecimal.ZERO);
+        item.put("profitOrderCount", 0L);
+        return item;
+    }
+
     /** Meta's effective_object_story_id is formatted as "{pageId}_{postId}" — we only want the postId. */
     private String extractPostId(String objectStoryId) {
         if (objectStoryId == null || objectStoryId.isBlank()) {

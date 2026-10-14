@@ -116,6 +116,8 @@ export const getMetaAdsPerformance = (params) =>
   api.get('/integrations/meta/ads/performance', { params })
 export const getMetaAdsDebug = (params) =>
   api.get('/integrations/meta/ads/debug', { params })
+export const getMetaAdDaily = (adId, dataSourceId, from, to) =>
+  api.get(`/integrations/meta/ads/${encodeURIComponent(adId)}/daily`, { params: { dataSourceId, from, to } })
 export const syncMetaAds = (dataSourceId, from, to) =>
   api.post('/integrations/meta/sync', { dataSourceId, from, to })
 
