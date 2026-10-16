@@ -1703,6 +1703,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
     { field: 'delivery', label: 'Phân phối', align: 'left', defaultWidth: 130 },
     { field: 'budget', label: 'Ngân sách', defaultWidth: 130 },
     { field: 'spend', label: 'Số tiền đã chi tiêu', defaultWidth: 150 },
+    { field: 'impressions', label: 'Lượt hiển thị', defaultWidth: 130 },
     { field: 'cpm', label: 'CPM', defaultWidth: 100 },
     { field: 'ctr', label: 'CTR', defaultWidth: 90 },
     { field: 'frequency', label: 'Tần suất', defaultWidth: 100 },
@@ -1859,7 +1860,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={27} className="px-4 py-10 text-center text-gray-400">
+                  <td colSpan={28} className="px-4 py-10 text-center text-gray-400">
                     Không có dữ liệu quảng cáo theo bộ lọc hiện tại
                   </td>
                 </tr>
@@ -1933,6 +1934,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                         />
                       </td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(spend)}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(row.impressions)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{Number(row.impressions || 0) > 0 ? formatCurrency(spend / Number(row.impressions) * 1000) : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{Number(row.impressions || 0) > 0 ? (Number(row.clicks || 0) / Number(row.impressions) * 100).toFixed(2) + '%' : '-'}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{Number(row.reach || 0) > 0 ? (Number(row.impressions || 0) / Number(row.reach)).toFixed(2) : '-'}</td>
