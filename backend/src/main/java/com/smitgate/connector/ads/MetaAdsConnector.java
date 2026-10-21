@@ -154,11 +154,45 @@ public class MetaAdsConnector implements AdsConnector {
 
         String accessToken = tokenResponse.get("access_token").asText();
 
-        // Step 2: Persist token to DB (short transaction, connection held only for DB ops)
-        return persistOAuthToken(tenantId, accessToken);
+        // Step 2: Fetch the connected Facebook user's name/picture so the UI can show
+        // which account is connected (OAuth tokens carry no human-readable identity on their own).
+        String connectedAccountConfigJson = fetchConnectedAccountConfigJson(accessToken);
+
+        // Step 3: Persist token to DB (short transaction, connection held only for DB ops)
+        return persistOAuthToken(tenantId, accessToken, connectedAccountConfigJson);
     }
 
-    protected Long persistOAuthToken(Long tenantId, String accessToken) {
+    private String fetchConnectedAccountConfigJson(String accessToken) {
+        try {
+            URI meUri = UriComponentsBuilder
+                    .fromUriString(GRAPH_BASE + "/" + apiVersion + "/me")
+                    .queryParam("fields", "id,name,picture.type(large)")
+                    .queryParam("access_token", accessToken)
+                    .build().toUri();
+
+            JsonNode me = webClientBuilder.build()
+                    .get()
+                    .uri(meUri)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .block(Duration.ofSeconds(15));
+
+            if (me == null) {
+                return null;
+            }
+
+            Map<String, Object> config = new HashMap<>();
+            config.put("facebookUserId", me.path("id").asText(""));
+            config.put("facebookUserName", me.path("name").asText(""));
+            config.put("facebookUserPicture", me.path("picture").path("data").path("url").asText(""));
+            return objectMapper.writeValueAsString(config);
+        } catch (Exception e) {
+            log.warn("Could not fetch connected Facebook user info: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    protected Long persistOAuthToken(Long tenantId, String accessToken, String configJson) {
         // Keep DB work short. DataSourceService methods are transactional individually,
         // so the external HTTP token exchange is never part of a DB transaction.
         DataSource existing = dataSourceRepository.findByTenantId(tenantId).stream()
@@ -167,11 +201,14 @@ public class MetaAdsConnector implements AdsConnector {
 
         if (existing != null) {
             dataSourceService.updateSecret(tenantId, existing.getId(), accessToken);
+            if (configJson != null) {
+                dataSourceService.updateConfigJson(tenantId, existing.getId(), configJson);
+            }
             dataSourceService.activate(tenantId, existing.getId());
             return existing.getId();
         } else {
             DataSource ds = dataSourceService.create(
-                    tenantId, DataSource.Type.META_ADS, "Meta Ads", null, accessToken);
+                    tenantId, DataSource.Type.META_ADS, "Meta Ads", configJson, accessToken);
             dataSourceService.activate(tenantId, ds.getId());
             return ds.getId();
         }

@@ -1,9 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSelectedAdAccounts, deactivateDataSource, getMetaAdAccounts, selectMetaAdAccounts } from '../services/api'
+import { getSelectedAdAccounts, deactivateDataSource, getMetaAdAccounts, selectMetaAdAccounts, getDataSources } from '../services/api'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { Plus, Link2, Unlink, ExternalLink, Facebook, CheckSquare, Square, Loader2 } from 'lucide-react'
+import { Plus, Link2, Unlink, ExternalLink, Facebook, CheckSquare, Square, Loader2, UserCircle2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+
+function parseConfigJson(raw) {
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
 
 export default function AdAccounts() {
   const navigate = useNavigate()
@@ -86,6 +95,17 @@ export default function AdAccounts() {
     retry: 1,
   })
 
+  const { data: dataSources = [] } = useQuery({
+    queryKey: ['data-sources'],
+    queryFn: () => getDataSources().then((r) => r.data?.data || []),
+    retry: 1,
+  })
+
+  const metaConnections = dataSources
+    .filter((ds) => ds.type === 'META_ADS' && ds.status !== 'DELETED')
+    .map((ds) => ({ ds, fb: parseConfigJson(ds.configJson) }))
+    .filter(({ fb }) => fb?.facebookUserName)
+
   const disconnectMutation = useMutation({
     mutationFn: (id) => deactivateDataSource(id),
     onSuccess: () => {
@@ -129,6 +149,35 @@ export default function AdAccounts() {
           Kết nối tài khoản
         </button>
       </div>
+
+      {/* Connected Facebook account identity */}
+      {metaConnections.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          {metaConnections.map(({ ds, fb }) => (
+            <div
+              key={ds.id}
+              className="flex items-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-2.5"
+            >
+              {fb.facebookUserPicture ? (
+                <img
+                  src={fb.facebookUserPicture}
+                  alt=""
+                  className="w-9 h-9 rounded-full object-cover border border-gray-100"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
+                  <UserCircle2 size={20} className="text-gray-400" />
+                </div>
+              )}
+              <div>
+                <div className="text-xs text-gray-400">Facebook đã kết nối Meta Ads</div>
+                <div className="text-sm font-semibold text-gray-800">{fb.facebookUserName}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Loading */}
       {isLoading && (

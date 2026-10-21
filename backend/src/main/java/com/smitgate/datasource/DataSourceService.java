@@ -98,6 +98,15 @@ public class DataSourceService {
     }
 
     @Transactional
+    public void updateConfigJson(Long tenantId, Long id, String configJson) {
+        DataSource ds = dataSourceRepository.findByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> new IllegalArgumentException("DataSource not found"));
+        ds.setConfigJson(configJson);
+        dataSourceRepository.save(ds);
+        evictDatasourceCaches();
+    }
+
+    @Transactional
     public DataSource deactivate(Long tenantId, Long id) {
         DataSource ds = dataSourceRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new IllegalArgumentException("DataSource not found"));
