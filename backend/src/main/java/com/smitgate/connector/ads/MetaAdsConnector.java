@@ -323,58 +323,19 @@ public class MetaAdsConnector implements AdsConnector {
                     }
                 }
                 raw.forEach((accountId, node) -> result.put(accountId, parseBilling(node)));
-                if (!billingMetadataLogged && !chunk.isEmpty()) {
-                    logBillingMetadata(token, chunk.get(0));
-                }
             }
         }
         return result;
     }
 
-    private volatile boolean billingMetadataLogged = false;
-
-    /**
-     * Logs (once per process) which billing-related fields/edges Meta exposes on an ad account,
-     * to find where the payment threshold / bill date live for the current API version.
-     */
-    private void logBillingMetadata(String token, String accountId) {
-        billingMetadataLogged = true;
-        try {
-            URI uri = UriComponentsBuilder
-                    .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + accountId)
-                    .queryParam("metadata", "1")
-                    .queryParam("access_token", token)
-                    .build().encode().toUri();
-            JsonNode meta = webClientBuilder.build().get().uri(uri).retrieve()
-                    .bodyToMono(JsonNode.class).block(Duration.ofSeconds(30));
-            if (meta == null) return;
-            java.util.regex.Pattern billingName = java.util.regex.Pattern.compile(
-                    "bill|threshold|pay|cycle|balance|fund|spend|due|invoice", java.util.regex.Pattern.CASE_INSENSITIVE);
-            List<String> fields = new ArrayList<>();
-            for (JsonNode f : meta.path("metadata").path("fields")) {
-                String name = f.path("name").asText("");
-                if (billingName.matcher(name).find()) fields.add(name);
-            }
-            List<String> connections = new ArrayList<>();
-            meta.path("metadata").path("connections").fieldNames().forEachRemaining(name -> {
-                if (billingName.matcher(name).find()) connections.add(name);
-            });
-            log.info("Meta billing metadata for {} ({}): fields={} connections={}",
-                    accountId, apiVersion, fields, connections);
-        } catch (Exception e) {
-            log.warn("Meta billing metadata lookup failed: {}", e.getMessage());
-        }
-    }
-
     /**
      * Requested one group at a time: Meta rejects the whole request if any field is unknown or
-     * not permitted for the token, and billing fields vary by account type and API version.
+     * not permitted for the token. The payment threshold and next bill date are not exposed by
+     * the Graph API (v20.0 rejects adspaymentcycle, next_bill_date and similar as nonexisting).
      */
     private static final List<String> BILLING_FIELD_GROUPS = List.of(
             "currency,balance",
-            "funding_source_details",
-            "adspaymentcycle{threshold_amount}",
-            "next_bill_date");
+            "funding_source_details");
 
     private JsonNode fetchByIds(String token, List<String> ids, String fields) {
         URI uri = UriComponentsBuilder
@@ -404,17 +365,8 @@ public class MetaAdsConnector implements AdsConnector {
         if (!funding.isMissingNode()) {
             billing.put("paymentMethod", funding.path("display_string").asText(""));
         }
-        JsonNode cycles = acc.path("adspaymentcycle").path("data");
-        if (cycles.isArray() && !cycles.isEmpty() && cycles.get(0).has("threshold_amount")) {
-            billing.put("billingThreshold",
-                    new BigDecimal(cycles.get(0).path("threshold_amount").asText("0")).divide(divisor));
-        }
         if (acc.has("balance")) {
             billing.put("balance", new BigDecimal(acc.path("balance").asText("0")).divide(divisor));
-        }
-        String nextBillDate = acc.path("next_bill_date").asText("");
-        if (!nextBillDate.isBlank()) {
-            billing.put("nextBillDate", nextBillDate);
         }
         return billing;
     }

@@ -107,6 +107,7 @@ export const selectMetaAdAccounts = (dataSourceId, accounts) =>
   api.post('/integrations/meta/ad-accounts/select', { dataSourceId, accounts })
 export const getSelectedAdAccounts = () => api.get('/integrations/meta/ad-accounts/selected')
 export const getAdAccountBilling = () => api.get('/integrations/meta/ad-accounts/billing')
+export const updateAdAccountBilling = (id, data) => api.put(`/integrations/meta/ad-accounts/${id}/billing`, data)
 export const getMetaCampaigns = (dataSourceId, adAccountId) =>
   api.get('/integrations/meta/campaigns', { params: { dataSourceId, adAccountId } })
 export const getMetaAdSets = (dataSourceId, adAccountId, campaignId) =>

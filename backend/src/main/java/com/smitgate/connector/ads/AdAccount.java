@@ -3,6 +3,8 @@ package com.smitgate.connector.ads;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -30,6 +32,14 @@ public class AdAccount {
     private String externalAccountId;
 
     private String name;
+
+    /** Entered manually: Meta's Graph API does not expose the payment threshold. */
+    @Column(name = "billing_threshold")
+    private BigDecimal billingThreshold;
+
+    /** Entered manually: Meta's Graph API does not expose the next bill date. */
+    @Column(name = "next_bill_date")
+    private LocalDate nextBillDate;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

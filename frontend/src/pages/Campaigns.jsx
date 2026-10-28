@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   getSelectedAdAccounts,
   getAdAccountBilling,
+  updateAdAccountBilling,
   getMetaCampaigns,
   getMetaAdSets,
   getMetaAdsPerformance,
@@ -984,6 +985,13 @@ export default function Campaigns() {
                   const formatMoney = (value) => new Intl.NumberFormat('vi-VN', {
                     style: 'currency', currency: billing.currency || 'VND', maximumFractionDigits: 0,
                   }).format(Number(value || 0))
+                  // Warn when the balance reaches 80% of the threshold or the bill date is within 3 days
+                  const nearThreshold = row.billingThreshold > 0 && billing.balance != null &&
+                    Number(billing.balance) >= Number(row.billingThreshold) * 0.8
+                  const daysToBill = row.nextBillDate
+                    ? (new Date(row.nextBillDate) - new Date(toDateKeySafe(new Date()))) / 86400000
+                    : null
+                  const dueSoon = daysToBill != null && daysToBill <= 3
                   return {
                     key: row.id,
                     selected: selectedAccountIds.includes(row.id),
@@ -1003,10 +1011,22 @@ export default function Campaigns() {
                       billing.balance != null ? (
                         <span className="font-semibold text-slate-800">{formatMoney(billing.balance)}</span>
                       ) : '—',
-                      billing.billingThreshold != null ? formatMoney(billing.billingThreshold) : '—',
-                      billing.nextBillDate
-                        ? new Date(billing.nextBillDate).toLocaleDateString('vi-VN')
-                        : '—',
+                      <EditableBillingCell
+                        accountId={row.id}
+                        field="billingThreshold"
+                        inputType="number"
+                        value={row.billingThreshold}
+                        display={formatMoney(row.billingThreshold)}
+                        className={nearThreshold ? 'font-semibold text-red-600' : 'text-slate-800'}
+                      />,
+                      <EditableBillingCell
+                        accountId={row.id}
+                        field="nextBillDate"
+                        inputType="date"
+                        value={row.nextBillDate}
+                        display={row.nextBillDate && new Date(row.nextBillDate).toLocaleDateString('vi-VN')}
+                        className={dueSoon ? 'font-semibold text-red-600' : 'text-slate-800'}
+                      />,
                     ],
                   }
                 })}
@@ -2656,6 +2676,57 @@ function AdViewModal({ savedViews, selectedAdIds, activeAdView, onApply, onSave,
         </div>
       </div>
     </div>
+  )
+}
+
+// Click-to-edit cell for manually entered billing info (Meta's API doesn't expose it)
+function EditableBillingCell({ accountId, field, value, inputType, display, className = '' }) {
+  const queryClient = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const mutation = useMutation({
+    mutationFn: (next) => updateAdAccountBilling(accountId, { [field]: next === '' ? null : next }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['meta-selected-accounts'] })
+      setEditing(false)
+    },
+    onError: (err) => toast.error(err?.response?.data?.message || 'Không lưu được'),
+  })
+
+  if (editing) {
+    const save = () => {
+      if (draft === String(value ?? '')) setEditing(false)
+      else mutation.mutate(draft)
+    }
+    return (
+      <input
+        type={inputType}
+        autoFocus
+        value={draft}
+        min={inputType === 'number' ? 0 : undefined}
+        disabled={mutation.isPending}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') save()
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        className="w-36 px-2 py-1 border border-blue-300 rounded text-xs"
+      />
+    )
+  }
+  return (
+    <button
+      type="button"
+      title="Bấm để nhập"
+      onClick={() => {
+        setDraft(value == null ? '' : String(value))
+        setEditing(true)
+      }}
+      className={`text-left hover:underline decoration-dotted ${className}`}
+    >
+      {value == null || value === '' ? <span className="text-slate-400">+ Nhập</span> : display}
+    </button>
   )
 }
 

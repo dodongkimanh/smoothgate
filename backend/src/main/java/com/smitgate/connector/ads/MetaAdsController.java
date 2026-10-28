@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -113,6 +114,26 @@ public class MetaAdsController {
     public ResponseEntity<ApiResponse<Map<String, Map<String, Object>>>> adAccountBilling(HttpServletRequest request) {
         Long tenantId = (Long) request.getAttribute("tenantId");
         return ResponseEntity.ok(ApiResponse.ok(metaAdsConnector.getAdAccountBilling(tenantId)));
+    }
+
+    /** Manually set billing threshold / next bill date (null or blank clears the value). */
+    @PutMapping("/ad-accounts/{id}/billing")
+    public ResponseEntity<ApiResponse<AdAccount>> updateAdAccountBilling(
+            HttpServletRequest request,
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        Long tenantId = (Long) request.getAttribute("tenantId");
+        AdAccount account = adAccountRepository.findByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy tài khoản quảng cáo"));
+        if (body.containsKey("billingThreshold")) {
+            Object v = body.get("billingThreshold");
+            account.setBillingThreshold(v == null || v.toString().isBlank() ? null : new BigDecimal(v.toString()));
+        }
+        if (body.containsKey("nextBillDate")) {
+            Object v = body.get("nextBillDate");
+            account.setNextBillDate(v == null || v.toString().isBlank() ? null : LocalDate.parse(v.toString()));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(adAccountRepository.save(account)));
     }
 
     @PostMapping("/sync")
