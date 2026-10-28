@@ -2,6 +2,7 @@ package com.smitgate.connector.ads;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.smitgate.config.SystemSettingRepository;
 import com.smitgate.connector.pos.OrderRepository;
 import com.smitgate.connector.pos.OrderStatusClassifier;
@@ -306,32 +307,36 @@ public class MetaAdsConnector implements AdsConnector {
             // Graph API multi-id lookups accept at most 50 ids per request
             for (int i = 0; i < ids.size(); i += 50) {
                 List<String> chunk = ids.subList(i, Math.min(i + 50, ids.size()));
-                try {
-                    JsonNode response = fetchByIds(token, chunk,
-                            "currency,balance,funding_source_details,adspaymentcycle{threshold_amount}");
-                    if (response == null) continue;
-                    response.fields().forEachRemaining(f -> result.put(f.getKey(), parseBilling(f.getValue())));
-                } catch (Exception e) {
-                    log.warn("Meta billing info failed for {}: {}", chunk, e.getMessage());
-                    continue;
-                }
-                // next_bill_date is not available for every account/API version — best effort only
-                try {
-                    JsonNode dates = fetchByIds(token, chunk, "next_bill_date");
-                    if (dates != null) {
-                        dates.fields().forEachRemaining(f -> {
-                            String date = f.getValue().path("next_bill_date").asText("");
-                            Map<String, Object> billing = result.get(f.getKey());
-                            if (billing != null && !date.isBlank()) billing.put("nextBillDate", date);
+                Map<String, ObjectNode> raw = new HashMap<>();
+                for (String fields : BILLING_FIELD_GROUPS) {
+                    try {
+                        JsonNode response = fetchByIds(token, chunk, fields);
+                        if (response == null) continue;
+                        response.fields().forEachRemaining(f -> {
+                            if (f.getValue().isObject()) {
+                                raw.computeIfAbsent(f.getKey(), k -> objectMapper.createObjectNode())
+                                        .setAll((ObjectNode) f.getValue());
+                            }
                         });
+                    } catch (Exception e) {
+                        log.warn("Meta billing fields [{}] unavailable: {}", fields, e.getMessage());
                     }
-                } catch (Exception e) {
-                    log.debug("next_bill_date unavailable for {}: {}", chunk, e.getMessage());
                 }
+                raw.forEach((accountId, node) -> result.put(accountId, parseBilling(node)));
             }
         }
         return result;
     }
+
+    /**
+     * Requested one group at a time: Meta rejects the whole request if any field is unknown or
+     * not permitted for the token, and billing fields vary by account type and API version.
+     */
+    private static final List<String> BILLING_FIELD_GROUPS = List.of(
+            "currency,balance",
+            "funding_source_details",
+            "adspaymentcycle{threshold_amount}",
+            "next_bill_date");
 
     private JsonNode fetchByIds(String token, List<String> ids, String fields) {
         URI uri = UriComponentsBuilder
@@ -368,6 +373,10 @@ public class MetaAdsConnector implements AdsConnector {
         }
         if (acc.has("balance")) {
             billing.put("balance", new BigDecimal(acc.path("balance").asText("0")).divide(divisor));
+        }
+        String nextBillDate = acc.path("next_bill_date").asText("");
+        if (!nextBillDate.isBlank()) {
+            billing.put("nextBillDate", nextBillDate);
         }
         return billing;
     }

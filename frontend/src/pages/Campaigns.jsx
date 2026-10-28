@@ -1005,6 +1005,10 @@ export default function Campaigns() {
                           {billing.balance != null && <span className="text-slate-500">{formatMoney(billing.balance)} / </span>}
                           <span className="font-semibold text-slate-800">{formatMoney(billing.billingThreshold)}</span>
                         </span>
+                      ) : billing.balance != null ? (
+                        <span className="text-slate-500" title="Số tiền chưa thanh toán (Meta không trả về ngưỡng)">
+                          {formatMoney(billing.balance)}
+                        </span>
                       ) : '—',
                       billing.nextBillDate
                         ? new Date(billing.nextBillDate).toLocaleDateString('vi-VN')
