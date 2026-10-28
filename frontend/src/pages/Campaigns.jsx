@@ -968,7 +968,7 @@ export default function Campaigns() {
               <DataTable
                 icon={<Network size={16} />}
                 title="Danh sách tài khoản quảng cáo"
-                columns={['Chọn', 'Tên tài khoản', 'Mã tài khoản', 'Số tiền đã chi tiêu', 'Thẻ thanh toán', 'Ngưỡng hóa đơn', 'Ngày thanh toán']}
+                columns={['Chọn', 'Tên tài khoản', 'Mã tài khoản', 'Số tiền đã chi tiêu', 'Thẻ thanh toán', 'Số dư hiện tại', 'Ngưỡng (Bạn sẽ thanh toán khi)', 'Ngày thanh toán']}
                 rows={filteredAccounts.map((row) => {
                   const accountSpend = reportCampaigns
                     .filter(c => String(c.campaignExternalId || '').length > 0 &&
@@ -1000,16 +1000,10 @@ export default function Campaigns() {
                         {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(totalSpend)}
                       </span>,
                       billing.paymentMethod || '—',
-                      billing.billingThreshold != null ? (
-                        <span title={billing.balance != null ? `Chưa thanh toán: ${formatMoney(billing.balance)}` : undefined}>
-                          {billing.balance != null && <span className="text-slate-500">{formatMoney(billing.balance)} / </span>}
-                          <span className="font-semibold text-slate-800">{formatMoney(billing.billingThreshold)}</span>
-                        </span>
-                      ) : billing.balance != null ? (
-                        <span className="text-slate-500" title="Số tiền chưa thanh toán (Meta không trả về ngưỡng)">
-                          {formatMoney(billing.balance)}
-                        </span>
+                      billing.balance != null ? (
+                        <span className="font-semibold text-slate-800">{formatMoney(billing.balance)}</span>
                       ) : '—',
+                      billing.billingThreshold != null ? formatMoney(billing.billingThreshold) : '—',
                       billing.nextBillDate
                         ? new Date(billing.nextBillDate).toLocaleDateString('vi-VN')
                         : '—',

@@ -323,9 +323,47 @@ public class MetaAdsConnector implements AdsConnector {
                     }
                 }
                 raw.forEach((accountId, node) -> result.put(accountId, parseBilling(node)));
+                if (!billingMetadataLogged && !chunk.isEmpty()) {
+                    logBillingMetadata(token, chunk.get(0));
+                }
             }
         }
         return result;
+    }
+
+    private volatile boolean billingMetadataLogged = false;
+
+    /**
+     * Logs (once per process) which billing-related fields/edges Meta exposes on an ad account,
+     * to find where the payment threshold / bill date live for the current API version.
+     */
+    private void logBillingMetadata(String token, String accountId) {
+        billingMetadataLogged = true;
+        try {
+            URI uri = UriComponentsBuilder
+                    .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + accountId)
+                    .queryParam("metadata", "1")
+                    .queryParam("access_token", token)
+                    .build().encode().toUri();
+            JsonNode meta = webClientBuilder.build().get().uri(uri).retrieve()
+                    .bodyToMono(JsonNode.class).block(Duration.ofSeconds(30));
+            if (meta == null) return;
+            java.util.regex.Pattern billingName = java.util.regex.Pattern.compile(
+                    "bill|threshold|pay|cycle|balance|fund|spend|due|invoice", java.util.regex.Pattern.CASE_INSENSITIVE);
+            List<String> fields = new ArrayList<>();
+            for (JsonNode f : meta.path("metadata").path("fields")) {
+                String name = f.path("name").asText("");
+                if (billingName.matcher(name).find()) fields.add(name);
+            }
+            List<String> connections = new ArrayList<>();
+            meta.path("metadata").path("connections").fieldNames().forEachRemaining(name -> {
+                if (billingName.matcher(name).find()) connections.add(name);
+            });
+            log.info("Meta billing metadata for {} ({}): fields={} connections={}",
+                    accountId, apiVersion, fields, connections);
+        } catch (Exception e) {
+            log.warn("Meta billing metadata lookup failed: {}", e.getMessage());
+        }
     }
 
     /**
