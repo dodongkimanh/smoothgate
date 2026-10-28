@@ -105,6 +105,16 @@ public class MetaAdsController {
         return ResponseEntity.ok(ApiResponse.ok(adAccountRepository.findByTenantId(tenantId)));
     }
 
+    /**
+     * Live billing info (payment card, billing threshold, next bill date) for selected accounts,
+     * keyed by externalAccountId.
+     */
+    @GetMapping("/ad-accounts/billing")
+    public ResponseEntity<ApiResponse<Map<String, Map<String, Object>>>> adAccountBilling(HttpServletRequest request) {
+        Long tenantId = (Long) request.getAttribute("tenantId");
+        return ResponseEntity.ok(ApiResponse.ok(metaAdsConnector.getAdAccountBilling(tenantId)));
+    }
+
     @PostMapping("/sync")
     public ResponseEntity<ApiResponse<Map<String, Object>>> syncMetrics(
             HttpServletRequest request,

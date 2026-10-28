@@ -275,6 +275,103 @@ public class MetaAdsConnector implements AdsConnector {
         return saved;
     }
 
+    /** Meta currencies with no minor unit — amounts come back as whole units instead of cents. */
+    private static final Set<String> ZERO_DECIMAL_CURRENCIES = Set.of(
+            "VND", "JPY", "KRW", "IDR", "CLP", "COP", "CRC", "HUF", "ISK", "PYG", "TWD");
+
+    /**
+     * Live billing info (payment method, billing threshold, unbilled balance, next bill date)
+     * for every selected Meta ad account of the tenant, keyed by externalAccountId.
+     * Failures are logged per data source so one broken connection does not hide the rest.
+     */
+    public Map<String, Map<String, Object>> getAdAccountBilling(Long tenantId) {
+        Map<Long, List<String>> idsByDataSource = new HashMap<>();
+        for (AdAccount acc : adAccountRepository.findByTenantId(tenantId)) {
+            if (acc.getPlatform() != AdAccount.Platform.META) continue;
+            idsByDataSource.computeIfAbsent(acc.getDataSourceId(), k -> new ArrayList<>())
+                    .add(normalizeAdAccountId(acc.getExternalAccountId()));
+        }
+
+        Map<String, Map<String, Object>> result = new HashMap<>();
+        for (Map.Entry<Long, List<String>> entry : idsByDataSource.entrySet()) {
+            String token;
+            try {
+                DataSource ds = dataSourceService.getByIdAndTenant(tenantId, entry.getKey());
+                token = dataSourceService.decryptSecret(ds);
+            } catch (Exception e) {
+                log.warn("Skip billing info for dataSource {}: {}", entry.getKey(), e.getMessage());
+                continue;
+            }
+            List<String> ids = entry.getValue();
+            // Graph API multi-id lookups accept at most 50 ids per request
+            for (int i = 0; i < ids.size(); i += 50) {
+                List<String> chunk = ids.subList(i, Math.min(i + 50, ids.size()));
+                try {
+                    JsonNode response = fetchByIds(token, chunk,
+                            "currency,balance,funding_source_details,adspaymentcycle{threshold_amount}");
+                    if (response == null) continue;
+                    response.fields().forEachRemaining(f -> result.put(f.getKey(), parseBilling(f.getValue())));
+                } catch (Exception e) {
+                    log.warn("Meta billing info failed for {}: {}", chunk, e.getMessage());
+                    continue;
+                }
+                // next_bill_date is not available for every account/API version — best effort only
+                try {
+                    JsonNode dates = fetchByIds(token, chunk, "next_bill_date");
+                    if (dates != null) {
+                        dates.fields().forEachRemaining(f -> {
+                            String date = f.getValue().path("next_bill_date").asText("");
+                            Map<String, Object> billing = result.get(f.getKey());
+                            if (billing != null && !date.isBlank()) billing.put("nextBillDate", date);
+                        });
+                    }
+                } catch (Exception e) {
+                    log.debug("next_bill_date unavailable for {}: {}", chunk, e.getMessage());
+                }
+            }
+        }
+        return result;
+    }
+
+    private JsonNode fetchByIds(String token, List<String> ids, String fields) {
+        URI uri = UriComponentsBuilder
+                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/")
+                .queryParam("ids", String.join(",", ids))
+                .queryParam("fields", fields)
+                .queryParam("access_token", token)
+                .build().encode().toUri();
+        return webClientBuilder.build()
+                .get()
+                .uri(uri)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        res -> res.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new RuntimeException("Meta API lỗi: " + body))))
+                .bodyToMono(JsonNode.class)
+                .block(Duration.ofSeconds(30));
+    }
+
+    private Map<String, Object> parseBilling(JsonNode acc) {
+        String currency = acc.path("currency").asText("VND");
+        BigDecimal divisor = ZERO_DECIMAL_CURRENCIES.contains(currency) ? BigDecimal.ONE : BigDecimal.valueOf(100);
+
+        Map<String, Object> billing = new HashMap<>();
+        billing.put("currency", currency);
+        JsonNode funding = acc.path("funding_source_details");
+        if (!funding.isMissingNode()) {
+            billing.put("paymentMethod", funding.path("display_string").asText(""));
+        }
+        JsonNode cycles = acc.path("adspaymentcycle").path("data");
+        if (cycles.isArray() && !cycles.isEmpty() && cycles.get(0).has("threshold_amount")) {
+            billing.put("billingThreshold",
+                    new BigDecimal(cycles.get(0).path("threshold_amount").asText("0")).divide(divisor));
+        }
+        if (acc.has("balance")) {
+            billing.put("balance", new BigDecimal(acc.path("balance").asText("0")).divide(divisor));
+        }
+        return billing;
+    }
+
     @Override
     public int syncMetricsDaily(Long tenantId, Long dataSourceId, LocalDate from, LocalDate to) {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
   getSelectedAdAccounts,
+  getAdAccountBilling,
   getMetaCampaigns,
   getMetaAdSets,
   getMetaAdsPerformance,
@@ -384,6 +385,14 @@ export default function Campaigns() {
   const { data: accounts = [], isLoading: accountsLoading } = useQuery({
     queryKey: ['meta-selected-accounts'],
     queryFn: () => getSelectedAdAccounts().then((r) => r.data?.data || []),
+    retry: 1,
+  })
+
+  const { data: accountBilling = {} } = useQuery({
+    queryKey: ['meta-account-billing'],
+    queryFn: () => getAdAccountBilling().then((r) => r.data?.data || {}),
+    enabled: activeTab === 'accounts' && accounts.length > 0,
+    staleTime: 5 * 60 * 1000,
     retry: 1,
   })
 
@@ -959,7 +968,7 @@ export default function Campaigns() {
               <DataTable
                 icon={<Network size={16} />}
                 title="Danh sách tài khoản quảng cáo"
-                columns={['Chọn', 'Tên tài khoản', 'Mã tài khoản', 'Số tiền đã chi tiêu']}
+                columns={['Chọn', 'Tên tài khoản', 'Mã tài khoản', 'Số tiền đã chi tiêu', 'Thẻ thanh toán', 'Ngưỡng hóa đơn', 'Ngày thanh toán']}
                 rows={filteredAccounts.map((row) => {
                   const accountSpend = reportCampaigns
                     .filter(c => String(c.campaignExternalId || '').length > 0 &&
@@ -970,6 +979,11 @@ export default function Campaigns() {
                     .filter(ad => ad.adAccountId === row.externalAccountId || ad.adAccountId === 'act_' + row.externalAccountId)
                     .reduce((sum, ad) => sum + Number(ad.spend || 0), 0)
                   const totalSpend = Math.max(accountSpend, spendFromAds)
+                  const extId = String(row.externalAccountId || '')
+                  const billing = accountBilling[extId.startsWith('act_') ? extId : `act_${extId}`] || {}
+                  const formatMoney = (value) => new Intl.NumberFormat('vi-VN', {
+                    style: 'currency', currency: billing.currency || 'VND', maximumFractionDigits: 0,
+                  }).format(Number(value || 0))
                   return {
                     key: row.id,
                     selected: selectedAccountIds.includes(row.id),
@@ -985,6 +999,16 @@ export default function Campaigns() {
                       <span className="font-semibold text-slate-800">
                         {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(totalSpend)}
                       </span>,
+                      billing.paymentMethod || '—',
+                      billing.billingThreshold != null ? (
+                        <span title={billing.balance != null ? `Chưa thanh toán: ${formatMoney(billing.balance)}` : undefined}>
+                          {billing.balance != null && <span className="text-slate-500">{formatMoney(billing.balance)} / </span>}
+                          <span className="font-semibold text-slate-800">{formatMoney(billing.billingThreshold)}</span>
+                        </span>
+                      ) : '—',
+                      billing.nextBillDate
+                        ? new Date(billing.nextBillDate).toLocaleDateString('vi-VN')
+                        : '—',
                     ],
                   }
                 })}
