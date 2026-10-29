@@ -44,7 +44,8 @@ public class AuthService {
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setFullName(fullName);
-        user.setRole(User.Role.ANALYST);
+        // Registering creates a fresh workspace, so the registrant administers it
+        user.setRole(User.Role.ADMIN);
         user.setStatus("ACTIVE");
         return userRepository.save(user);
     }

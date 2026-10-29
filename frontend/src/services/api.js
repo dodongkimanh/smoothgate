@@ -43,7 +43,8 @@ api.interceptors.response.use(
       }
     }
 
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // 403 means "not permitted" (e.g. staff outside their ad accounts) — only 401 ends the session
+    if (error.response?.status === 401) {
       const onAuthPage = ['/login', '/register'].includes(window.location.pathname)
       if (!onAuthPage) {
         useAuthStore.getState().logout()
@@ -166,3 +167,9 @@ export const getAgentSettings = () => api.get('/agent/settings')
 export const saveAgentSettings = (settings) => api.put('/agent/settings', settings)
 
 export default api
+
+// Staff / user management (admin only)
+export const getUsers = () => api.get('/users')
+export const createUser = (data) => api.post('/users', data)
+export const updateUser = (id, data) => api.put(`/users/${id}`, data)
+export const deleteUser = (id) => api.delete(`/users/${id}`)

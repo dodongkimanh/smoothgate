@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { useAuthStore } from './store/authStore'
+import { useAuthStore, isStaffUser } from './store/authStore'
 import { getMe } from './services/api'
 import Layout from './components/Layout'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -15,6 +15,7 @@ import ConnectAds from './pages/ConnectAds'
 import ConnectPoscake from './pages/ConnectPoscake'
 import Settings from './pages/Settings'
 import Agent from './pages/Agent'
+import Staff from './pages/Staff'
 
 function ProtectedRoute({ children }) {
   const token = useAuthStore((s) => s.token)
@@ -53,8 +54,15 @@ function ProtectedRoute({ children }) {
         setStatusMsg(attempt === 0
           ? 'Đang kết nối server...'
           : `Server đang khởi động... (thử lần ${attempt + 1})`)
-        await getMe()
+        const me = await getMe()
         if (!signal.cancelled) {
+          // Role may have changed since login (e.g. admin re-assigned it) — keep the stored copy current
+          const fresh = me?.data?.data
+          if (fresh) {
+            useAuthStore.setState((st) => ({
+              user: { ...(st.user || {}), email: fresh.email, fullName: fresh.fullName, role: fresh.role },
+            }))
+          }
           // Token verified successfully — clear stale query cache to ensure fresh data
           queryClient.clear()
           setBackendReady(true)
@@ -134,6 +142,13 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+/** Staff may only use the ad manager page; everything else redirects there. */
+function AdminOnly({ children }) {
+  const user = useAuthStore((s) => s.user)
+  if (isStaffUser(user)) return <Navigate to="/campaigns-list" replace />
+  return children
+}
+
 function LoginRoute() {
   const token = useAuthStore((s) => s.token)
   const [hydrated, setHydrated] = useState(useAuthStore.persist.hasHydrated())
@@ -161,18 +176,19 @@ function App() {
         }
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<ErrorBoundary><Dashboard /></ErrorBoundary>} />
+        <Route path="dashboard" element={<AdminOnly><ErrorBoundary><Dashboard /></ErrorBoundary></AdminOnly>} />
         <Route path="campaigns-list" element={<ErrorBoundary><Campaigns /></ErrorBoundary>} />
-        <Route path="campaign-drafts" element={<ErrorBoundary><CampaignDrafts /></ErrorBoundary>} />
+        <Route path="campaign-drafts" element={<AdminOnly><ErrorBoundary><CampaignDrafts /></ErrorBoundary></AdminOnly>} />
         <Route path="campaigns" element={<Navigate to="/campaigns-list" replace />} />
         <Route path="ad-groups" element={<Navigate to="/campaigns-list" replace />} />
         <Route path="posts" element={<Navigate to="/campaigns-list" replace />} />
-        <Route path="ad-accounts" element={<ErrorBoundary><AdAccounts /></ErrorBoundary>} />
-        <Route path="orders" element={<ErrorBoundary><Orders /></ErrorBoundary>} />
-        <Route path="connect-ads" element={<ErrorBoundary><ConnectAds /></ErrorBoundary>} />
-        <Route path="connect-poscake" element={<ErrorBoundary><ConnectPoscake /></ErrorBoundary>} />
-        <Route path="settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
-        <Route path="agent" element={<ErrorBoundary><Agent /></ErrorBoundary>} />
+        <Route path="ad-accounts" element={<AdminOnly><ErrorBoundary><AdAccounts /></ErrorBoundary></AdminOnly>} />
+        <Route path="orders" element={<AdminOnly><ErrorBoundary><Orders /></ErrorBoundary></AdminOnly>} />
+        <Route path="connect-ads" element={<AdminOnly><ErrorBoundary><ConnectAds /></ErrorBoundary></AdminOnly>} />
+        <Route path="connect-poscake" element={<AdminOnly><ErrorBoundary><ConnectPoscake /></ErrorBoundary></AdminOnly>} />
+        <Route path="settings" element={<AdminOnly><ErrorBoundary><Settings /></ErrorBoundary></AdminOnly>} />
+        <Route path="staff" element={<AdminOnly><ErrorBoundary><Staff /></ErrorBoundary></AdminOnly>} />
+        <Route path="agent" element={<AdminOnly><ErrorBoundary><Agent /></ErrorBoundary></AdminOnly>} />
       </Route>
     </Routes>
   )

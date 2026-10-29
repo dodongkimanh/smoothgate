@@ -19,11 +19,13 @@ import java.util.stream.Collectors;
 public class AdNoteController {
 
     private final AdNoteService adNoteService;
+    private final com.smitgate.auth.AdAccountAccessService accessService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> list(
             HttpServletRequest request, @RequestParam String adId) {
         Long tenantId = (Long) request.getAttribute("tenantId");
+        accessService.requireMetaObject(tenantId, adId);
         List<Map<String, Object>> notes = adNoteService.listNotes(tenantId, adId).stream()
                 .map(this::toView)
                 .collect(Collectors.toList());
@@ -53,6 +55,7 @@ public class AdNoteController {
         String author = SecurityContextHolder.getContext().getAuthentication() != null
                 ? SecurityContextHolder.getContext().getAuthentication().getName()
                 : null;
+        accessService.requireMetaObject(tenantId, adId);
         AdNote note = adNoteService.addNote(tenantId, adId, content, author);
         return ResponseEntity.ok(ApiResponse.ok(toView(note)));
     }

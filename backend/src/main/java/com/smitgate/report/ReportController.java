@@ -18,6 +18,7 @@ public class ReportController {
 
     private final ReportService reportService;
     private final AdsRefreshService adsRefreshService;
+    private final com.smitgate.auth.AdAccountAccessService accessService;
 
     @GetMapping("/overview")
     public ResponseEntity<ApiResponse<OverviewResponse>> overview(
@@ -37,8 +38,13 @@ public class ReportController {
             @RequestParam(required = false) String platform) {
         Long tenantId = (Long) request.getAttribute("tenantId");
         adsRefreshService.refreshAdsMetricsAsync(tenantId, from, to);
-        return ResponseEntity.ok(ApiResponse.ok(
-                reportService.getCampaignPerformance(tenantId, from, to, platform)));
+        List<CampaignPerfResponse> rows = reportService.getCampaignPerformance(tenantId, from, to, platform);
+        java.util.Set<Long> allowed = accessService.allowedAccountIds(tenantId);
+        if (allowed != null) {
+            // Result may be a shared cached list — filter into a copy
+            rows = rows.stream().filter(r -> r.getAdAccountId() != null && allowed.contains(r.getAdAccountId())).toList();
+        }
+        return ResponseEntity.ok(ApiResponse.ok(rows));
     }
 
     @GetMapping("/campaigns/{id}/daily")
@@ -59,6 +65,7 @@ public class ReportController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "30") int limit) {
         Long tenantId = (Long) request.getAttribute("tenantId");
+        accessService.requireCampaign(tenantId, id);
         return ResponseEntity.ok(ApiResponse.ok(
                 reportService.getCampaignFunnel(tenantId, id, from, to, limit)));
     }

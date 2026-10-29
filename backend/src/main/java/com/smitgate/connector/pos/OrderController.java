@@ -37,6 +37,7 @@ public class OrderController {
     private final OrderRepository orderRepository;
     private final PosShopRepository posShopRepository;
     private final ObjectMapper objectMapper;
+    private final com.smitgate.auth.AdAccountAccessService accessService;
 
     @Value("${app.orders.list.raw-snippet-chars:12000}")
     private int rawSnippetChars;
@@ -173,6 +174,7 @@ public class OrderController {
             @RequestParam(defaultValue = "false") boolean profitOnly) {
 
         Long tenantId = (Long) request.getAttribute("tenantId");
+        accessService.requireMetaObject(tenantId, adId);
         LocalDateTime fromDateTime = from.atStartOfDay();
         LocalDateTime toDateTime = to.atTime(LocalTime.MAX);
 
@@ -215,6 +217,8 @@ public class OrderController {
         if (order == null) {
             return ResponseEntity.notFound().build();
         }
+        // Staff may only review orders attributed to ads in their assigned accounts
+        accessService.requireMetaObject(tenantId, order.getClickId());
 
         if (body.containsKey("reviewStatus")) {
             String reviewStatus = String.valueOf(body.get("reviewStatus"));

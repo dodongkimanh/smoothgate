@@ -13,3 +13,6 @@ export const useAuthStore = create(
     { name: 'smitgate-auth' }
   )
 )
+
+/** STAFF users only see the ad manager page, limited to their assigned ad accounts. */
+export const isStaffUser = (user) => user?.role === 'STAFF'

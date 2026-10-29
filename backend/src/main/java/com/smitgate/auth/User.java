@@ -10,7 +10,8 @@ import java.time.LocalDateTime;
 @Table(name = "users")
 public class User {
 
-    public enum Role { ADMIN, ANALYST }
+    /** STAFF only sees the ad accounts assigned to them in user_ad_accounts. */
+    public enum Role { ADMIN, ANALYST, STAFF }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

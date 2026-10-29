@@ -44,6 +44,7 @@ export default function Header({ onMenuToggle }) {
       '/connect-poscake': 'Kết nối Poscake',
       '/settings': 'Cài đặt',
       '/agent': 'Agent AI',
+      '/staff': 'Quản lý nhân viên',
     }
     return titles[location.pathname] || 'SmoothGate'
   }

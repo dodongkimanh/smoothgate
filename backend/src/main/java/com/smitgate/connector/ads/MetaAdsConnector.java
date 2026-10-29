@@ -276,6 +276,28 @@ public class MetaAdsConnector implements AdsConnector {
         return saved;
     }
 
+    /** Owning ad account ("act_...") of a Meta campaign/adset/ad, or null if Meta doesn't return one. */
+    public String getObjectAccountId(Long tenantId, Long dataSourceId, String objectId) {
+        DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
+        String token = dataSourceService.decryptSecret(ds);
+        URI uri = UriComponentsBuilder
+                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + objectId)
+                .queryParam("fields", "account_id")
+                .queryParam("access_token", token)
+                .build().encode().toUri();
+        JsonNode response = webClientBuilder.build()
+                .get()
+                .uri(uri)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        res -> res.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new RuntimeException("Meta API lỗi: " + body))))
+                .bodyToMono(JsonNode.class)
+                .block(Duration.ofSeconds(15));
+        String accountId = response != null ? response.path("account_id").asText("") : "";
+        return accountId.isBlank() ? null : normalizeAdAccountId(accountId);
+    }
+
     /** Meta currencies with no minor unit — amounts come back as whole units instead of cents. */
     private static final Set<String> ZERO_DECIMAL_CURRENCIES = Set.of(
             "VND", "JPY", "KRW", "IDR", "CLP", "COP", "CRC", "HUF", "ISK", "PYG", "TWD");

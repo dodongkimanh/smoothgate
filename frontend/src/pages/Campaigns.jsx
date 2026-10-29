@@ -23,6 +23,7 @@ import {
   getMetaAdDaily,
 } from '../services/api'
 import toast from 'react-hot-toast'
+import { useAuthStore, isStaffUser } from '../store/authStore'
 import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bookmark, Bug, ChevronDown, ChevronRight, DollarSign, Eye, Layers3, LineChart as LineChartIcon, Megaphone, Network, Palette, Phone, RefreshCw, Search, ShoppingCart, StickyNote, Trash2, TrendingUp, Users, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -338,6 +339,7 @@ function SortableTh({ field, label, sortField, sortDir, onToggle, align = 'right
 }
 
 export default function Campaigns() {
+  const isStaff = isStaffUser(useAuthStore((s) => s.user))
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('accounts')
   const [search, setSearch] = useState('')
@@ -1014,6 +1016,7 @@ export default function Campaigns() {
                       <EditableBillingCell
                         accountId={row.id}
                         field="billingThreshold"
+                        readOnly={isStaff}
                         inputType="number"
                         value={row.billingThreshold}
                         display={formatMoney(row.billingThreshold)}
@@ -1022,6 +1025,7 @@ export default function Campaigns() {
                       <EditableBillingCell
                         accountId={row.id}
                         field="nextBillDate"
+                        readOnly={isStaff}
                         inputType="date"
                         value={row.nextBillDate}
                         display={row.nextBillDate && new Date(row.nextBillDate).toLocaleDateString('vi-VN')}
@@ -1658,6 +1662,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
   const [debugData, setDebugData] = useState(null)
   const [debugLoading, setDebugLoading] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
+  const isStaff = isStaffUser(useAuthStore((s) => s.user))
   const [selectedAdIds, setSelectedAdIds] = useState([])
   const [orderModal, setOrderModal] = useState(null)
   const [noteModal, setNoteModal] = useState(null)
@@ -1783,8 +1788,8 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
         <StatCard label="LN sau QC" value={formatCurrency(totals.totalProfitAfterAds)} color="text-slate-800" />
       </div>
 
-      {/* Debug: Xem dữ liệu gốc từ Meta */}
-      <div className="flex items-center gap-2">
+      {/* Debug: Xem dữ liệu gốc từ Meta (admin only) */}
+      {!isStaff && <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={loadDebugData}
@@ -1803,7 +1808,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
             Ẩn
           </button>
         )}
-      </div>
+      </div>}
 
       {showDebug && debugData && (
         <DebugInsightsPanel data={debugData} loading={debugLoading} />
@@ -2680,7 +2685,7 @@ function AdViewModal({ savedViews, selectedAdIds, activeAdView, onApply, onSave,
 }
 
 // Click-to-edit cell for manually entered billing info (Meta's API doesn't expose it)
-function EditableBillingCell({ accountId, field, value, inputType, display, className = '' }) {
+function EditableBillingCell({ accountId, field, value, inputType, display, className = '', readOnly = false }) {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -2692,6 +2697,10 @@ function EditableBillingCell({ accountId, field, value, inputType, display, clas
     },
     onError: (err) => toast.error(err?.response?.data?.message || 'Không lưu được'),
   })
+
+  if (readOnly) {
+    return value == null || value === '' ? '—' : <span className={className}>{display}</span>
+  }
 
   if (editing) {
     const save = () => {

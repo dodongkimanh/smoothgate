@@ -9,7 +9,9 @@ import {
   Settings,
   Users,
   Bot,
+  UserCog,
 } from 'lucide-react'
+import { useAuthStore, isStaffUser } from '../store/authStore'
 import logoMark from '../assets/smoothgate-mark.svg'
 
 const navItems = [
@@ -23,12 +25,16 @@ const navItems = [
 ]
 
 const bottomItems = [
+  { path: '/staff', icon: UserCog, label: 'Nhân viên' },
   { path: '/agent', icon: Bot, label: 'Agent AI' },
   { path: '/settings', icon: Settings, label: 'Cài đặt' },
 ]
 
 export default function Sidebar({ onClose }) {
   const location = useLocation()
+  const isStaff = isStaffUser(useAuthStore((s) => s.user))
+  const mainItems = isStaff ? navItems.filter((item) => item.path === '/campaigns-list') : navItems
+  const footerItems = isStaff ? [] : bottomItems
 
   return (
     <aside className="w-[76px] bg-white/95 backdrop-blur-sm border-r border-slate-200 flex flex-col items-center py-4 shadow-sm min-h-screen">
@@ -39,7 +45,7 @@ export default function Sidebar({ onClose }) {
 
       {/* Main Navigation */}
       <nav className="flex-1 flex flex-col items-center gap-1.5 px-2">
-        {navItems.map((item) => {
+        {mainItems.map((item) => {
           const Icon = item.icon
           const isActive = location.pathname === item.path ||
             (item.path === '/campaigns-list' && ['/campaigns', '/campaigns-list', '/ad-groups', '/posts'].includes(location.pathname))
@@ -66,7 +72,7 @@ export default function Sidebar({ onClose }) {
 
       {/* Bottom Navigation */}
       <div className="flex flex-col items-center gap-1.5 px-2">
-        {bottomItems.map((item) => {
+        {footerItems.map((item) => {
           const Icon = item.icon
           const isActive = location.pathname === item.path
           return (

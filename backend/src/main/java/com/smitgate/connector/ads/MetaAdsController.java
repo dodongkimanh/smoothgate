@@ -26,6 +26,7 @@ public class MetaAdsController {
 
     private final MetaAdsConnector metaAdsConnector;
     private final AdAccountRepository adAccountRepository;
+    private final com.smitgate.auth.AdAccountAccessService accessService;
 
     @Value("${app.frontend.url}")
     private String frontendUrl;
@@ -103,7 +104,7 @@ public class MetaAdsController {
     @GetMapping("/ad-accounts/selected")
     public ResponseEntity<ApiResponse<List<AdAccount>>> selectedAccounts(HttpServletRequest request) {
         Long tenantId = (Long) request.getAttribute("tenantId");
-        return ResponseEntity.ok(ApiResponse.ok(adAccountRepository.findByTenantId(tenantId)));
+        return ResponseEntity.ok(ApiResponse.ok(accessService.visibleAccounts(tenantId)));
     }
 
     /**
@@ -113,7 +114,10 @@ public class MetaAdsController {
     @GetMapping("/ad-accounts/billing")
     public ResponseEntity<ApiResponse<Map<String, Map<String, Object>>>> adAccountBilling(HttpServletRequest request) {
         Long tenantId = (Long) request.getAttribute("tenantId");
-        return ResponseEntity.ok(ApiResponse.ok(metaAdsConnector.getAdAccountBilling(tenantId)));
+        Map<String, Map<String, Object>> billing = metaAdsConnector.getAdAccountBilling(tenantId);
+        java.util.Set<String> allowed = accessService.allowedExternalIds(tenantId);
+        if (allowed != null) billing.keySet().retainAll(allowed);
+        return ResponseEntity.ok(ApiResponse.ok(billing));
     }
 
     /** Manually set billing threshold / next bill date (null or blank clears the value). */
@@ -154,6 +158,7 @@ public class MetaAdsController {
             @RequestParam Long dataSourceId,
             @RequestParam String adAccountId) {
         Long tenantId = (Long) request.getAttribute("tenantId");
+        accessService.requireAdAccount(tenantId, adAccountId);
         return ResponseEntity.ok(ApiResponse.ok(
                 metaAdsConnector.listCampaignHierarchy(tenantId, dataSourceId, adAccountId)
         ));
@@ -166,6 +171,7 @@ public class MetaAdsController {
             @RequestParam String adAccountId,
             @RequestParam(required = false) String campaignId) {
         Long tenantId = (Long) request.getAttribute("tenantId");
+        accessService.requireAdAccount(tenantId, adAccountId);
         return ResponseEntity.ok(ApiResponse.ok(
                 metaAdsConnector.listAdSetHierarchy(tenantId, dataSourceId, adAccountId, campaignId)
         ));
@@ -179,6 +185,7 @@ public class MetaAdsController {
             @RequestParam(required = false) String campaignId,
             @RequestParam(required = false) String adSetId) {
         Long tenantId = (Long) request.getAttribute("tenantId");
+        accessService.requireAdAccount(tenantId, adAccountId);
         return ResponseEntity.ok(ApiResponse.ok(
                 metaAdsConnector.listAdHierarchy(tenantId, dataSourceId, adAccountId, campaignId, adSetId)
         ));
@@ -194,6 +201,7 @@ public class MetaAdsController {
             @RequestParam(required = false) String campaignId,
             @RequestParam(required = false) String adSetId) {
         Long tenantId = (Long) request.getAttribute("tenantId");
+        accessService.requireAdAccount(tenantId, adAccountId);
         return ResponseEntity.ok(ApiResponse.ok(
                 metaAdsConnector.listAdPerformance(tenantId, dataSourceId, adAccountId, from, to, campaignId, adSetId)
         ));
@@ -207,6 +215,7 @@ public class MetaAdsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         Long tenantId = (Long) request.getAttribute("tenantId");
+        accessService.requireMetaObject(tenantId, adId);
         return ResponseEntity.ok(ApiResponse.ok(
                 metaAdsConnector.getAdDailyMetrics(tenantId, dataSourceId, adId, from, to)
         ));
@@ -240,6 +249,7 @@ public class MetaAdsController {
         Long dataSourceId = Long.parseLong(body.get("dataSourceId").toString());
         Long budgetCents = Long.parseLong(body.get("budgetCents").toString());
         String budgetType = (String) body.getOrDefault("budgetType", "daily_budget");
+        accessService.requireMetaObject(tenantId, objectId);
         metaAdsConnector.updateBudget(tenantId, dataSourceId, objectId, budgetCents, budgetType);
         return ResponseEntity.ok(ApiResponse.ok(Map.of("objectId", objectId, "budgetCents", budgetCents)));
     }
@@ -252,6 +262,7 @@ public class MetaAdsController {
         String objectId = body.get("objectId");
         Long dataSourceId = Long.parseLong(body.get("dataSourceId"));
         String newStatus = body.get("status");
+        accessService.requireMetaObject(tenantId, objectId);
         metaAdsConnector.updateAdStatus(tenantId, dataSourceId, objectId, newStatus);
         return ResponseEntity.ok(ApiResponse.ok(Map.of("objectId", objectId, "status", newStatus)));
     }
