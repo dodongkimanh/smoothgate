@@ -915,6 +915,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("budget", parseBudget(
                         adset.path("daily_budget"), adset.path("lifetime_budget"),
                         adset.path("campaign").path("daily_budget"), adset.path("campaign").path("lifetime_budget")));
+                item.put("budgetSource", budgetSource(adset));
                 item.put("comments", comments);
                 item.put("messageContacts", messageContacts);
                 item.put("costPerResult", costPerResult);
@@ -1202,6 +1203,19 @@ public class MetaAdsConnector implements AdsConnector {
         } catch (Exception ignored) {
             return BigDecimal.ZERO;
         }
+    }
+
+    /**
+     * Where the row's budget comes from, mirroring parseBudget's precedence, so the UI can sum
+     * each budget once (CBO budgets are shared by every ad set in the campaign) and only daily ones.
+     */
+    private String budgetSource(JsonNode adset) {
+        JsonNode campaign = adset.path("campaign");
+        if (!adset.path("daily_budget").asText("").isBlank()) return "ADSET_DAILY";
+        if (!adset.path("lifetime_budget").asText("").isBlank()) return "ADSET_LIFETIME";
+        if (!campaign.path("daily_budget").asText("").isBlank()) return "CAMPAIGN_DAILY";
+        if (!campaign.path("lifetime_budget").asText("").isBlank()) return "CAMPAIGN_LIFETIME";
+        return "NONE";
     }
 
     private BigDecimal sumActionValues(JsonNode actions, String... actionTypes) {

@@ -758,6 +758,18 @@ export default function Campaigns() {
       totalMessageContacts += Number(item.messageContacts || 0)
     })
     base.totalMessageContacts = totalMessageContacts
+    // Each budget counted once: ad-set budgets per ad set, CBO budgets per campaign.
+    // Only running ad sets with a daily budget count toward today's budget.
+    const budgetByOwner = new Map()
+    effectiveAdsForDisplay.forEach((row) => {
+      if ((row.adSetStatus || '').toUpperCase() !== 'ACTIVE') return
+      if (row.budgetSource === 'ADSET_DAILY') {
+        budgetByOwner.set(`adset:${buildUniqueKey(row.adAccountId, row.adSetId)}`, Number(row.budget || 0))
+      } else if (row.budgetSource === 'CAMPAIGN_DAILY') {
+        budgetByOwner.set(`campaign:${buildUniqueKey(row.adAccountId, row.campaignId)}`, Number(row.budget || 0))
+      }
+    })
+    base.totalDailyBudget = [...budgetByOwner.values()].reduce((sum, v) => sum + v, 0)
     return base
   }, [effectiveAdsForDisplay, reportCampaigns])
 
@@ -1786,6 +1798,19 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
         <StatCard label="Đã gửi" value={formatNumber(totals.totalProfitOrderCount)} color="text-indigo-700" />
         <StatCard label="LN đã nhận" value={formatCurrency(totals.totalOrderProfit)} color="text-slate-800" />
         <StatCard label="LN sau QC" value={formatCurrency(totals.totalProfitAfterAds)} color="text-slate-800" />
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-8 gap-2">
+        <StatCard label="Tổng ngân sách trong ngày" value={formatCurrency(totals.totalDailyBudget)} color="text-amber-700" />
+        <StatCard
+          label="Chi phí TB / tin nhắn"
+          value={totals.totalMessageContacts > 0 ? formatCurrency(totals.totalSpend / totals.totalMessageContacts) : '-'}
+          color="text-violet-700"
+        />
+        <StatCard
+          label="Chi phí / SĐT"
+          value={totals.totalPhoneCount > 0 ? formatCurrency(totals.totalSpend / totals.totalPhoneCount) : '-'}
+          color="text-teal-700"
+        />
       </div>
 
       {/* Debug: Xem dữ liệu gốc từ Meta (admin only) */}
