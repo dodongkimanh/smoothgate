@@ -298,6 +298,26 @@ public class MetaAdsConnector implements AdsConnector {
         return accountId.isBlank() ? null : normalizeAdAccountId(accountId);
     }
 
+    /** Reads an ad set's / campaign's daily_budget, effective_status and account_id straight from Meta. */
+    public JsonNode getBudgetState(Long tenantId, Long dataSourceId, String objectId) {
+        DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
+        String token = dataSourceService.decryptSecret(ds);
+        URI uri = UriComponentsBuilder
+                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + objectId)
+                .queryParam("fields", "daily_budget,effective_status,account_id")
+                .queryParam("access_token", token)
+                .build().encode().toUri();
+        return webClientBuilder.build()
+                .get()
+                .uri(uri)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
+                        res -> res.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new RuntimeException("Meta API lỗi: " + body))))
+                .bodyToMono(JsonNode.class)
+                .block(Duration.ofSeconds(15));
+    }
+
     /** Meta currencies with no minor unit — amounts come back as whole units instead of cents. */
     private static final Set<String> ZERO_DECIMAL_CURRENCIES = Set.of(
             "VND", "JPY", "KRW", "IDR", "CLP", "COP", "CRC", "HUF", "ISK", "PYG", "TWD");

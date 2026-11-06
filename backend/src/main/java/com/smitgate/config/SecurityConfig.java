@@ -63,7 +63,9 @@ public class SecurityConfig {
                                 "/api/orders/by-ad/*",
                                 "/api/ad-notes",
                                 "/api/ad-notes/counts",
-                                "/api/ad-saved-views").authenticated()
+                                "/api/ad-saved-views",
+                                "/api/integrations/meta/budget-schedules").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/integrations/meta/budget-schedules").authenticated()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/integrations/meta/toggle-status",
                                 "/api/integrations/meta/update-budget",

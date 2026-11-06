@@ -152,6 +152,9 @@ export const toggleMetaStatus = (objectId, dataSourceId, status) =>
   api.post('/integrations/meta/toggle-status', { objectId, dataSourceId, status })
 export const updateMetaBudget = (objectId, dataSourceId, budgetCents, budgetType) =>
   api.post('/integrations/meta/update-budget', { objectId, dataSourceId, budgetCents, budgetType })
+// Daily automatic budget increase (increasePercent 0 removes the schedule)
+export const getBudgetSchedules = () => api.get('/integrations/meta/budget-schedules')
+export const saveBudgetSchedule = (data) => api.put('/integrations/meta/budget-schedules', data)
 
 // Campaign Drafts (nháp chiến dịch nội bộ, chưa đăng lên Meta)
 export const getCampaignDrafts = () => api.get('/campaign-drafts')

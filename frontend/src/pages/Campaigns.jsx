@@ -12,6 +12,8 @@ import {
   getCampaignFunnel,
   toggleMetaStatus,
   updateMetaBudget,
+  getBudgetSchedules,
+  saveBudgetSchedule,
   getOrdersByAd,
   updateOrderReview,
   getAdNotes,
@@ -24,7 +26,7 @@ import {
 } from '../services/api'
 import toast from 'react-hot-toast'
 import { useAuthStore, isStaffUser } from '../store/authStore'
-import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bookmark, Bug, ChevronDown, ChevronRight, DollarSign, Eye, Layers3, LineChart as LineChartIcon, Megaphone, Network, Palette, Phone, RefreshCw, Search, ShoppingCart, StickyNote, Trash2, TrendingUp, Users, X } from 'lucide-react'
+import { AlertCircle, ArrowDown, ArrowUp, ArrowUpDown, ArrowLeft, BarChart3, Bookmark, Bug, ChevronDown, ChevronRight, Clock, DollarSign, Eye, Layers3, LineChart as LineChartIcon, Megaphone, Network, Palette, Phone, RefreshCw, Search, ShoppingCart, StickyNote, Trash2, TrendingUp, Users, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import {
   Chart as ChartJS,
@@ -1694,6 +1696,12 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
   })
 
   const queryClient = useQueryClient()
+  const { data: budgetSchedules = {} } = useQuery({
+    queryKey: ['budget-schedules'],
+    queryFn: () => getBudgetSchedules().then((r) =>
+      Object.fromEntries((r.data?.data || []).map((s) => [s.objectId, s]))),
+    staleTime: 60_000,
+  })
   const { data: savedViews = [] } = useQuery({
     queryKey: ['ad-saved-views'],
     queryFn: () => getAdSavedViews().then((r) => r.data?.data || []),
@@ -1999,11 +2007,21 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                       </td>
                       <td className="px-4 py-2.5 align-top whitespace-nowrap"><DeliveryStatus status={row.delivery} /></td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">
-                        <EditableBudget
-                          objectId={row.adSetId || row.adId}
-                          dataSourceId={row.dataSourceId}
-                          currentBudget={row.budget}
-                        />
+                        {(() => {
+                          // CBO: the budget lives on the campaign, not the ad set
+                          const budgetOwnerId = String(row.budgetSource || '').startsWith('CAMPAIGN')
+                            ? row.campaignId
+                            : (row.adSetId || row.adId)
+                          return (
+                            <EditableBudget
+                              objectId={budgetOwnerId}
+                              dataSourceId={row.dataSourceId}
+                              currentBudget={row.budget}
+                              isDaily={row.budgetSource === 'ADSET_DAILY' || row.budgetSource === 'CAMPAIGN_DAILY'}
+                              schedule={budgetSchedules[budgetOwnerId]}
+                            />
+                          )
+                        })()}
                       </td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top font-medium">{formatCurrency(spend)}</td>
                       <td className="px-4 py-2.5 text-right text-slate-700 align-top">{formatNumber(row.impressions)}</td>
@@ -3254,12 +3272,13 @@ function DeliveryStatus({ status, childrenAds }) {
   return <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-500">{status || 'UNKNOWN'}</span>
 }
 
-function EditableBudget({ objectId, dataSourceId, currentBudget }) {
+function EditableBudget({ objectId, dataSourceId, currentBudget, isDaily, schedule }) {
   const budgetVnd = Math.round(Number(currentBudget || 0))
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
   const [displayBudget, setDisplayBudget] = useState(budgetVnd)
   const [saving, setSaving] = useState(false)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
 
   const formatCurrency = (v) => new Intl.NumberFormat('vi-VN', {
     style: 'currency', currency: 'VND', maximumFractionDigits: 0,
@@ -3322,15 +3341,161 @@ function EditableBudget({ objectId, dataSourceId, currentBudget }) {
     )
   }
 
+  const schedulePct = Number(schedule?.increasePercent || 0)
+  const hasSchedule = schedulePct !== 0
+
   return (
-    <button
-      onClick={handleEdit}
-      className="text-right hover:bg-blue-50 hover:text-blue-700 px-2 py-0.5 rounded transition-colors cursor-pointer group"
-      title="Nhấn để sửa ngân sách"
-    >
-      {formatCurrency(displayBudget)}
-      <span className="ml-1 text-slate-300 group-hover:text-blue-500 text-[10px]">✎</span>
-    </button>
+    <div className="flex flex-col items-end">
+      <div className="flex items-center">
+        <button
+          onClick={handleEdit}
+          className="text-right hover:bg-blue-50 hover:text-blue-700 px-2 py-0.5 rounded transition-colors cursor-pointer group"
+          title="Nhấn để sửa ngân sách"
+        >
+          {formatCurrency(displayBudget)}
+          <span className="ml-1 text-slate-300 group-hover:text-blue-500 text-[10px]">✎</span>
+        </button>
+        {isDaily && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setScheduleOpen(true) }}
+            className={`p-0.5 rounded hover:bg-amber-50 ${hasSchedule ? 'text-amber-600' : 'text-slate-300 hover:text-amber-600'}`}
+            title="Hẹn giờ tự tăng/giảm ngân sách hằng ngày"
+          >
+            <Clock size={12} />
+          </button>
+        )}
+      </div>
+      {hasSchedule && (
+        <button
+          onClick={(e) => { e.stopPropagation(); setScheduleOpen(true) }}
+          className={`text-[10px] rounded px-1.5 mt-0.5 ${schedulePct > 0
+            ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+            : 'text-red-600 bg-red-50 hover:bg-red-100'}`}
+          title={schedule.lastResult ? `Lần chạy gần nhất: ${schedule.lastResult}` : 'Chưa chạy lần nào'}
+        >
+          {schedulePct > 0 ? '+' : '−'}{Math.abs(schedulePct)}% lúc {schedule.runTime}
+        </button>
+      )}
+      {scheduleOpen && (
+        <BudgetScheduleModal
+          objectId={objectId}
+          dataSourceId={dataSourceId}
+          currentBudget={displayBudget}
+          schedule={schedule}
+          onClose={() => setScheduleOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function BudgetScheduleModal({ objectId, dataSourceId, currentBudget, schedule, onClose }) {
+  const queryClient = useQueryClient()
+  const savedPercent = Number(schedule?.increasePercent || 0)
+  const [direction, setDirection] = useState(savedPercent < 0 ? 'down' : 'up')
+  const [percent, setPercent] = useState(schedule ? String(Math.abs(savedPercent)) : '10')
+  const [runTime, setRunTime] = useState(schedule?.runTime || '18:00')
+  const [budgetLimit, setBudgetLimit] = useState(schedule?.budgetLimit ? String(schedule.budgetLimit) : '')
+  const [saving, setSaving] = useState(false)
+
+  const formatCurrency = (v) => new Intl.NumberFormat('vi-VN', {
+    style: 'currency', currency: 'VND', maximumFractionDigits: 0,
+  }).format(Number(v || 0))
+
+  const isUp = direction === 'up'
+  const pct = Number(percent || 0)
+  const signedPct = isUp ? pct : -pct
+  const preview = Math.round(Number(currentBudget || 0) * (1 + signedPct / 100))
+  const boundedPreview = budgetLimit
+    ? (isUp ? Math.min(preview, Number(budgetLimit)) : Math.max(preview, Number(budgetLimit)))
+    : preview
+
+  const save = async (removing = false) => {
+    if (!removing && (isNaN(pct) || pct < 0 || pct > (isUp ? 100 : 90))) {
+      toast.error(isUp ? 'Phần trăm tăng phải từ 0 đến 100' : 'Phần trăm giảm phải từ 0 đến 90')
+      return
+    }
+    setSaving(true)
+    try {
+      await saveBudgetSchedule({
+        objectId,
+        dataSourceId,
+        increasePercent: removing ? 0 : signedPct,
+        runTime,
+        budgetLimit: budgetLimit || null,
+      })
+      await queryClient.invalidateQueries({ queryKey: ['budget-schedules'] })
+      toast.success(removing || pct === 0
+        ? 'Đã tắt tự điều chỉnh ngân sách'
+        : `Sẽ tự ${isUp ? 'tăng' : 'giảm'} ${pct}% lúc ${runTime} mỗi ngày`)
+      onClose()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Không thể lưu lịch điều chỉnh ngân sách')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={(e) => { e.stopPropagation(); onClose() }}>
+      <div className="bg-white rounded-xl shadow-xl w-80 p-4 text-left" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-semibold text-slate-800 text-sm">Tự điều chỉnh ngân sách hằng ngày</div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+        </div>
+        <div className="space-y-3 text-xs">
+          <div className="grid grid-cols-2 gap-1 p-0.5 bg-slate-100 rounded-lg">
+            {[['up', 'Tăng'], ['down', 'Giảm']].map(([key, label]) => (
+              <button key={key} type="button" onClick={() => setDirection(key)}
+                className={`py-1.5 rounded-md font-medium ${direction === key
+                  ? (key === 'up' ? 'bg-white text-emerald-700 shadow-sm' : 'bg-white text-red-600 shadow-sm')
+                  : 'text-slate-500'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <label className="block">
+            <span className="text-slate-600">{isUp ? 'Tăng' : 'Giảm'} (%) — để 0 là không đổi</span>
+            <input type="number" min="0" max={isUp ? 100 : 90} step="1" value={percent} onChange={(e) => setPercent(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:border-blue-500" />
+          </label>
+          <label className="block">
+            <span className="text-slate-600">Giờ chạy (giờ Việt Nam)</span>
+            <input type="time" value={runTime} onChange={(e) => setRunTime(e.target.value)}
+              className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:border-blue-500" />
+          </label>
+          <label className="block">
+            <span className="text-slate-600">
+              {isUp ? 'Ngân sách tối đa — không tăng quá mức này' : 'Ngân sách tối thiểu — không giảm dưới mức này'} (không bắt buộc)
+            </span>
+            <input type="number" min="0" value={budgetLimit} onChange={(e) => setBudgetLimit(e.target.value)} placeholder="Không giới hạn"
+              className="mt-1 w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:border-blue-500" />
+          </label>
+          {pct > 0 && (
+            <div className={`rounded px-2 py-1.5 ${isUp ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+              Lần tới: {formatCurrency(currentBudget)} → <b>{formatCurrency(boundedPreview)}</b>
+            </div>
+          )}
+          {schedule?.lastResult && (
+            <div className="text-slate-500">
+              Lần chạy gần nhất{schedule.lastRunAt ? ` (${new Date(schedule.lastRunAt).toLocaleString('vi-VN')})` : ''}: {schedule.lastResult}
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 mt-4">
+          {schedule && (
+            <button onClick={() => save(true)} disabled={saving}
+              className="px-3 py-1.5 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+              Tắt tự điều chỉnh
+            </button>
+          )}
+          <button onClick={() => save(false)} disabled={saving}
+            className="px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+            {saving ? 'Đang lưu...' : 'Lưu'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
