@@ -56,16 +56,14 @@ export default defineConfig({
               expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
             },
           },
+          // API responses are never cached: Meta calls often take >10s, and a cached fallback
+          // showed stale ad statuses/budgets after the user had just changed them.
           {
             urlPattern: /\/api\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
-              networkTimeoutSeconds: 10,
-            },
+            handler: 'NetworkOnly',
           },
         ],
+        navigateFallbackDenylist: [/^\/api\//],
       },
     }),
   ],

@@ -6,6 +6,11 @@ import { Toaster } from 'react-hot-toast'
 import App from './App'
 import './index.css'
 
+// Drop API responses cached by older service worker versions (see vite.config.js)
+if ('caches' in window) {
+  caches.delete('api-cache').catch(() => {})
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
