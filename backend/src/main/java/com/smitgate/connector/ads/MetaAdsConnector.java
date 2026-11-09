@@ -1350,7 +1350,11 @@ public class MetaAdsConnector implements AdsConnector {
                 .block(Duration.ofSeconds(30));
     }
 
-    public void updateAdStatus(Long tenantId, Long dataSourceId, String adId, String status) {
+    /**
+     * Sets a campaign/ad set/ad status, then reads it back from Meta so the caller gets the real
+     * result instead of assuming the POST took effect. Returns {status, effectiveStatus}.
+     */
+    public Map<String, String> updateAdStatus(Long tenantId, Long dataSourceId, String adId, String status) {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
         String token = dataSourceService.decryptSecret(ds);
 
@@ -1360,12 +1364,40 @@ public class MetaAdsConnector implements AdsConnector {
                 .queryParam("access_token", token)
                 .build().encode().toUri();
 
-        webClientBuilder.build()
+        String response = webClientBuilder.build()
                 .post()
                 .uri(uri)
                 .retrieve()
+                .onStatus(s -> s.is4xxClientError() || s.is5xxServerError(),
+                        res -> res.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new RuntimeException("Meta API lỗi đổi trạng thái: " + body))))
                 .bodyToMono(String.class)
                 .block(Duration.ofSeconds(30));
+
+        URI readBack = UriComponentsBuilder
+                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + adId)
+                .queryParam("fields", "status,effective_status")
+                .queryParam("access_token", token)
+                .build().encode().toUri();
+        JsonNode current = webClientBuilder.build()
+                .get()
+                .uri(readBack)
+                .retrieve()
+                .onStatus(s -> s.is4xxClientError() || s.is5xxServerError(),
+                        res -> res.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new RuntimeException("Meta API lỗi đọc trạng thái: " + body))))
+                .bodyToMono(JsonNode.class)
+                .block(Duration.ofSeconds(15));
+        String actualStatus = current != null ? current.path("status").asText("") : "";
+        String effectiveStatus = current != null ? current.path("effective_status").asText("") : "";
+        log.info("Toggle {} -> {}: meta response={}, now status={}, effective_status={}",
+                adId, status, response, actualStatus, effectiveStatus);
+
+        if (!status.equalsIgnoreCase(actualStatus)) {
+            throw new IllegalStateException("Meta chưa đổi trạng thái (hiện tại: " + actualStatus
+                    + ", phản hồi: " + response + ")");
+        }
+        return Map.of("status", actualStatus, "effectiveStatus", effectiveStatus);
     }
 
     /**

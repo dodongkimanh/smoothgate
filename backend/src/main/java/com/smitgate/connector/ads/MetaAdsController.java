@@ -263,8 +263,11 @@ public class MetaAdsController {
         Long dataSourceId = Long.parseLong(body.get("dataSourceId"));
         String newStatus = body.get("status");
         accessService.requireMetaObject(tenantId, objectId);
-        metaAdsConnector.updateAdStatus(tenantId, dataSourceId, objectId, newStatus);
-        return ResponseEntity.ok(ApiResponse.ok(Map.of("objectId", objectId, "status", newStatus)));
+        Map<String, String> actual = metaAdsConnector.updateAdStatus(tenantId, dataSourceId, objectId, newStatus);
+        return ResponseEntity.ok(ApiResponse.ok(Map.of(
+                "objectId", objectId,
+                "status", actual.get("status"),
+                "effectiveStatus", actual.get("effectiveStatus"))));
     }
 }
 

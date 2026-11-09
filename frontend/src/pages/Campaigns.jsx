@@ -3173,9 +3173,11 @@ function MetaToggle({ objectId, dataSourceId, status, name }) {
     setLoading(true)
     setShowConfirm(false)
     try {
-      await toggleMetaStatus(objectId, dataSourceId, newStatus)
-      setOn(!on)
-      toast.success(newStatus === 'ACTIVE' ? 'Đã bật' : 'Đã tắt')
+      // Backend reads the status back from Meta, so this reflects what Meta actually stored
+      const res = await toggleMetaStatus(objectId, dataSourceId, newStatus)
+      const actual = (res.data?.data?.status || newStatus).toUpperCase()
+      setOn(actual === 'ACTIVE')
+      toast.success(actual === 'ACTIVE' ? 'Đã bật' : 'Đã tắt')
     } catch (err) {
       toast.error(err.response?.data?.message || 'Không thể đổi trạng thái')
     } finally {
