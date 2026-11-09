@@ -1320,7 +1320,7 @@ function CampaignPerformanceTable({ rows, reportCampaignMap, adsPerformance, sel
                       <MetaToggle
                         objectId={row.id}
                         dataSourceId={row.dataSourceId}
-                        status={row.status || row.effective_status}
+                        status={row.configuredStatus || row.status || row.effective_status}
                         name={row.name}
                       />
                     </td>
@@ -1595,7 +1595,7 @@ function AdSetsTable({ rows, adSetMetrics, adsPerformance, selectedAdSetIds, onT
                         <MetaToggle
                           objectId={row.id}
                           dataSourceId={row.dataSourceId}
-                          status={row.status}
+                          status={row.configuredStatus || row.status}
                           name={row.name}
                         />
                       </td>
@@ -1974,7 +1974,7 @@ function AdsPerformanceTable({ rows, totalRows, totals, activeAccounts, fromDate
                         <MetaToggle
                           objectId={row.adId}
                           dataSourceId={row.dataSourceId}
-                          status={row.delivery}
+                          status={row.configuredStatus || row.delivery}
                           name={row.adName}
                         />
                       </td>
@@ -3167,6 +3167,8 @@ function MetaToggle({ objectId, dataSourceId, status, name }) {
   const [on, setOn] = useState(isActive)
   const [loading, setLoading] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  // Follow fresh data from a refetch (e.g. the refresh button)
+  useEffect(() => { setOn(isActive) }, [isActive])
 
   const handleConfirm = async () => {
     const newStatus = on ? 'PAUSED' : 'ACTIVE'

@@ -683,6 +683,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("id", campaignId);
                 item.put("name", row.path("name").asText(""));
                 item.put("status", row.path("effective_status").asText(row.path("status").asText("UNKNOWN")));
+                item.put("configuredStatus", row.path("status").asText(""));
                 item.put("adAccountId", normalizedAccountId);
                 campaigns.add(item);
 
@@ -738,6 +739,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("id", row.path("id").asText(""));
                 item.put("name", row.path("name").asText(""));
                 item.put("status", row.path("effective_status").asText(row.path("status").asText("UNKNOWN")));
+                item.put("configuredStatus", row.path("status").asText(""));
                 item.put("campaignId", rowCampaignId);
                 item.put("campaignName", row.path("campaign").path("name").asText(""));
                 item.put("adAccountId", normalizedAccountId);
@@ -787,6 +789,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("id", row.path("id").asText(""));
                 item.put("name", row.path("name").asText(""));
                 item.put("status", row.path("effective_status").asText(row.path("status").asText("UNKNOWN")));
+                item.put("configuredStatus", row.path("status").asText(""));
                 item.put("adSetId", rowAdSetId);
                 item.put("adSetName", row.path("adset").path("name").asText(""));
                 item.put("campaignId", rowCampaignId);
@@ -927,6 +930,7 @@ public class MetaAdsConnector implements AdsConnector {
                 item.put("adAccountName", adAccountName);
                 item.put("createdDate", ad.path("created_time").asText(""));
                 item.put("delivery", ad.path("effective_status").asText(ad.path("status").asText("UNKNOWN")));
+                item.put("configuredStatus", ad.path("status").asText(""));
                 item.put("campaignId", rowCampaignId);
                 item.put("campaignName", adset.path("campaign").path("name").asText(""));
                 item.put("adSetId", rowAdSetId);
