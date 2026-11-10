@@ -644,26 +644,6 @@ export default function Campaigns() {
     return true
   })
 
-  const adsTotals = useMemo(() => {
-    const base = filteredAdsPerformance.reduce((acc, row) => {
-      const spend = Number(row.spend || 0)
-      const orderProfit = Number(row.orderProfit || 0)
-      acc.totalSpend += spend
-      acc.totalOrderProfit += orderProfit
-      acc.totalProfitAfterAds += orderProfit - spend
-      acc.totalOrderCount += Number(row.orderCount || 0)
-      return acc
-    }, { totalSpend: 0, totalOrderProfit: 0, totalProfitAfterAds: 0, totalOrderCount: 0 })
-
-    // Sum campaign-level messageContacts (deduplicated by Meta) instead of per-ad sum
-    let totalMessageContacts = 0
-    reportCampaigns.forEach((item) => {
-      totalMessageContacts += Number(item.messageContacts || 0)
-    })
-    base.totalMessageContacts = totalMessageContacts
-    return base
-  }, [filteredAdsPerformance, reportCampaigns])
-
   const campaignTotals = useMemo(() => {
     const campaignsToSum = selectedCampaignIds.length > 0
       ? filteredCampaigns.filter((c) => selectedCampaignIds.includes(c._rowKey || c.id))
@@ -755,10 +735,23 @@ export default function Campaigns() {
       acc.totalProfitOrderCount += Number(row.profitOrderCount || 0)
       return acc
     }, { totalSpend: 0, totalSales: 0, totalOrderProfit: 0, totalProfitAfterAds: 0, totalPhoneCount: 0, totalOrderCount: 0, totalProfitOrderCount: 0 })
+    // Messages only for the ads on screen. Campaign-level counts (deduplicated by Meta) are used
+    // when whole campaigns are shown; once ad sets or a saved view narrow it down, sum the ads.
+    const adLevelFilter = selectedAdSetIds.length > 0 || Boolean(activeAdView)
     let totalMessageContacts = 0
-    reportCampaigns.forEach((item) => {
-      totalMessageContacts += Number(item.messageContacts || 0)
-    })
+    if (adLevelFilter) {
+      effectiveAdsForDisplay.forEach((row) => { totalMessageContacts += Number(row.messageContacts || 0) })
+    } else {
+      const adsByCampaign = new Map()
+      effectiveAdsForDisplay.forEach((row) => {
+        const id = String(row.campaignId || '')
+        adsByCampaign.set(id, (adsByCampaign.get(id) || 0) + Number(row.messageContacts || 0))
+      })
+      adsByCampaign.forEach((adSum, campaignId) => {
+        const report = reportCampaignMap.get(campaignId)
+        totalMessageContacts += report ? Number(report.messageContacts || 0) : adSum
+      })
+    }
     base.totalMessageContacts = totalMessageContacts
     // Each budget counted once: ad-set budgets per ad set, CBO budgets per campaign.
     // Only running ad sets with a daily budget count toward today's budget.
@@ -773,7 +766,7 @@ export default function Campaigns() {
     })
     base.totalDailyBudget = [...budgetByOwner.values()].reduce((sum, v) => sum + v, 0)
     return base
-  }, [effectiveAdsForDisplay, reportCampaigns])
+  }, [effectiveAdsForDisplay, reportCampaignMap, selectedAdSetIds, activeAdView])
 
   const adSetMetrics = useMemo(() => {
     const map = {}
