@@ -6,8 +6,6 @@ import {
   ShoppingCart,
   DollarSign,
   TrendingUp,
-  Target,
-  Eye,
   Banknote,
   BarChart3,
   Facebook,
@@ -331,8 +329,15 @@ export default function Dashboard() {
     },
     { label: 'Doanh thu', value: formatCurrency(overview.totalRevenue), icon: DollarSign, color: 'text-emerald-600 bg-emerald-50' },
     { label: 'ROAS', value: `${Number(overview.roas || 0).toFixed(2)}x`, icon: TrendingUp, color: 'text-purple-600 bg-purple-50' },
-    { label: 'CPO', value: formatCurrency(overview.cpo), icon: Target, color: 'text-orange-600 bg-orange-50' },
-    { label: 'Hiển thị', value: formatNumber(overview.totalImpressions), icon: Eye, color: 'text-cyan-600 bg-cyan-50' },
+    { label: 'Tin nhắn liên hệ', value: formatNumber(overview.messageContacts), icon: MessageCircle, color: 'text-violet-600 bg-violet-50' },
+    {
+      label: 'Chi phí / tin nhắn',
+      value: formatCurrency(Number(overview.messageContacts || 0) > 0
+        ? Number(overview.totalSpend || 0) / Number(overview.messageContacts || 0)
+        : 0),
+      icon: MessageCircle,
+      color: 'text-cyan-600 bg-cyan-50',
+    },
     { label: 'Lợi nhuận đơn hàng', value: formatCurrency(overview.totalOrderProfit), icon: Banknote, color: 'text-indigo-600 bg-indigo-50' },
     {
       // SĐT = số điện thoại phân biệt từ đơn trạng thái Mới + Đã xác nhận
@@ -342,7 +347,6 @@ export default function Dashboard() {
       color: 'text-teal-600 bg-teal-50',
     },
     { label: 'Đơn đã gán nguồn', value: formatNumber(overview.attributedOrders), icon: BarChart3, color: 'text-pink-600 bg-pink-50' },
-    { label: 'Tin nhắn liên hệ', value: formatNumber(overview.messageContacts), icon: MessageCircle, color: 'text-violet-600 bg-violet-50' },
     {
       label: 'Lợi nhuận sau chi phí QC',
       value: formatCurrency(Number(overview.totalOrderProfit || 0) - Number(overview.totalSpend || 0)),
