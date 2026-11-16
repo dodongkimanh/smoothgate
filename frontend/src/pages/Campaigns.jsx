@@ -700,6 +700,14 @@ export default function Campaigns() {
     setSelectedCampaignIds(filteredCampaigns.map((c) => c._rowKey || c.id))
   }
 
+  const spentCampaignKeys = useMemo(() => filteredCampaigns
+    .filter((c) => Number(reportCampaignMap.get(String(c.id || ''))?.totalSpend || 0) > 0)
+    .map((c) => c._rowKey || c.id), [filteredCampaigns, reportCampaignMap])
+
+  const selectSpentCampaigns = () => {
+    setSelectedCampaignIds(spentCampaignKeys)
+  }
+
   const clearCampaignSelection = () => {
     setSelectedCampaignIds([])
   }
@@ -1087,6 +1095,8 @@ export default function Campaigns() {
                   selectedCampaignIds={selectedCampaignIds}
                   onToggleCampaign={toggleCampaign}
                   onSelectAllCampaigns={selectAllCampaigns}
+                  onSelectSpentCampaigns={selectSpentCampaigns}
+                  spentCampaignCount={spentCampaignKeys.length}
                   onClearCampaignSelection={clearCampaignSelection}
                   onSelectCampaign={(row) => {
                     setSelectedCampaign(row)
@@ -1189,7 +1199,7 @@ export default function Campaigns() {
   )
 }
 
-function CampaignPerformanceTable({ rows, reportCampaignMap, adsPerformance, selectedCampaign, selectedCampaignIds, onToggleCampaign, onSelectAllCampaigns, onClearCampaignSelection, onSelectCampaign, sortField, sortDir, onSortToggle }) {
+function CampaignPerformanceTable({ rows, reportCampaignMap, adsPerformance, selectedCampaign, selectedCampaignIds, onToggleCampaign, onSelectAllCampaigns, onSelectSpentCampaigns, spentCampaignCount, onClearCampaignSelection, onSelectCampaign, sortField, sortDir, onSortToggle }) {
   const campaignAdsMetrics = useMemo(() => {
     const map = {}
     ;(adsPerformance || []).forEach(ad => {
@@ -1243,6 +1253,7 @@ function CampaignPerformanceTable({ rows, reportCampaignMap, adsPerformance, sel
           </span>
         )}
         <button type="button" onClick={onSelectAllCampaigns} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100">Chọn tất cả</button>
+        <button type="button" onClick={onSelectSpentCampaigns} disabled={!spentCampaignCount} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-50 disabled:hover:bg-transparent">Chọn đã chi tiêu ({spentCampaignCount || 0})</button>
         {someChecked && <button type="button" onClick={onClearCampaignSelection} className="px-2.5 py-1 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:bg-slate-100">Bỏ chọn</button>}
       </div>
       <div className="overflow-x-auto">
