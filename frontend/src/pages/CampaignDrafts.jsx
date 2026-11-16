@@ -332,7 +332,7 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
                 </label>
                 <Input label="Ngân sách hàng ngày (đ)" type="number" min="0" value={group.dailyBudget} onChange={(e) => setG(gi, 'dailyBudget', e.target.value)} />
                 <Input label="Ngày bắt đầu" type="datetime-local" value={group.startDate} onChange={(e) => setG(gi, 'startDate', e.target.value)} />
-                <Input label="Vị trí (địa lý)" value={group.locations} onChange={(e) => setG(gi, 'locations', e.target.value)} />
+                <Input label="Vị trí (địa lý)" value={group.locations} onChange={(e) => setG(gi, 'locations', e.target.value)} placeholder="VN | Hà Nội, Hải Phòng | VN, trừ: TP.HCM" />
                 <Input label="Độ tuổi tối thiểu" type="number" min="13" max="65" value={group.minAge} onChange={(e) => setG(gi, 'minAge', e.target.value)} />
                 <Input label="Độ tuổi tối đa" type="number" min="18" max="65" value={group.maxAge} onChange={(e) => setG(gi, 'maxAge', e.target.value)} placeholder="Để trống = không giới hạn" />
                 <Input label="Gợi ý độ tuổi (ghi chú)" value={group.ageSuggestion} onChange={(e) => setG(gi, 'ageSuggestion', e.target.value)} placeholder="VD: 55-65+" />
@@ -342,7 +342,7 @@ function CampaignForm({ initial, onCancel, onSubmit, isSaving }) {
                 <Input label="ID đối tượng tùy chỉnh thật (cách nhau bởi dấu phẩy)" value={group.customAudienceIds} onChange={(e) => setG(gi, 'customAudienceIds', e.target.value)} placeholder="VD: 120211234567890, 120219876543210" />
                 <TextArea label="Nhắm mục tiêu chi tiết" value={group.detailedTargeting} onChange={(e) => setG(gi, 'detailedTargeting', e.target.value)} placeholder="VD: Sở thích: Đồ thờ cúng, Phong thủy; Hành vi: Đã tương tác trang Facebook..." />
                 <Select label="Mục tiêu hiệu quả" value={group.performanceGoal} onChange={(e) => setG(gi, 'performanceGoal', e.target.value)} options={PERFORMANCE_GOALS} />
-                <TextArea label="Vị trí quảng cáo" value={group.placements} onChange={(e) => setG(gi, 'placements', e.target.value)} placeholder="VD: Bảng feed, Reels, Marketplace, Tin..." />
+                <TextArea label="Vị trí quảng cáo" value={group.placements} onChange={(e) => setG(gi, 'placements', e.target.value)} placeholder="Để trống = Tự động. VD: Bảng feed, Reels — hoặc loại trừ: trừ: In-stream, Reels overlay, Tin" />
                 <Toggle label="Mở rộng nhắm mục tiêu" checked={group.advantageAudience} onChange={(v) => setG(gi, 'advantageAudience', v)} />
                 <Toggle label="Lên lịch điều chỉnh ngân sách" checked={group.budgetScheduling} onChange={(v) => setG(gi, 'budgetScheduling', v)} />
               </div>

@@ -75,6 +75,16 @@ public class CampaignDraftPublisher {
             throw new IllegalArgumentException("Chiến dịch chưa có nhóm quảng cáo nào");
         }
 
+        // Validate free-text targeting up front so a typo fails before an empty campaign is created on Meta.
+        for (Map<String, Object> group : adGroups) {
+            try {
+                DraftTargetingParser.parseLocations(String.valueOf(group.getOrDefault("locations", "")));
+                DraftTargetingParser.parsePlacements(String.valueOf(group.getOrDefault("placements", "")));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Nhóm \"" + group.get("name") + "\": " + e.getMessage());
+            }
+        }
+
         String metaObjective = OBJECTIVE_MAP.getOrDefault(draft.getObjective(), "OUTCOME_ENGAGEMENT");
         boolean campaignOwnsBudget = "Ngân sách chiến dịch".equals(campaign.get("budgetLevel"));
 
@@ -129,11 +139,15 @@ public class CampaignDraftPublisher {
                         String.valueOf(group.get("performanceGoal")), "CONVERSATIONS");
                 String devicePlatformOption = String.valueOf(group.getOrDefault("devicePlatform", "Tất cả"));
                 List<String> customAudienceIds = parseCustomAudienceIds(group.get("customAudienceIds"));
+                DraftTargetingParser.LocationSpec locations =
+                        DraftTargetingParser.parseLocations(String.valueOf(group.getOrDefault("locations", "")));
+                Map<String, Object> placementTargeting =
+                        DraftTargetingParser.parsePlacements(String.valueOf(group.getOrDefault("placements", "")));
                 String metaAdSetId = metaAdsConnector.createAdSet(
                         tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(), metaCampaignId,
                         String.valueOf(group.getOrDefault("name", draft.getName())),
                         adSetBudget, ageMin, ageMax, gendersOption, pageId, startTimeIso, advantageAudience,
-                        optimizationGoal, devicePlatformOption, customAudienceIds);
+                        optimizationGoal, devicePlatformOption, customAudienceIds, locations, placementTargeting);
                 group.put("metaAdSetId", metaAdSetId);
                 result.put("metaAdSetId", metaAdSetId);
 

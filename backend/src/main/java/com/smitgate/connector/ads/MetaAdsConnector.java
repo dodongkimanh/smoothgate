@@ -3,6 +3,7 @@ package com.smitgate.connector.ads;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.smitgate.campaign.DraftTargetingParser;
 import com.smitgate.config.SystemSettingRepository;
 import com.smitgate.connector.pos.OrderRepository;
 import com.smitgate.connector.pos.OrderStatusClassifier;
@@ -1451,12 +1452,16 @@ public class MetaAdsConnector implements AdsConnector {
     public String createAdSet(Long tenantId, Long dataSourceId, String adAccountId, String campaignId,
                                String name, Long dailyBudgetVnd, int ageMin, Integer ageMax,
                                String gendersOption, String pageId, String startTimeIso, boolean advantageAudience,
-                               String optimizationGoal, String devicePlatformOption, List<String> customAudienceIds) {
+                               String optimizationGoal, String devicePlatformOption, List<String> customAudienceIds,
+                               DraftTargetingParser.LocationSpec locations, Map<String, Object> placementTargeting) {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
         String token = dataSourceService.decryptSecret(ds);
         String normalizedAccountId = normalizeAdAccountId(adAccountId);
 
         Map<String, Object> targeting = new HashMap<>();
+        if (placementTargeting != null) {
+            targeting.putAll(placementTargeting);
+        }
         targeting.put("age_min", ageMin);
         if (ageMax != null) {
             targeting.put("age_max", ageMax);
@@ -1466,7 +1471,14 @@ public class MetaAdsConnector implements AdsConnector {
         } else if ("Nữ".equals(gendersOption)) {
             targeting.put("genders", List.of(2));
         }
-        targeting.put("geo_locations", Map.of("countries", List.of("VN")));
+        if (locations == null || locations.wholeCountry()) {
+            targeting.put("geo_locations", Map.of("countries", List.of("VN")));
+        } else {
+            targeting.put("geo_locations", Map.of("regions", regionKeys(token, locations.includeRegions())));
+        }
+        if (locations != null && !locations.excludeRegions().isEmpty()) {
+            targeting.put("excluded_geo_locations", Map.of("regions", regionKeys(token, locations.excludeRegions())));
+        }
         if ("Di động".equals(devicePlatformOption)) {
             targeting.put("device_platforms", List.of("mobile"));
         } else if ("Máy tính".equals(devicePlatformOption)) {
@@ -1523,6 +1535,54 @@ public class MetaAdsConnector implements AdsConnector {
         } catch (Exception e) {
             throw new RuntimeException("Lỗi xây dựng targeting cho nhóm quảng cáo: " + e.getMessage());
         }
+    }
+
+    /**
+     * Resolves Vietnamese province names (any spelling: "Hà Nội", "Hanoi", "TP.HCM", "Hải Dương Province")
+     * to Meta region targeting entries. Fails listing every name Meta has no region for.
+     */
+    private List<Map<String, String>> regionKeys(String token, List<String> names) {
+        URI uri = UriComponentsBuilder
+                .fromUriString(GRAPH_BASE + "/" + apiVersion + "/search")
+                .queryParam("type", "adgeolocation")
+                .queryParam("location_types", "[\"region\"]")
+                .queryParam("country_code", "VN")
+                .queryParam("q", "")
+                .queryParam("limit", 200)
+                .queryParam("access_token", token)
+                .build().encode().toUri();
+        JsonNode response = webClientBuilder.build()
+                .get().uri(uri)
+                .retrieve()
+                .onStatus(status -> status.is4xxClientError(),
+                        res -> res.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new IllegalArgumentException("Meta lỗi khi tra cứu tỉnh/thành: " + body))))
+                .bodyToMono(JsonNode.class)
+                .block(Duration.ofSeconds(30));
+
+        Map<String, String> keyByName = new HashMap<>();
+        if (response != null) {
+            for (JsonNode region : response.path("data")) {
+                keyByName.put(DraftTargetingParser.canonicalRegion(region.path("name").asText()), region.path("key").asText());
+            }
+        }
+
+        List<Map<String, String>> regions = new ArrayList<>();
+        List<String> unknown = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (String name : names) {
+            String key = keyByName.get(DraftTargetingParser.canonicalRegion(name));
+            if (key == null) {
+                unknown.add(name);
+            } else if (seen.add(key)) {
+                regions.add(Map.of("key", key));
+            }
+        }
+        if (!unknown.isEmpty()) {
+            throw new IllegalArgumentException("Meta không có tỉnh/thành: " + String.join(", ", unknown)
+                    + " (Meta vẫn dùng 63 tỉnh cũ, VD: Hà Nội, Hải Dương, Thành phố Hồ Chí Minh)");
+        }
+        return regions;
     }
 
     /**
