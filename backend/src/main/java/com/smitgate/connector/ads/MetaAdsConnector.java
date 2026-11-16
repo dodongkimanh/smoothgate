@@ -1422,12 +1422,15 @@ public class MetaAdsConnector implements AdsConnector {
                 .queryParam("objective", objective)
                 .queryParam("status", "PAUSED")
                 .queryParam("special_ad_categories", "[]")
-                // Meta now requires this explicitly: true = campaign-level shared budget
-                // (Advantage Campaign Budget / CBO), false = each ad set has its own budget.
-                .queryParam("is_adset_budget_sharing_enabled", dailyBudgetVnd != null ? "true" : "false")
                 .queryParam("access_token", token);
         if (dailyBudgetVnd != null) {
+            // Campaign budget (Advantage Campaign Budget): the bid strategy lives on the campaign too.
             builder.queryParam("daily_budget", dailyBudgetVnd.toString());
+            builder.queryParam("bid_strategy", "LOWEST_COST_WITHOUT_CAP");
+        } else {
+            // Ad-set budgets: Meta requires this flag explicitly. "true" would let ad sets borrow up to
+            // 20% of each other's budget; Meta rejects it outright when the campaign owns the budget.
+            builder.queryParam("is_adset_budget_sharing_enabled", "false");
         }
 
         JsonNode response = webClientBuilder.build()
@@ -1505,13 +1508,14 @@ public class MetaAdsConnector implements AdsConnector {
                     .queryParam("billing_event", "IMPRESSIONS")
                     .queryParam("optimization_goal", optimizationGoal)
                     .queryParam("destination_type", "MESSENGER")
-                    .queryParam("bid_strategy", "LOWEST_COST_WITHOUT_CAP")
                     .queryParam("targeting", objectMapper.writeValueAsString(targeting))
                     .queryParam("promoted_object", objectMapper.writeValueAsString(promotedObject))
                     .queryParam("status", "PAUSED")
                     .queryParam("access_token", token);
             if (dailyBudgetVnd != null) {
                 builder.queryParam("daily_budget", dailyBudgetVnd.toString());
+                // With a campaign budget the bid strategy is set on the campaign, not here.
+                builder.queryParam("bid_strategy", "LOWEST_COST_WITHOUT_CAP");
             }
             if (startTimeIso != null && !startTimeIso.isBlank()) {
                 builder.queryParam("start_time", startTimeIso);
