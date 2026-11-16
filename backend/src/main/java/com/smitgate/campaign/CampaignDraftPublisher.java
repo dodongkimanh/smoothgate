@@ -96,13 +96,24 @@ public class CampaignDraftPublisher {
             }
         }
 
-        String metaCampaignId;
-        try {
-            metaCampaignId = metaAdsConnector.createCampaign(
-                    tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(),
-                    draft.getName(), metaObjective, campaignBudget);
-        } catch (Exception e) {
-            throw new RuntimeException("Không tạo được chiến dịch trên Meta: " + e.getMessage());
+        // A retry after every ad set failed reuses the empty campaign the first attempt left behind,
+        // instead of piling up empty duplicates. Copied drafts also carry the original's ID, so only
+        // reuse a campaign that is in this account, not deleted, and still has no ad sets.
+        String previousCampaignId = trimToNull(String.valueOf(campaign.getOrDefault("metaCampaignId", "")));
+        String metaCampaignId = null;
+        if (previousCampaignId != null && metaAdsConnector.isEmptyCampaign(
+                tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(), previousCampaignId)) {
+            metaCampaignId = previousCampaignId;
+            log.info("Draft {} reuses empty Meta campaign {} from a previous failed publish", draft.getId(), metaCampaignId);
+        }
+        if (metaCampaignId == null) {
+            try {
+                metaCampaignId = metaAdsConnector.createCampaign(
+                        tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(),
+                        draft.getName(), metaObjective, campaignBudget);
+            } catch (Exception e) {
+                throw new RuntimeException("Không tạo được chiến dịch trên Meta: " + e.getMessage());
+            }
         }
         campaign.put("metaCampaignId", metaCampaignId);
         campaign.put("metaAdAccountExternalId", adAccount.getExternalAccountId());

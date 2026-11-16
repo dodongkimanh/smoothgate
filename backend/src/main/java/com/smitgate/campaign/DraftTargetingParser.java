@@ -33,7 +33,8 @@ public final class DraftTargetingParser {
     // Positions used when the user writes "trừ: ..." — the automatic set minus what they exclude.
     // Audience Network and the right column are left out: neither delivers Messenger-destination ads well.
     private static final Map<String, List<String>> ALL_POSITIONS = Map.of(
-            FB, List.of("feed", "profile_feed", "marketplace", "video_feeds", "search", "story",
+            // video_feeds is not listed: Meta retired it (subcode 2490562 on ad set create).
+            FB, List.of("feed", "profile_feed", "marketplace", "search", "story",
                     "facebook_reels", "facebook_reels_overlay", "instream_video", "notification"),
             IG, List.of("stream", "story", "explore", "reels"),
             MS, List.of("messenger_home"));
@@ -49,7 +50,6 @@ public final class DraftTargetingParser {
         alias(List.of("instream", "instreamvideo", "videotrongluong"), "facebook:instream_video");
         alias(List.of("tin", "story", "stories"), "facebook:story", "instagram:story");
         alias(List.of("marketplace"), "facebook:marketplace");
-        alias(List.of("video", "videofeeds", "bangfeedvideo"), "facebook:video_feeds");
         alias(List.of("timkiem", "search", "ketquatimkiem"), "facebook:search");
         alias(List.of("trangcanhan", "profile", "profilefeed", "feedtrangcanhan"), "facebook:profile_feed");
         alias(List.of("thongbao", "notification"), "facebook:notification");
@@ -121,7 +121,7 @@ public final class DraftTargetingParser {
         }
         if (!unknown.isEmpty()) {
             throw new IllegalArgumentException("Không hiểu vị trí quảng cáo: " + String.join(", ", unknown)
-                    + ". Dùng: Bảng feed, Reels, Reels overlay, In-stream, Tin, Marketplace, Video, Tìm kiếm, "
+                    + ". Dùng: Bảng feed, Reels, Reels overlay, In-stream, Tin, Marketplace, Tìm kiếm, "
                     + "Trang cá nhân, Thông báo, Messenger, Instagram — hoặc \"trừ: ...\" để loại trừ.");
         }
         return entries;

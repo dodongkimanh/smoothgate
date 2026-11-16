@@ -1542,6 +1542,34 @@ public class MetaAdsConnector implements AdsConnector {
     }
 
     /**
+     * True when the campaign exists in this ad account, is not deleted/archived and has no ad sets —
+     * i.e. the empty shell left by a publish whose ad sets all failed. Any lookup error means false.
+     */
+    public boolean isEmptyCampaign(Long tenantId, Long dataSourceId, String adAccountId, String campaignId) {
+        try {
+            DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
+            String token = dataSourceService.decryptSecret(ds);
+            URI uri = UriComponentsBuilder
+                    .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + campaignId)
+                    .queryParam("fields", "account_id,effective_status,adsets.limit(1){id}")
+                    .queryParam("access_token", token)
+                    .build().encode().toUri();
+            JsonNode campaign = webClientBuilder.build().get().uri(uri)
+                    .retrieve().bodyToMono(JsonNode.class).block(Duration.ofSeconds(30));
+            if (campaign == null) return false;
+            String accountId = "act_" + campaign.path("account_id").asText();
+            String status = campaign.path("effective_status").asText();
+            boolean hasAdSets = campaign.path("adsets").path("data").size() > 0;
+            return accountId.equals(normalizeAdAccountId(adAccountId))
+                    && !"DELETED".equals(status) && !"ARCHIVED".equals(status)
+                    && !hasAdSets;
+        } catch (Exception e) {
+            log.warn("Could not check Meta campaign {} for reuse: {}", campaignId, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Resolves Vietnamese province names (any spelling: "Hà Nội", "Hanoi", "TP.HCM", "Hải Dương Province")
      * to Meta region targeting entries. Fails listing every name Meta has no region for.
      */
