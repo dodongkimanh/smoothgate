@@ -63,6 +63,22 @@ public class Order {
     @Column(name = "click_id", length = 500)
     private String clickId;
 
+    /** Facebook Page the customer messaged (from Pancake conversation_id "pageId_psid"). */
+    @Column(name = "fb_page_id", length = 32)
+    private String fbPageId;
+
+    /** Page-scoped user ID of the customer on that Page — lets Meta match the purchase to the ad conversation. */
+    @Column(name = "fb_psid", length = 64)
+    private String fbPsid;
+
+    /** When the Purchase event was accepted by Meta Conversions API; null = not sent yet. */
+    @Column(name = "meta_purchase_sent_at")
+    private LocalDateTime metaPurchaseSentAt;
+
+    /** Last error from sending the Purchase event, cleared once it is accepted. */
+    @Column(name = "meta_purchase_error", length = 500)
+    private String metaPurchaseError;
+
     @Column(name = "raw_json", columnDefinition = "TEXT")
     private String rawJson;
 

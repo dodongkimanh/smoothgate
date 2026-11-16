@@ -634,6 +634,7 @@ public class PancakeConnector {
         setIfPresent(node, "p_utm_content",  order.getUtmContent(),  order::setUtmContent);
         setIfPresent(node, "p_utm_term",     order.getUtmTerm(),     order::setUtmTerm);
         hydrateTrackingId(order, node);
+        hydrateMessengerCustomer(order, node);
 
         // Also check note field for UTM params (tracking snippet may embed them)
         String note = node.path("note").asText("");
@@ -651,6 +652,25 @@ public class PancakeConnector {
         }
         order.setRawJson(raw);
         orderRepository.save(order);
+    }
+
+    private static final java.util.regex.Pattern PAGE_SCOPED_ID = java.util.regex.Pattern.compile("^([0-9]+)_([0-9]+)$");
+
+    /**
+     * Messenger orders carry conversation_id = "<pageId>_<psid>" (the customer's fb_id has the same shape).
+     * Comment conversations and Zalo/website orders don't match and are left empty.
+     */
+    private void hydrateMessengerCustomer(Order order, JsonNode node) {
+        for (String candidate : new String[] {
+                node.path("conversation_id").asText(""),
+                node.path("customer").path("fb_id").asText("")}) {
+            java.util.regex.Matcher m = PAGE_SCOPED_ID.matcher(candidate.trim());
+            if (m.matches()) {
+                order.setFbPageId(m.group(1));
+                order.setFbPsid(m.group(2));
+                return;
+            }
+        }
     }
 
     /** Map Poscake integer status codes to English lowercase slugs (must match VALID/LEAD_ORDER_STATUSES). */

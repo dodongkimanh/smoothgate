@@ -56,6 +56,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
                 String getRawJsonSnippet();
         }
 
+    /** Paid Messenger orders not yet reported to Meta Conversions API (status is filtered by the caller). */
+    @Query("SELECT o FROM Order o WHERE o.tenantId = :tenantId AND o.metaPurchaseSentAt IS NULL "
+            + "AND o.fbPsid IS NOT NULL AND o.fbPageId IS NOT NULL AND o.revenue > 0 "
+            + "AND o.createdAtExternal >= :since")
+    List<Order> findUnsentMetaPurchases(@Param("tenantId") Long tenantId, @Param("since") LocalDateTime since);
+
     Optional<Order> findByTenantIdAndPosShopIdAndExternalOrderId(
             Long tenantId, Long posShopId, String externalOrderId);
 

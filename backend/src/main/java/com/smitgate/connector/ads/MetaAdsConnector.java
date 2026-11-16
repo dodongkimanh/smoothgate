@@ -123,7 +123,8 @@ public class MetaAdsConnector implements AdsConnector {
                 .fromUriString("https://www.facebook.com/" + apiVersion + "/dialog/oauth")
                 .queryParam("client_id", effectiveAppId)
                 .queryParam("redirect_uri", getRedirectUri())
-                .queryParam("scope", "ads_read,ads_management,read_insights")
+                // page_events: send paid orders back to Meta as Purchase events (MetaPurchaseEventService).
+                .queryParam("scope", "ads_read,ads_management,read_insights,pages_show_list,page_events")
                 .queryParam("state", tenantId.toString())
                 .build().toUriString();
     }
