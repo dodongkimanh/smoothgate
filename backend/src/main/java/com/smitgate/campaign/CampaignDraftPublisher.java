@@ -26,6 +26,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CampaignDraftPublisher {
 
+    /** Highest minimum age Meta accepts on an ad set with Advantage+ audience. */
+    static final int ADVANTAGE_MAX_AGE_MIN = 25;
+
     private static final Map<String, String> OBJECTIVE_MAP = Map.of(
             "Nhận diện thương hiệu", "OUTCOME_AWARENESS",
             "Lưu lượng truy cập", "OUTCOME_TRAFFIC",
@@ -96,16 +99,19 @@ public class CampaignDraftPublisher {
             }
         }
 
-        // A retry after every ad set failed reuses the empty campaign the first attempt left behind,
-        // instead of piling up empty duplicates. Copied drafts also carry the original's ID, so only
-        // reuse a campaign that is in this account, not deleted, and still has no ad sets.
+        // A retry reuses the campaign the first attempt created instead of piling up duplicates: after a
+        // partial publish only the ad groups that failed are created in it; after a total failure the empty
+        // campaign is filled. Only a campaign in this account that is not deleted is reused.
         String previousCampaignId = trimToNull(String.valueOf(campaign.getOrDefault("metaCampaignId", "")));
+        boolean partiallyPublished = adGroups.stream().anyMatch(g -> hasMetaId(g.get("metaAdSetId")));
         String metaCampaignId = null;
-        if (previousCampaignId != null && metaAdsConnector.isEmptyCampaign(
-                tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(), previousCampaignId)) {
+        if (previousCampaignId != null && metaAdsConnector.isReusableCampaign(
+                tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(), previousCampaignId,
+                partiallyPublished)) {
             metaCampaignId = previousCampaignId;
-            log.info("Draft {} reuses empty Meta campaign {} from a previous failed publish", draft.getId(), metaCampaignId);
+            log.info("Draft {} reuses Meta campaign {} from a previous publish", draft.getId(), metaCampaignId);
         }
+        boolean reusingCampaign = metaCampaignId != null && partiallyPublished;
         if (metaCampaignId == null) {
             try {
                 metaCampaignId = metaAdsConnector.createCampaign(
@@ -122,6 +128,15 @@ public class CampaignDraftPublisher {
         for (Map<String, Object> group : adGroups) {
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("name", group.get("name"));
+            Map<?, ?> existingAd = group.get("ad") instanceof Map<?, ?> m ? m : Map.of();
+            if (reusingCampaign && hasMetaId(group.get("metaAdSetId")) && hasMetaId(existingAd.get("metaAdId"))) {
+                result.put("metaAdSetId", group.get("metaAdSetId"));
+                result.put("metaAdId", existingAd.get("metaAdId"));
+                result.put("status", "SUCCESS");
+                result.put("warning", "Đã có trên Meta từ lần đăng trước, giữ nguyên");
+                results.add(result);
+                continue;
+            }
             try {
                 String pageId = trimToNull(String.valueOf(group.getOrDefault("pageId", "")));
                 if (pageId == null) {
@@ -132,6 +147,14 @@ public class CampaignDraftPublisher {
                             "Trang đã chọn chưa có ID Facebook hợp lệ (\"" + pageId + "\") — mở lại form, chọn lại Trang từ danh sách rồi lưu.");
                 }
                 int ageMin = parseInt(group.get("minAge"), 18);
+                boolean advantageAudience = parseBool(group.get("advantageAudience"), true);
+                if (advantageAudience && ageMin > ADVANTAGE_MAX_AGE_MIN) {
+                    // Meta rejects a hard minimum age above 25 with Advantage+ audience (subcode 1870188);
+                    // the higher age only works as a suggestion there.
+                    result.put("warning", "Đối tượng Advantage+ chỉ cho tuổi tối thiểu tới " + ADVANTAGE_MAX_AGE_MIN
+                            + "; đã dùng " + ADVANTAGE_MAX_AGE_MIN + " thay cho " + ageMin);
+                    ageMin = ADVANTAGE_MAX_AGE_MIN;
+                }
                 Integer ageMax = parseIntOrNull(group.get("maxAge"));
                 String gendersOption = String.valueOf(group.getOrDefault("gender", "Tất cả"));
 
@@ -145,7 +168,6 @@ public class CampaignDraftPublisher {
 
                 String startTimeIso = toMetaIsoTime(String.valueOf(group.getOrDefault("startDate", "")));
 
-                boolean advantageAudience = parseBool(group.get("advantageAudience"), true);
                 String optimizationGoal = OPTIMIZATION_GOAL_MAP.getOrDefault(
                         String.valueOf(group.get("performanceGoal")), "CONVERSATIONS");
                 String devicePlatformOption = String.valueOf(group.getOrDefault("devicePlatform", "Tất cả"));
@@ -154,7 +176,9 @@ public class CampaignDraftPublisher {
                         DraftTargetingParser.parseLocations(String.valueOf(group.getOrDefault("locations", "")));
                 Map<String, Object> placementTargeting =
                         DraftTargetingParser.parsePlacements(String.valueOf(group.getOrDefault("placements", "")));
-                String metaAdSetId = metaAdsConnector.createAdSet(
+                String metaAdSetId = reusingCampaign && hasMetaId(group.get("metaAdSetId"))
+                        ? String.valueOf(group.get("metaAdSetId"))
+                        : metaAdsConnector.createAdSet(
                         tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(), metaCampaignId,
                         String.valueOf(group.getOrDefault("name", draft.getName())),
                         adSetBudget, ageMin, ageMax, gendersOption, pageId, startTimeIso, advantageAudience,
@@ -270,6 +294,10 @@ public class CampaignDraftPublisher {
     }
 
     /** Parses a comma-separated list of real Meta custom audience IDs, ignoring blanks. */
+    private static boolean hasMetaId(Object value) {
+        return value != null && String.valueOf(value).trim().matches("\\d+");
+    }
+
     private List<String> parseCustomAudienceIds(Object value) {
         if (value == null) return List.of();
         String raw = String.valueOf(value).trim();

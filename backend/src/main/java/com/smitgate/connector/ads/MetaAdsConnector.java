@@ -1547,6 +1547,15 @@ public class MetaAdsConnector implements AdsConnector {
      * i.e. the empty shell left by a publish whose ad sets all failed. Any lookup error means false.
      */
     public boolean isEmptyCampaign(Long tenantId, Long dataSourceId, String adAccountId, String campaignId) {
+        return isReusableCampaign(tenantId, dataSourceId, adAccountId, campaignId, false);
+    }
+
+    /**
+     * Whether a campaign from an earlier publish can take more ad sets: it is in this account and not deleted
+     * or archived; unless {@code allowAdSets}, it must also still have none.
+     */
+    public boolean isReusableCampaign(Long tenantId, Long dataSourceId, String adAccountId, String campaignId,
+                                      boolean allowAdSets) {
         try {
             DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
             String token = dataSourceService.decryptSecret(ds);
@@ -1563,7 +1572,7 @@ public class MetaAdsConnector implements AdsConnector {
             boolean hasAdSets = campaign.path("adsets").path("data").size() > 0;
             return accountId.equals(normalizeAdAccountId(adAccountId))
                     && !"DELETED".equals(status) && !"ARCHIVED".equals(status)
-                    && !hasAdSets;
+                    && (allowAdSets || !hasAdSets);
         } catch (Exception e) {
             log.warn("Could not check Meta campaign {} for reuse: {}", campaignId, e.getMessage());
             return false;
