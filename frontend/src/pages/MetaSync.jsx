@@ -149,7 +149,7 @@ function audienceTone(row) {
   return row.lastError ? 'bad' : 'idle'
 }
 
-function HealthCard({ icon: Icon, title, tone, status, lines }) {
+function HealthCard({ icon: Icon, title, tone, status, lines, note }) {
   const t = TONE[tone]
   const StatusIcon = t.icon
   return (
@@ -174,6 +174,7 @@ function HealthCard({ icon: Icon, title, tone, status, lines }) {
           </div>
         ))}
       </dl>
+      {note && <p className={`text-sm rounded-lg px-3 py-2 ${t.bg} ${t.text}`}>{note}</p>}
     </div>
   )
 }
@@ -445,6 +446,27 @@ export default function MetaSync() {
       : Number(purchases.failed) > 0
         ? 'warn'
         : 'ok'
+  const failingPages = (leads.failingPages || []).map((p) => p.pageName || p.pageId)
+  const leadNote = !jobs.crmConfigured
+    ? 'Smoothgate chưa đọc được CRM nên không lấy được SĐT.'
+    : jobs.leadLastRunAt && minutesSince(jobs.leadLastRunAt) > 45
+      ? 'Quá 45 phút chưa chạy — máy chủ có thể đang dừng hoặc khởi động lại.'
+      : Number(leads.failed) > 0
+        ? `${nf.format(leads.failed)} SĐT chưa gửi được${failingPages.length ? ` ở page ${failingPages.join(', ')}` : ''}: ${
+            leads.failReason || 'xem cột Lỗi trong bảng Theo Page.'
+          }`
+        : null
+  const purchaseNote = jobs.purchaseLastRunAt && minutesSince(jobs.purchaseLastRunAt) > 45
+    ? 'Quá 45 phút chưa chạy — máy chủ có thể đang dừng hoặc khởi động lại.'
+    : Number(purchases.failed) > 0
+      ? `${nf.format(purchases.failed)} đơn chưa gửi được — xem cột Trạng thái trong danh sách đơn.`
+      : null
+  const audienceNote = audienceTone_ === 'warn'
+    ? minutesSince(lastAudienceSync) > 26 * 60
+      ? 'Quá 1 ngày chưa đồng bộ tệp.'
+      : 'Có tệp bị lỗi ở lần gửi cuối — di chuột lên ô màu vàng/đỏ trong bảng tệp đối tượng để xem.'
+    : null
+
   const statusText = { ok: 'Hoạt động tốt', warn: 'Cần xem', bad: 'Lỗi', idle: 'Chờ lần chạy đầu' }
   const accountsWithErrors = new Set(lists.filter((a) => audienceTone(a) === 'bad').map((a) => a.account))
 
@@ -473,6 +495,7 @@ export default function MetaSync() {
           title="1 · Tệp đối tượng khách hàng"
           tone={audienceTone_}
           status={statusText[audienceTone_]}
+          note={audienceNote}
           lines={[
             ['Gửi lần cuối (mỗi ngày)', lastAudienceSync ? ago(lastAudienceSync) : '—'],
             ['Tài khoản QC ổn', `${new Set(okLists.map((a) => a.account)).size} / ${new Set(lists.map((a) => a.account)).size}`],
@@ -485,6 +508,7 @@ export default function MetaSync() {
           title="2 · Sự kiện SĐT (Khách hàng tiềm năng)"
           tone={leadTone}
           status={!jobs.crmConfigured ? 'Chưa nối CRM' : statusText[leadTone]}
+          note={leadNote}
           lines={[
             ['Lần chạy gần nhất (30 phút/lần)', jobs.leadLastRunAt ? ago(jobs.leadLastRunAt) : 'chưa chạy'],
             ['SĐT hôm nay', nf.format(leads.today ?? 0)],
@@ -497,6 +521,7 @@ export default function MetaSync() {
           title="3 · Sự kiện mua hàng"
           tone={purchaseTone}
           status={statusText[purchaseTone]}
+          note={purchaseNote}
           lines={[
             ['Lần chạy gần nhất (30 phút/lần)', jobs.purchaseLastRunAt ? ago(jobs.purchaseLastRunAt) : 'chưa chạy'],
             ['Đơn gửi 7 ngày', nf.format(purchases.sent7d ?? 0)],

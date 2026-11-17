@@ -97,10 +97,23 @@ public class MetaSyncStatusController {
                 SELECT count(*) FILTER (WHERE event_time >= date_trunc('day', now() AT TIME ZONE 'Asia/Ho_Chi_Minh')) AS today,
                        count(*) FILTER (WHERE event_time >= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') - interval '7 days') AS "last7d",
                        count(*) FILTER (WHERE sent_at IS NULL AND last_error IS NULL) AS pending,
-                       count(*) FILTER (WHERE sent_at IS NULL AND last_error IS NOT NULL) AS failed,
+                       count(*) FILTER (WHERE sent_at IS NULL AND last_error IS NOT NULL
+                                        AND event_time >= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') - interval '7 days') AS failed,
                        to_char(max(sent_at), %s) AS "lastSentAt"
                 FROM meta_lead_events WHERE tenant_id = ?
                 """.formatted(ISO), tenantId));
+
+        // Pages whose leads Meta is still refusing (only those still young enough to be retried).
+        List<Map<String, Object>> failing = jdbc.queryForList("""
+                SELECT page_id AS "pageId", count(*) AS failed, max(last_error) AS error
+                FROM meta_lead_events
+                WHERE tenant_id = ? AND sent_at IS NULL AND last_error IS NOT NULL
+                  AND event_time >= (now() AT TIME ZONE 'Asia/Ho_Chi_Minh') - interval '7 days'
+                GROUP BY page_id ORDER BY failed DESC
+                """, tenantId);
+        failing.forEach(r -> r.put("pageName", pageNames.get(String.valueOf(r.get("pageId")))));
+        out.put("failingPages", failing);
+        out.put("failReason", failing.isEmpty() ? null : explain(String.valueOf(failing.get(0).get("error"))));
 
         out.put("rangeTotals", jdbc.queryForMap("""
                 SELECT count(*) AS total, count(sent_at) AS sent,
@@ -222,6 +235,22 @@ public class MetaSyncStatusController {
                 r.put("accountName", act == null ? null : names.getOrDefault(act, act));
             }
         }
+    }
+
+    /** Meta's error in words the owner can act on. */
+    static String explain(String error) {
+        if (error == null) return null;
+        if (error.contains("page_events")) {
+            return "Smoothgate chưa được cấp quyền gửi sự kiện cho page này. Vào Kết nối QC, kết nối lại Meta, "
+                    + "bấm \"Chỉnh sửa quyền truy cập\" và tích chọn page đó.";
+        }
+        if (error.contains("pages_read_engagement") || error.contains("không quản lý trang")) {
+            return "Tài khoản Facebook đang kết nối không quản lý page này. Thêm tài khoản đó làm quản trị viên page rồi kết nối lại Meta.";
+        }
+        if (error.contains("token") || error.contains("session")) {
+            return "Kết nối Meta đã hết hạn. Vào Kết nối QC và kết nối lại Meta.";
+        }
+        return error;
     }
 
     private static String iso(java.time.LocalDateTime t) {
