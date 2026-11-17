@@ -80,9 +80,10 @@ public class CrmCustomerSource {
     public Map<String, String> pageNames() {
         Map<String, String> out = new HashMap<>();
         if (jdbc == null) return out;
-        jdbc.query("SELECT \"ID Trang\", max(\"Page\") FROM public.data_dulieukhach "
+        // The newest name wins: Pages get renamed and older rows keep the old name.
+        jdbc.query("SELECT \"ID Trang\", (array_agg(\"Page\" ORDER BY created_at DESC))[1] FROM public.data_dulieukhach "
                         + "WHERE created_at >= now() - interval '90 days' AND COALESCE(\"ID Trang\", '') <> '' "
-                        + "GROUP BY 1",
+                        + "AND \"Page\" IS NOT NULL GROUP BY 1",
                 rs -> {
                     String name = rs.getString(2);
                     if (name == null) return;
