@@ -116,17 +116,14 @@ public class MetaPurchaseEventService {
         String userToken = dataSourceService.decryptSecret(ds);
         byPage.forEach((pageId, orders) -> {
             try {
-                String pageToken = pageAccessToken(userToken, pageId);
-                String datasetId = datasetFor(pageToken, pageId);
-                int received = postEvents(pageToken, datasetId, pageId, orders, now);
+                int received = sendToPage(userToken, pageId, purchaseEvents(pageId, orders, now));
                 LocalDateTime sentAt = LocalDateTime.now(VIETNAM_ZONE);
                 for (Order order : orders) {
                     order.setMetaPurchaseSentAt(sentAt);
                     order.setMetaPurchaseError(null);
                 }
                 orderRepository.saveAll(orders);
-                log.info("Meta purchase events: page {} dataset {} sent {} accepted {}",
-                        pageId, datasetId, orders.size(), received);
+                log.info("Meta purchase events: page {} sent {} accepted {}", pageId, orders.size(), received);
             } catch (Exception e) {
                 String msg = truncate(e.getMessage(), 500);
                 for (Order order : orders) {
@@ -167,24 +164,37 @@ public class MetaPurchaseEventService {
         return id;
     }
 
-    private int postEvents(String pageToken, String datasetId, String pageId, List<Order> orders, LocalDateTime now) {
+    /**
+     * Sends business-messaging events to the Page's dataset with a Page token got from the connected user's
+     * token. Returns how many Meta accepted; throws with a readable message (never the token) on failure.
+     */
+    int sendToPage(String userToken, String pageId, List<Map<String, Object>> events) {
+        String pageToken = pageAccessToken(userToken, pageId);
+        String datasetId = datasetFor(pageToken, pageId);
+        return postEvents(pageToken, datasetId, events);
+    }
+
+    /** Who the event is about: the Messenger conversation, plus hashed phone, name and gender for matching. */
+    static Map<String, Object> userData(String pageId, String psid, String rawPhone, String name, String gender) {
+        Map<String, Object> userData = new LinkedHashMap<>();
+        userData.put("page_id", pageId);
+        userData.put("page_scoped_user_id", psid);
+        CustomerContact contact = CustomerContact.of(rawPhone, name, gender, null);
+        if (contact != null) {
+            userData.put("ph", List.of(sha256(contact.phone())));
+            if (contact.firstName() != null) userData.put("fn", List.of(sha256(contact.firstName())));
+            if (contact.lastName() != null) userData.put("ln", List.of(sha256(contact.lastName())));
+            if (contact.gender() != null) userData.put("ge", List.of(sha256(contact.gender())));
+        }
+        userData.put("country", List.of(sha256("vn")));
+        return userData;
+    }
+
+    private List<Map<String, Object>> purchaseEvents(String pageId, List<Order> orders, LocalDateTime now) {
         List<Map<String, Object>> events = new ArrayList<>();
         for (Order order : orders) {
-            Map<String, Object> userData = new LinkedHashMap<>();
-            userData.put("page_id", pageId);
-            userData.put("page_scoped_user_id", order.getFbPsid());
-            String phone = normalizePhone(order.getCustomerPhone());
-            if (phone != null) {
-                userData.put("ph", List.of(sha256(phone)));
-            }
-            CustomerContact contact = CustomerContact.of(phone, order.getCustomerName(),
-                    CustomerContact.genderFromJson(order.getRawJson()), null);
-            if (contact != null) {
-                if (contact.firstName() != null) userData.put("fn", List.of(sha256(contact.firstName())));
-                if (contact.lastName() != null) userData.put("ln", List.of(sha256(contact.lastName())));
-                if (contact.gender() != null) userData.put("ge", List.of(sha256(contact.gender())));
-            }
-            userData.put("country", List.of(sha256("vn")));
+            Map<String, Object> userData = userData(pageId, order.getFbPsid(), order.getCustomerPhone(),
+                    order.getCustomerName(), CustomerContact.genderFromJson(order.getRawJson()));
 
             Map<String, Object> customData = new LinkedHashMap<>();
             customData.put("currency", "VND");
@@ -201,7 +211,10 @@ public class MetaPurchaseEventService {
             event.put("custom_data", customData);
             events.add(event);
         }
+        return events;
+    }
 
+    private int postEvents(String pageToken, String datasetId, List<Map<String, Object>> events) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         try {
             form.add("data", objectMapper.writeValueAsString(events));

@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -49,6 +50,28 @@ public class CrmCustomerSource {
     public List<CustomerContact> buyers() {
         return query("SELECT sdt, khach_hang, dia_chi FROM public.don_hang "
                 + "WHERE COALESCE(tinh_trang, '') NOT IN " + NOT_SOLD);
+    }
+
+    /** A CRM lead from a Messenger conversation that already has a phone number. */
+    public record PhoneLead(long rowId, String pageId, String psid, String phone, String name, String adId,
+                            Instant createdAt) {
+    }
+
+    /**
+     * Messenger leads created in the last {@code days} days that have a phone, a Page and a PSID —
+     * the customers Meta can tie back to an ad conversation. Oldest first.
+     */
+    public List<PhoneLead> phoneLeads(int days) {
+        if (jdbc == null) return List.of();
+        return jdbc.query("SELECT id, \"ID Trang\", \"PSID\", \"Sdt\", \"Khach_hang\", ad_id, created_at "
+                        + "FROM public.data_dulieukhach "
+                        + "WHERE created_at >= now() - make_interval(days => ?) "
+                        + "AND COALESCE(\"Sdt\", '') <> '' AND COALESCE(\"PSID\", '') <> '' "
+                        + "AND COALESCE(\"ID Trang\", '') <> '' ORDER BY created_at",
+                (rs, i) -> new PhoneLead(rs.getLong(1), rs.getString(2).trim(), rs.getString(3).trim(),
+                        rs.getString(4), rs.getString(5), rs.getString(6),
+                        rs.getTimestamp(7) == null ? null : rs.getTimestamp(7).toInstant()),
+                days);
     }
 
     private List<CustomerContact> query(String sql) {
