@@ -147,6 +147,8 @@ public class DataSourceService {
     @Transactional
     public void markError(Long id, String errorMsg) {
         dataSourceRepository.findById(id).ifPresent(ds -> {
+            // A sync that was running when the user deleted the connection must not bring it back as ERROR.
+            if (isSoftDeleted(ds)) return;
             ds.setStatus(DataSource.Status.ERROR);
             ds.setLastErrorAt(LocalDateTime.now());
             ds.setLastErrorMsg(errorMsg);

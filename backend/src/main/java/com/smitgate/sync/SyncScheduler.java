@@ -69,6 +69,9 @@ public class SyncScheduler {
         boolean hasDataChange = false;
 
         for (DataSource ds : sources) {
+            if (dataSourceService.isSoftDeleted(ds)) {
+                continue;
+            }
             try {
                 int count = pancakeConnector.syncOrders(ds.getTenantId(), ds.getId());
                 log.info("Synced {} orders for tenant {} datasource {}", count, ds.getTenantId(), ds.getId());
@@ -124,6 +127,9 @@ public class SyncScheduler {
         boolean hasDataChange = false;
 
         for (DataSource ds : sources) {
+            if (dataSourceService.isSoftDeleted(ds)) {
+                continue;
+            }
             try {
                 int count = metaAdsConnector.syncMetricsDaily(ds.getTenantId(), ds.getId(), yesterday, today);
                 log.info("Synced {} metrics for tenant {} datasource {}", count, ds.getTenantId(), ds.getId());
