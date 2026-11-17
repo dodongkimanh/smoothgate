@@ -48,6 +48,13 @@ public class MetaLeadEventService {
     @Value("${app.meta-capi.leads-enabled:true}")
     private boolean enabled;
 
+    /** End of the last scheduled run since startup (Vietnam time); null until the first run finishes. */
+    private volatile LocalDateTime lastRunAt;
+
+    public LocalDateTime getLastRunAt() {
+        return lastRunAt;
+    }
+
     @Scheduled(
             fixedDelayString = "${app.meta-capi.fixed-delay-ms:1800000}",
             initialDelayString = "${app.meta-capi.leads-initial-delay-ms:420000}")
@@ -71,6 +78,7 @@ public class MetaLeadEventService {
                 log.error("Meta lead events failed for tenant {}: {}", tenantId, e.getMessage());
             }
         });
+        lastRunAt = LocalDateTime.now(VIETNAM_ZONE);
     }
 
     void sendForTenant(Long tenantId, DataSource ds) {

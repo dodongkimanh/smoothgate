@@ -94,6 +94,7 @@ export const createAdSavedView = (name, adKeys) =>
 export const deleteAdSavedView = (id) => api.delete(`/ad-saved-views/${id}`)
 
 // Data Sources
+export const getMetaSyncStatus = () => api.get('/meta-sync/status')
 export const getDataSources = () => api.get('/datasources')
 export const createDataSource = (data) => api.post('/datasources', data)
 export const activateDataSource = (id) => api.post(`/datasources/${id}/activate`)

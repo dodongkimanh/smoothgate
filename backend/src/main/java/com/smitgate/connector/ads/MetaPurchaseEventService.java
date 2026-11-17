@@ -69,6 +69,13 @@ public class MetaPurchaseEventService {
     /** pageId → dataset id, resolved once per page. */
     private final Map<String, String> datasetByPage = new ConcurrentHashMap<>();
 
+    /** End of the last scheduled run since startup (Vietnam time); null until the first run finishes. */
+    private volatile LocalDateTime lastRunAt;
+
+    public LocalDateTime getLastRunAt() {
+        return lastRunAt;
+    }
+
     @Scheduled(
             fixedDelayString = "${app.meta-capi.fixed-delay-ms:1800000}",
             initialDelayString = "${app.meta-capi.initial-delay-ms:300000}")
@@ -94,6 +101,7 @@ public class MetaPurchaseEventService {
                 log.error("Meta purchase events failed for tenant {}: {}", tenantId, e.getMessage());
             }
         });
+        lastRunAt = LocalDateTime.now(VIETNAM_ZONE);
     }
 
     void sendForTenant(Long tenantId, DataSource ds) {

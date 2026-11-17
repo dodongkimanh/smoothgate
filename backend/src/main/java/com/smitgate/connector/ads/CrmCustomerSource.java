@@ -8,7 +8,9 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Reads customers from the company CRM (crm-dulieukhachhang on igam3) through a read-only database user
@@ -72,6 +74,37 @@ public class CrmCustomerSource {
                         rs.getString(4), rs.getString(5), rs.getString(6),
                         rs.getTimestamp(7) == null ? null : rs.getTimestamp(7).toInstant()),
                 days);
+    }
+
+    /** Page id → Page name as the CRM shows it ("Kim Ánh Đỉnh Đồng Nam Định"), from recent leads. */
+    public Map<String, String> pageNames() {
+        Map<String, String> out = new HashMap<>();
+        if (jdbc == null) return out;
+        jdbc.query("SELECT \"ID Trang\", max(\"Page\") FROM public.data_dulieukhach "
+                        + "WHERE created_at >= now() - interval '90 days' AND COALESCE(\"ID Trang\", '') <> '' "
+                        + "GROUP BY 1",
+                rs -> {
+                    String name = rs.getString(2);
+                    if (name == null) return;
+                    name = name.replaceAll("\\s*\\(\\d+\\)\\s*$", "").trim();
+                    if (!name.isEmpty()) out.put(rs.getString(1).trim(), name);
+                });
+        return out;
+    }
+
+    /** CRM row id → customer name, for showing who a lead event was about. */
+    public Map<Long, String> customerNames(java.util.Collection<Long> rowIds) {
+        Map<Long, String> out = new HashMap<>();
+        if (jdbc == null || rowIds.isEmpty()) return out;
+        Long[] ids = rowIds.toArray(new Long[0]);
+        jdbc.query(con -> {
+            var ps = con.prepareStatement("SELECT id, \"Khach_hang\" FROM public.data_dulieukhach WHERE id = ANY(?)");
+            ps.setArray(1, con.createArrayOf("bigint", ids));
+            return ps;
+        }, rs -> {
+            out.put(rs.getLong(1), rs.getString(2));
+        });
+        return out;
     }
 
     private List<CustomerContact> query(String sql) {

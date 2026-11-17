@@ -15,6 +15,7 @@ import ConnectAds from './pages/ConnectAds'
 import ConnectPoscake from './pages/ConnectPoscake'
 import Settings from './pages/Settings'
 import Agent from './pages/Agent'
+import MetaSync from './pages/MetaSync'
 import Staff from './pages/Staff'
 
 function ProtectedRoute({ children }) {
@@ -189,6 +190,7 @@ function App() {
         <Route path="settings" element={<AdminOnly><ErrorBoundary><Settings /></ErrorBoundary></AdminOnly>} />
         <Route path="staff" element={<AdminOnly><ErrorBoundary><Staff /></ErrorBoundary></AdminOnly>} />
         <Route path="agent" element={<AdminOnly><ErrorBoundary><Agent /></ErrorBoundary></AdminOnly>} />
+        <Route path="meta-sync" element={<AdminOnly><ErrorBoundary><MetaSync /></ErrorBoundary></AdminOnly>} />
       </Route>
     </Routes>
   )

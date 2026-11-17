@@ -1,0 +1,485 @@
+import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { RefreshCw, Users, PhoneCall, ShoppingBag, CheckCircle2, AlertTriangle, XCircle, Clock, ShieldCheck } from 'lucide-react'
+import { getMetaSyncStatus } from '../services/api'
+
+const KINDS = [
+  { key: 'BUYERS', label: 'Khách đã mua', hint: 'SĐT, họ tên, tỉnh/thành' },
+  { key: 'ALL_PHONES', label: 'Tất cả khách để lại SĐT', hint: 'SĐT, họ tên' },
+  { key: 'LAL_BUYERS', label: 'LAL 1% khách đã mua', hint: 'Meta tự cập nhật' },
+  { key: 'LAL_ALL_PHONES', label: 'LAL 2% tất cả SĐT', hint: 'Meta tự cập nhật' },
+]
+
+const nf = new Intl.NumberFormat('vi-VN')
+
+function parseTime(value) {
+  if (!value) return null
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function fmtTime(value) {
+  const d = parseTime(value)
+  if (!d) return '—'
+  return d.toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+}
+
+function ago(value) {
+  const d = parseTime(value)
+  if (!d) return null
+  const minutes = Math.round((Date.now() - d.getTime()) / 60000)
+  if (minutes < 1) return 'vừa xong'
+  if (minutes < 60) return `${minutes} phút trước`
+  const hours = Math.round(minutes / 60)
+  if (hours < 48) return `${hours} giờ trước`
+  return `${Math.round(hours / 24)} ngày trước`
+}
+
+function minutesSince(value) {
+  const d = parseTime(value)
+  return d ? (Date.now() - d.getTime()) / 60000 : Infinity
+}
+
+function money(value) {
+  return `${nf.format(Math.round(Number(value) || 0))} đ`
+}
+
+/** "operation 200 Bình thường | delivery 200 ..." → { code, text } */
+function metaOperation(status) {
+  const m = /operation\s+(\d+)\s+([^|]+)/i.exec(status || '')
+  return m ? { code: Number(m[1]), text: m[2].trim() } : null
+}
+
+function matchedSize(row) {
+  const lo = row.metaCountLower
+  const hi = row.metaCountUpper
+  if (lo == null && hi == null) return '—'
+  if (lo === -1 || hi === -1) return 'Meta đang tính'
+  if (lo === 1000 && hi === 1000) return 'dưới 1.000'
+  if (lo === hi) return nf.format(lo)
+  return `${nf.format(lo)} – ${nf.format(hi)}`
+}
+
+const TONE = {
+  ok: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50', icon: CheckCircle2 },
+  warn: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50', icon: AlertTriangle },
+  bad: { dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50', icon: XCircle },
+  idle: { dot: 'bg-slate-400', text: 'text-slate-600', bg: 'bg-slate-50', icon: Clock },
+}
+
+function Badge({ tone, children, title }) {
+  const t = TONE[tone]
+  return (
+    <span title={title} className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${t.bg} ${t.text}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${t.dot}`} />
+      {children}
+    </span>
+  )
+}
+
+function audienceTone(row) {
+  if (row.lastError && !row.audienceId) return 'bad'
+  const op = metaOperation(row.metaStatus)
+  if (op && op.code === 200) return row.lastError ? 'warn' : 'ok'
+  if (op && op.code >= 300 && op.code < 500) return 'warn'
+  if (op) return 'bad'
+  return row.lastError ? 'bad' : 'idle'
+}
+
+function HealthCard({ icon: Icon, title, tone, status, lines }) {
+  const t = TONE[tone]
+  const StatusIcon = t.icon
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex flex-col gap-3 min-w-0">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
+            <Icon className="h-4 w-4 text-slate-600" />
+          </div>
+          <h3 className="font-semibold text-slate-800 text-sm truncate">{title}</h3>
+        </div>
+        <span className={`inline-flex items-center gap-1 text-xs font-medium ${t.text}`}>
+          <StatusIcon className="h-4 w-4" />
+          {status}
+        </span>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
+        {lines.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-[11px] text-slate-500">{label}</dt>
+            <dd className="text-sm font-semibold text-slate-800 tabular-nums truncate">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
+function Section({ title, subtitle, children, right }) {
+  return (
+    <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 border-b border-gray-100">
+        <div>
+          <h2 className="font-semibold text-slate-800 text-sm">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+        </div>
+        {right}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+const th = 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap'
+const td = 'px-3 py-2 text-sm text-slate-700 whitespace-nowrap'
+
+function AudienceTable({ audiences }) {
+  const accounts = []
+  const byAccount = new Map()
+  for (const row of audiences) {
+    if (!byAccount.has(row.account)) {
+      byAccount.set(row.account, {})
+      accounts.push(row.account)
+    }
+    byAccount.get(row.account)[row.kind] = row
+  }
+  if (accounts.length === 0) {
+    return <p className="px-4 py-6 text-sm text-slate-500">Chưa có tệp nào. Lần đồng bộ đầu chạy khoảng 10 phút sau khi máy chủ khởi động.</p>
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full">
+        <thead className="bg-slate-50">
+          <tr>
+            <th className={th}>Tài khoản</th>
+            {KINDS.map((k) => (
+              <th key={k.key} className={th}>
+                {k.label}
+                <div className="normal-case font-normal tracking-normal text-slate-400">{k.hint}</div>
+              </th>
+            ))}
+            <th className={th}>Gửi lần cuối</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {accounts.map((account) => {
+            const rows = byAccount.get(account)
+            const lastSynced = Object.values(rows).map((r) => r.lastSyncedAt).filter(Boolean).sort().pop()
+            return (
+              <tr key={account}>
+                <td className={`${td} font-medium`}>{account}</td>
+                {KINDS.map((k) => {
+                  const row = rows[k.key]
+                  if (!row) return <td key={k.key} className={td}>—</td>
+                  const tone = audienceTone(row)
+                  const op = metaOperation(row.metaStatus)
+                  const title = [row.lastError, row.metaStatus].filter(Boolean).join('\n')
+                  return (
+                    <td key={k.key} className={td} title={title}>
+                      <div className="flex flex-col gap-1">
+                        <span className="tabular-nums font-medium">{matchedSize(row)}</span>
+                        <span className="text-[11px] text-slate-500 tabular-nums">
+                          {row.lastCount != null ? `gửi ${nf.format(row.lastCount)} SĐT` : k.key.startsWith('LAL') ? 'người tương tự' : ''}
+                        </span>
+                        <Badge tone={tone}>
+                          {tone === 'bad' ? 'Lỗi' : op ? op.text : row.lastError ? 'Lỗi lần gửi cuối' : 'Chưa kiểm tra'}
+                        </Badge>
+                      </div>
+                    </td>
+                  )
+                })}
+                <td className={`${td} text-xs text-slate-500`}>
+                  {fmtTime(lastSynced)}
+                  {lastSynced && <div className="text-slate-400">{ago(lastSynced)}</div>}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function EventStatus({ sentAt, error }) {
+  if (sentAt) return <Badge tone="ok" title={`Gửi lúc ${fmtTime(sentAt)}`}>Đã gửi {fmtTime(sentAt)}</Badge>
+  if (error) return <Badge tone="bad" title={error}>Lỗi</Badge>
+  return <Badge tone="idle">Đang chờ</Badge>
+}
+
+function ErrorText({ error }) {
+  if (!error) return null
+  return <div className="text-[11px] text-red-600 whitespace-normal max-w-md mt-1">{error}</div>
+}
+
+export default function MetaSync() {
+  const [tab, setTab] = useState('leads')
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['meta-sync-status'],
+    queryFn: () => getMetaSyncStatus().then((r) => r.data?.data),
+    refetchInterval: 60000,
+  })
+
+  if (isLoading) {
+    return <div className="p-8 text-sm text-slate-500">Đang tải trạng thái đồng bộ…</div>
+  }
+  if (error || !data) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+          Không tải được trạng thái: {error?.response?.data?.message || error?.message || 'lỗi không rõ'}
+        </div>
+      </div>
+    )
+  }
+
+  const { jobs = {}, audiences = [], leads = {}, purchases = {} } = data
+
+  const lists = audiences.filter((a) => a.kind === 'BUYERS' || a.kind === 'ALL_PHONES')
+  const okLists = lists.filter((a) => audienceTone(a) !== 'bad')
+  const lastAudienceSync = audiences.map((a) => a.lastSyncedAt).filter(Boolean).sort().pop()
+  const allPhones = audiences.find((a) => a.kind === 'ALL_PHONES' && a.lastCount != null)
+  const buyers = audiences.find((a) => a.kind === 'BUYERS' && a.lastCount != null)
+  const audienceTone_ =
+    lists.length === 0 ? 'idle' : minutesSince(lastAudienceSync) > 26 * 60 ? 'warn' : okLists.length < lists.length ? 'warn' : 'ok'
+
+  const leadTone = !jobs.crmConfigured
+    ? 'bad'
+    : !jobs.leadLastRunAt
+      ? 'idle'
+      : minutesSince(jobs.leadLastRunAt) > 45
+        ? 'warn'
+        : Number(leads.failed) > 0
+          ? 'warn'
+          : 'ok'
+  const purchaseTone = !jobs.purchaseLastRunAt
+    ? 'idle'
+    : minutesSince(jobs.purchaseLastRunAt) > 45
+      ? 'warn'
+      : Number(purchases.failed) > 0
+        ? 'warn'
+        : 'ok'
+  const statusText = { ok: 'Hoạt động tốt', warn: 'Cần xem', bad: 'Lỗi', idle: 'Chờ lần chạy đầu' }
+  const accountsWithErrors = new Set(lists.filter((a) => audienceTone(a) === 'bad').map((a) => a.account))
+
+  return (
+    <div className="p-4 sm:p-6 space-y-4 max-w-[1600px] mx-auto">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-slate-800">Đồng bộ dữ liệu lên Meta</h1>
+          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            SĐT, họ tên và tỉnh/thành được mã hóa SHA-256 trước khi gửi; Meta chỉ dùng để so khớp người.
+          </p>
+        </div>
+        <button
+          onClick={() => refetch()}
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-gray-50"
+        >
+          <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+          Tải lại
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <HealthCard
+          icon={Users}
+          title="1 · Tệp đối tượng khách hàng"
+          tone={audienceTone_}
+          status={statusText[audienceTone_]}
+          lines={[
+            ['Gửi lần cuối (mỗi ngày)', lastAudienceSync ? ago(lastAudienceSync) : '—'],
+            ['Tài khoản QC ổn', `${new Set(okLists.map((a) => a.account)).size} / ${new Set(lists.map((a) => a.account)).size}`],
+            ['Tất cả SĐT đã gửi', allPhones ? nf.format(allPhones.lastCount) : '—'],
+            ['Khách đã mua đã gửi', buyers ? nf.format(buyers.lastCount) : '—'],
+          ]}
+        />
+        <HealthCard
+          icon={PhoneCall}
+          title="2 · Sự kiện SĐT (Khách hàng tiềm năng)"
+          tone={leadTone}
+          status={!jobs.crmConfigured ? 'Chưa nối CRM' : statusText[leadTone]}
+          lines={[
+            ['Lần chạy gần nhất (30 phút/lần)', jobs.leadLastRunAt ? ago(jobs.leadLastRunAt) : 'chưa chạy'],
+            ['SĐT hôm nay', nf.format(leads.today ?? 0)],
+            ['Đã gửi 7 ngày', nf.format(leads.last7d ?? 0)],
+            ['Lỗi / đang chờ', `${nf.format(leads.failed ?? 0)} / ${nf.format(leads.pending ?? 0)}`],
+          ]}
+        />
+        <HealthCard
+          icon={ShoppingBag}
+          title="3 · Sự kiện mua hàng"
+          tone={purchaseTone}
+          status={statusText[purchaseTone]}
+          lines={[
+            ['Lần chạy gần nhất (30 phút/lần)', jobs.purchaseLastRunAt ? ago(jobs.purchaseLastRunAt) : 'chưa chạy'],
+            ['Đơn gửi 7 ngày', nf.format(purchases.sent7d ?? 0)],
+            ['Giá trị gửi 7 ngày', money(purchases.value7d)],
+            ['Đơn lỗi (30 ngày)', nf.format(purchases.failed ?? 0)],
+          ]}
+        />
+      </div>
+
+      <Section
+        title="Tệp đối tượng trên từng tài khoản quảng cáo"
+        subtitle="Số người Meta khớp được với SĐT đã gửi. Di chuột lên ô để xem chi tiết trạng thái hoặc lỗi."
+        right={accountsWithErrors.size > 0 && (
+          <Badge tone="bad">{accountsWithErrors.size} tài khoản lỗi: {[...accountsWithErrors].join(', ')}</Badge>
+        )}
+      >
+        <AudienceTable audiences={audiences} />
+      </Section>
+
+      <div className="flex gap-1 bg-white rounded-xl p-1 border border-gray-100 shadow-sm w-fit">
+        {[
+          ['leads', 'Sự kiện SĐT'],
+          ['purchases', 'Sự kiện mua hàng'],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tab === key ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-gray-50'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'leads' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div className="xl:col-span-2">
+              <Section title="Theo page" subtitle="Mỗi khách (page + Messenger) chỉ gửi 1 lần. Lỗi được thử lại tự động trong 7 ngày.">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className={th}>Page</th>
+                        <th className={`${th} text-right`}>Hôm nay</th>
+                        <th className={`${th} text-right`}>Tổng</th>
+                        <th className={`${th} text-right`}>Đã gửi</th>
+                        <th className={`${th} text-right`}>Lỗi</th>
+                        <th className={th}>Gửi gần nhất</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {(leads.byPage || []).map((p) => (
+                        <tr key={p.pageId}>
+                          <td className={td}>
+                            <div className="font-medium">{p.pageName || 'Page chưa rõ tên'}</div>
+                            <div className="text-[11px] text-slate-400">{p.pageId}</div>
+                            <ErrorText error={p.lastError} />
+                          </td>
+                          <td className={`${td} text-right tabular-nums`}>{nf.format(p.today)}</td>
+                          <td className={`${td} text-right tabular-nums`}>{nf.format(p.total)}</td>
+                          <td className={`${td} text-right tabular-nums text-emerald-700`}>{nf.format(p.sent)}</td>
+                          <td className={`${td} text-right tabular-nums ${Number(p.failed) > 0 ? 'text-red-600 font-semibold' : 'text-slate-400'}`}>
+                            {nf.format(p.failed)}
+                          </td>
+                          <td className={`${td} text-xs text-slate-500`}>{p.lastSentAt ? ago(p.lastSentAt) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Section>
+            </div>
+            <Section title="Theo ngày khách nhắn" subtitle="14 ngày gần nhất">
+              <table className="min-w-full">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className={th}>Ngày</th>
+                    <th className={`${th} text-right`}>SĐT</th>
+                    <th className={`${th} text-right`}>Đã gửi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(leads.daily || []).map((d) => (
+                    <tr key={d.date}>
+                      <td className={td}>{d.date.split('-').reverse().slice(0, 2).join('/')}</td>
+                      <td className={`${td} text-right tabular-nums`}>{nf.format(d.total)}</td>
+                      <td className={`${td} text-right tabular-nums text-emerald-700`}>{nf.format(d.sent)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Section>
+          </div>
+
+          <Section title="50 khách gần nhất đã gửi lên Meta" subtitle="Thời gian là lúc khách nhắn tin; Meta tính cho quảng cáo đã đưa khách tới.">
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className={th}>Khách nhắn lúc</th>
+                    <th className={th}>Khách hàng</th>
+                    <th className={th}>Page</th>
+                    <th className={th}>ID quảng cáo</th>
+                    <th className={th}>Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(leads.recent || []).map((r) => (
+                    <tr key={r.id}>
+                      <td className={`${td} tabular-nums`}>{fmtTime(r.eventTime)}</td>
+                      <td className={td}>{r.customerName || '—'}</td>
+                      <td className={td}>{r.pageName || r.pageId}</td>
+                      <td className={`${td} tabular-nums text-xs`}>{r.adId || <span className="text-slate-400">không có</span>}</td>
+                      <td className={td}>
+                        <EventStatus sentAt={r.sentAt} error={r.error} />
+                        <ErrorText error={!r.sentAt && r.error} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+        </div>
+      )}
+
+      {tab === 'purchases' && (
+        <Section
+          title="Đơn hàng đã gửi lên Meta"
+          subtitle="Đơn hợp lệ, có doanh thu và có Messenger của khách (lấy từ đơn Pancake trong Smoothgate). 30 đơn gần nhất."
+          right={purchases.lastSentAt && <span className="text-xs text-slate-500">Gửi gần nhất {ago(purchases.lastSentAt)}</span>}
+        >
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className={th}>Mã đơn</th>
+                  <th className={th}>Khách hàng</th>
+                  <th className={`${th} text-right`}>Giá trị</th>
+                  <th className={th}>Page</th>
+                  <th className={th}>Ngày đơn</th>
+                  <th className={th}>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {(purchases.recent || []).length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-sm text-slate-500">Chưa có đơn nào được gửi.</td>
+                  </tr>
+                )}
+                {(purchases.recent || []).map((o) => (
+                  <tr key={o.orderId}>
+                    <td className={`${td} tabular-nums`}>#{o.orderId}</td>
+                    <td className={td}>{o.customerName || '—'}</td>
+                    <td className={`${td} text-right tabular-nums font-medium`}>{money(o.revenue)}</td>
+                    <td className={td}>{o.pageName || o.pageId || '—'}</td>
+                    <td className={`${td} tabular-nums`}>{fmtTime(o.orderAt)}</td>
+                    <td className={td}>
+                      <EventStatus sentAt={o.sentAt} error={o.error} />
+                      <ErrorText error={!o.sentAt && o.error} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      )}
+    </div>
+  )
+}
