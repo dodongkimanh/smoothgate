@@ -36,6 +36,11 @@ spring:
 
 app:
   timezone: ${APP_TIMEZONE:Asia/Ho_Chi_Minh}
+  # Read-only connection to the company CRM (crm-dulieukhachhang) for Meta customer audiences; blank = not used.
+  crm:
+    jdbc-url: ${CRM_DB_URL:}
+    username: ${CRM_DB_USERNAME:}
+    password: ${CRM_DB_PASSWORD:}
   jwt:
     secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
     expiration: ${JWT_EXPIRATION:3153600000000}

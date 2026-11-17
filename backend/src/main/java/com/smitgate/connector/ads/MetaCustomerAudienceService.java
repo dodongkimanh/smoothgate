@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,11 +33,12 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 /**
- * Keeps two Meta customer-list audiences per ad account filled with the phones customers left in Pancake
+ * Keeps two Meta customer-list audiences per ad account filled with the customers from the CRM and Pancake
  * (everyone who left a phone, and buyers only), and creates a lookalike of each once Meta accepts it.
  * The lists are replaced in full on every run, so new customers flow into the lookalikes automatically.
  *
- * <p>Phones are normalized to 84... and SHA-256 hashed before leaving the server; Meta never sees them in clear.
+ * <p>Each customer is sent as phone, first/last name, gender, province and country to raise the match rate;
+ * every value is normalized and SHA-256 hashed before it leaves the server, so Meta never sees it in clear.
  */
 @Slf4j
 @Service
@@ -49,6 +49,7 @@ public class MetaCustomerAudienceService {
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     /** Meta accepts at most 10,000 entries per upload request. */
     static final int BATCH_SIZE = 10_000;
+    static final List<String> SCHEMA = List.of("PHONE", "FN", "LN", "GEN", "ST", "COUNTRY");
 
     private static final Map<MetaCustomerAudience.Kind, String> NAMES = Map.of(
             MetaCustomerAudience.Kind.BUYERS, "Smoothgate | Khách đã mua (SĐT)",
@@ -57,6 +58,7 @@ public class MetaCustomerAudienceService {
             MetaCustomerAudience.Kind.LAL_ALL_PHONES, "Smoothgate | LAL 2% tất cả SĐT");
 
     private final OrderRepository orderRepository;
+    private final CrmCustomerSource crmCustomerSource;
     private final AdAccountRepository adAccountRepository;
     private final MetaCustomerAudienceRepository audienceRepository;
     private final DataSourceRepository dataSourceRepository;
@@ -107,10 +109,13 @@ public class MetaCustomerAudienceService {
             return;
         }
 
-        List<String> buyers = hashPhones(orderRepository.findDistinctBuyerPhones(
-                tenantId, OrderStatusClassifier.validStatusesForAggregation()));
-        List<String> allPhones = hashPhones(orderRepository.findDistinctPhones(
-                tenantId, OrderStatusClassifier.leadStatusesForAggregation()));
+        List<CustomerContact> crmBuyers = crmCustomerSource.buyers();
+        List<CustomerContact> crmAll = crmCustomerSource.allContacts();
+        List<CustomerContact> pancakeBuyers = pancakeContacts(tenantId, OrderStatusClassifier.validStatusesForAggregation(), true);
+        List<CustomerContact> pancakeAll = pancakeContacts(tenantId, OrderStatusClassifier.leadStatusesForAggregation(), false);
+        // Buyers' records first so their order address and name win over a bare lead record.
+        List<List<String>> buyers = hashRows(merge(crmBuyers, pancakeBuyers));
+        List<List<String>> allPhones = hashRows(merge(crmBuyers, pancakeBuyers, crmAll, pancakeAll));
         String token = dataSourceService.decryptSecret(ds);
 
         Map<String, MetaCustomerAudience> rows = new LinkedHashMap<>();
@@ -126,11 +131,11 @@ public class MetaCustomerAudienceService {
             ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_BUYERS), buyerList, 0.01);
             ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_ALL_PHONES), allList, 0.02);
         }
-        log.info("Meta customer audiences: tenant {} synced {} accounts ({} buyers, {} phones)",
-                tenantId, accounts.size(), buyers.size(), allPhones.size());
+        log.info("Meta customer audiences: tenant {} synced {} accounts ({} buyers, {} people; CRM {} buyers / {} rows)",
+                tenantId, accounts.size(), buyers.size(), allPhones.size(), crmBuyers.size(), crmAll.size());
     }
 
-    private void syncList(String token, AdAccount account, MetaCustomerAudience row, List<String> hashes) {
+    private void syncList(String token, AdAccount account, MetaCustomerAudience row, List<List<String>> hashes) {
         if (hashes.isEmpty()) {
             return;
         }
@@ -139,7 +144,7 @@ public class MetaCustomerAudienceService {
                 MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
                 form.add("name", NAMES.get(row.getKind()));
                 form.add("subtype", "CUSTOM");
-                form.add("description", "Tự động đồng bộ từ Smoothgate (SĐT khách trên Pancake), cập nhật mỗi ngày");
+                form.add("description", "Tự động đồng bộ từ Smoothgate (khách trên CRM và Pancake), cập nhật mỗi ngày");
                 form.add("customer_file_source", "USER_PROVIDED_ONLY");
                 row.setExternalAudienceId(requireId(post(account.getExternalAccountId() + "/customaudiences", form, token)));
                 row.setLastSyncedAt(null);
@@ -187,9 +192,9 @@ public class MetaCustomerAudienceService {
         audienceRepository.save(row);
     }
 
-    private void upload(String token, String audienceId, String edge, List<String> hashes) throws Exception {
+    private void upload(String token, String audienceId, String edge, List<List<String>> hashes) throws Exception {
         long sessionId = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
-        List<List<String>> batches = batches(hashes);
+        List<List<List<String>>> batches = batches(hashes);
         for (int i = 0; i < batches.size(); i++) {
             Map<String, Object> session = new LinkedHashMap<>();
             session.put("session_id", sessionId);
@@ -199,7 +204,7 @@ public class MetaCustomerAudienceService {
 
             MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
             form.add("session", objectMapper.writeValueAsString(session));
-            form.add("payload", objectMapper.writeValueAsString(Map.of("schema", "PHONE_SHA256", "data", batches.get(i))));
+            form.add("payload", objectMapper.writeValueAsString(Map.of("schema", SCHEMA, "data", batches.get(i))));
             JsonNode res = post(audienceId + "/" + edge, form, token);
             if (!res.has("num_received")) {
                 throw new IllegalStateException("Meta không xác nhận danh sách: " + res);
@@ -207,18 +212,43 @@ public class MetaCustomerAudienceService {
         }
     }
 
-    /** Normalized (84...), de-duplicated, SHA-256 hashed phones; invalid numbers are dropped. */
-    static List<String> hashPhones(Collection<String> phones) {
-        Set<String> normalized = new LinkedHashSet<>();
-        for (String phone : phones) {
-            String n = MetaPurchaseEventService.normalizePhone(phone);
-            if (n != null) normalized.add(n);
+    private List<CustomerContact> pancakeContacts(Long tenantId, List<String> statuses, boolean buyersOnly) {
+        List<CustomerContact> out = new ArrayList<>();
+        for (Object[] r : orderRepository.findAudienceContacts(tenantId, statuses, buyersOnly)) {
+            CustomerContact c = CustomerContact.of((String) r[0], (String) r[1], (String) r[2], null);
+            if (c != null) out.add(c);
         }
-        return normalized.stream().map(MetaPurchaseEventService::sha256).toList();
+        return out;
     }
 
-    static List<List<String>> batches(List<String> items) {
-        List<List<String>> out = new ArrayList<>();
+    /** One contact per phone; a later source only fills fields the earlier ones left empty. */
+    @SafeVarargs
+    static Collection<CustomerContact> merge(List<CustomerContact>... sources) {
+        Map<String, CustomerContact> byPhone = new LinkedHashMap<>();
+        for (List<CustomerContact> source : sources) {
+            for (CustomerContact c : source) {
+                byPhone.merge(c.phone(), c, CustomerContact::mergedWith);
+            }
+        }
+        return byPhone.values();
+    }
+
+    /** Rows in {@link #SCHEMA} order, each value SHA-256 hashed; a missing value is sent empty. */
+    static List<List<String>> hashRows(Collection<CustomerContact> contacts) {
+        List<List<String>> rows = new ArrayList<>(contacts.size());
+        for (CustomerContact c : contacts) {
+            rows.add(List.of(hash(c.phone()), hash(c.firstName()), hash(c.lastName()),
+                    hash(c.gender()), hash(c.state()), hash("vn")));
+        }
+        return rows;
+    }
+
+    private static String hash(String value) {
+        return value == null || value.isEmpty() ? "" : MetaPurchaseEventService.sha256(value);
+    }
+
+    static <T> List<List<T>> batches(List<T> items) {
+        List<List<T>> out = new ArrayList<>();
         for (int i = 0; i < items.size(); i += BATCH_SIZE) {
             out.add(items.subList(i, Math.min(items.size(), i + BATCH_SIZE)));
         }

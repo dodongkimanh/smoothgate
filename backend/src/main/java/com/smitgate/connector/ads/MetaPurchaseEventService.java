@@ -177,6 +177,14 @@ public class MetaPurchaseEventService {
             if (phone != null) {
                 userData.put("ph", List.of(sha256(phone)));
             }
+            CustomerContact contact = CustomerContact.of(phone, order.getCustomerName(),
+                    CustomerContact.genderFromJson(order.getRawJson()), null);
+            if (contact != null) {
+                if (contact.firstName() != null) userData.put("fn", List.of(sha256(contact.firstName())));
+                if (contact.lastName() != null) userData.put("ln", List.of(sha256(contact.lastName())));
+                if (contact.gender() != null) userData.put("ge", List.of(sha256(contact.gender())));
+            }
+            userData.put("country", List.of(sha256("vn")));
 
             Map<String, Object> customData = new LinkedHashMap<>();
             customData.put("currency", "VND");

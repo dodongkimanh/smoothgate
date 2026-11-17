@@ -62,17 +62,19 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             + "AND o.createdAtExternal >= :since")
     List<Order> findUnsentMetaPurchases(@Param("tenantId") Long tenantId, @Param("since") LocalDateTime since);
 
-    /** Every phone a customer has left on an order in one of the given statuses (Meta customer-list audiences). */
-    @Query("SELECT DISTINCT o.customerPhone FROM Order o WHERE o.tenantId = :tenantId " +
-            "AND o.customerPhone IS NOT NULL AND o.customerPhone <> '' " +
-            "AND LOWER(o.status) IN :statuses")
-    List<String> findDistinctPhones(@Param("tenantId") Long tenantId, @Param("statuses") List<String> statuses);
-
-    /** Phones of customers who paid: a confirmed status with revenue. */
-    @Query("SELECT DISTINCT o.customerPhone FROM Order o WHERE o.tenantId = :tenantId " +
-            "AND o.customerPhone IS NOT NULL AND o.customerPhone <> '' " +
-            "AND o.revenue > 0 AND LOWER(o.status) IN :statuses")
-    List<String> findDistinctBuyerPhones(@Param("tenantId") Long tenantId, @Param("statuses") List<String> statuses);
+    /**
+     * Phone, name and gender (from the Pancake payload) of every order in one of the given statuses;
+     * with {@code buyersOnly} only orders with revenue. Feeds Meta customer-list audiences.
+     */
+    @Query(value = "SELECT customer_phone, customer_name, " +
+            "(regexp_match(raw_json, '\"gender\"[^a-z]*\"(male|female)\"'))[1] " +
+            "FROM orders WHERE tenant_id = :tenantId " +
+            "AND customer_phone IS NOT NULL AND customer_phone <> '' " +
+            "AND (:buyersOnly = FALSE OR revenue > 0) " +
+            "AND LOWER(status) IN (:statuses)", nativeQuery = true)
+    List<Object[]> findAudienceContacts(@Param("tenantId") Long tenantId,
+                                        @Param("statuses") List<String> statuses,
+                                        @Param("buyersOnly") boolean buyersOnly);
 
     Optional<Order> findByTenantIdAndPosShopIdAndExternalOrderId(
             Long tenantId, Long posShopId, String externalOrderId);
