@@ -62,6 +62,18 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             + "AND o.createdAtExternal >= :since")
     List<Order> findUnsentMetaPurchases(@Param("tenantId") Long tenantId, @Param("since") LocalDateTime since);
 
+    /** Every phone a customer has left on an order in one of the given statuses (Meta customer-list audiences). */
+    @Query("SELECT DISTINCT o.customerPhone FROM Order o WHERE o.tenantId = :tenantId " +
+            "AND o.customerPhone IS NOT NULL AND o.customerPhone <> '' " +
+            "AND LOWER(o.status) IN :statuses")
+    List<String> findDistinctPhones(@Param("tenantId") Long tenantId, @Param("statuses") List<String> statuses);
+
+    /** Phones of customers who paid: a confirmed status with revenue. */
+    @Query("SELECT DISTINCT o.customerPhone FROM Order o WHERE o.tenantId = :tenantId " +
+            "AND o.customerPhone IS NOT NULL AND o.customerPhone <> '' " +
+            "AND o.revenue > 0 AND LOWER(o.status) IN :statuses")
+    List<String> findDistinctBuyerPhones(@Param("tenantId") Long tenantId, @Param("statuses") List<String> statuses);
+
     Optional<Order> findByTenantIdAndPosShopIdAndExternalOrderId(
             Long tenantId, Long posShopId, String externalOrderId);
 
