@@ -133,7 +133,7 @@ const TONE = {
 function Badge({ tone, children, title }) {
   const t = TONE[tone]
   return (
-    <span title={title} className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${t.bg} ${t.text}`}>
+    <span title={title} className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-sm font-medium ${t.bg} ${t.text}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${t.dot}`} />
       {children}
     </span>
@@ -159,18 +159,18 @@ function HealthCard({ icon: Icon, title, tone, status, lines }) {
           <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
             <Icon className="h-4 w-4 text-slate-600" />
           </div>
-          <h3 className="font-semibold text-slate-800 text-sm truncate">{title}</h3>
+          <h3 className="font-semibold text-slate-800 text-base truncate">{title}</h3>
         </div>
-        <span className={`inline-flex items-center gap-1 text-xs font-medium ${t.text}`}>
-          <StatusIcon className="h-4 w-4" />
+        <span className={`inline-flex items-center gap-1 text-sm font-medium ${t.text}`}>
+          <StatusIcon className="h-5 w-5" />
           {status}
         </span>
       </div>
       <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
         {lines.map(([label, value]) => (
           <div key={label} className="min-w-0">
-            <dt className="text-[11px] text-slate-500">{label}</dt>
-            <dd className="text-sm font-semibold text-slate-800 tabular-nums truncate">{value}</dd>
+            <dt className="text-sm text-slate-500">{label}</dt>
+            <dd className="text-base font-semibold text-slate-800 tabular-nums truncate">{value}</dd>
           </div>
         ))}
       </dl>
@@ -183,8 +183,8 @@ function Section({ title, subtitle, children, right }) {
     <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 border-b border-gray-100">
         <div>
-          <h2 className="font-semibold text-slate-800 text-sm">{title}</h2>
-          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+          <h2 className="font-semibold text-slate-800 text-base">{title}</h2>
+          {subtitle && <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>}
         </div>
         {right}
       </div>
@@ -193,8 +193,8 @@ function Section({ title, subtitle, children, right }) {
   )
 }
 
-const th = 'px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap'
-const td = 'px-3 py-2 text-sm text-slate-700 whitespace-nowrap'
+const th = 'px-3 py-2 text-left text-sm font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap'
+const td = 'px-3 py-2 text-base text-slate-700 whitespace-nowrap'
 
 function AudienceTable({ audiences }) {
   const accounts = []
@@ -207,7 +207,7 @@ function AudienceTable({ audiences }) {
     byAccount.get(row.account)[row.kind] = row
   }
   if (accounts.length === 0) {
-    return <p className="px-4 py-6 text-sm text-slate-500">Chưa có tệp nào. Lần đồng bộ đầu chạy khoảng 10 phút sau khi máy chủ khởi động.</p>
+    return <p className="px-4 py-6 text-base text-slate-500">Chưa có tệp nào. Lần đồng bộ đầu chạy khoảng 10 phút sau khi máy chủ khởi động.</p>
   }
   return (
     <div className="overflow-x-auto">
@@ -241,7 +241,7 @@ function AudienceTable({ audiences }) {
                     <td key={k.key} className={td} title={title}>
                       <div className="flex flex-col gap-1">
                         <span className="tabular-nums font-medium">{matchedSize(row)}</span>
-                        <span className="text-[11px] text-slate-500 tabular-nums">
+                        <span className="text-sm text-slate-500 tabular-nums">
                           {row.lastCount != null ? `gửi ${nf.format(row.lastCount)} SĐT` : k.key.startsWith('LAL') ? 'người tương tự' : ''}
                         </span>
                         <Badge tone={tone}>
@@ -251,7 +251,7 @@ function AudienceTable({ audiences }) {
                     </td>
                   )
                 })}
-                <td className={`${td} text-xs text-slate-500`}>
+                <td className={`${td} text-sm text-slate-500`}>
                   {fmtTime(lastSynced)}
                   {lastSynced && <div className="text-slate-400">{ago(lastSynced)}</div>}
                 </td>
@@ -284,7 +284,7 @@ function GroupSwitch({ value, onChange }) {
           key={key}
           type="button"
           onClick={() => onChange(key)}
-          className={`px-2.5 py-1 rounded-md text-xs font-medium ${value === key ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+          className={`px-2.5 py-1 rounded-md text-sm font-medium ${value === key ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
         >
           {label}
         </button>
@@ -341,8 +341,8 @@ function GroupTable({ rows, mode, columns }) {
           {groups.map((g) => (
             <tr key={g.key}>
               <td className={td}>
-                <div className={`${g.none ? 'text-slate-400' : 'font-medium'} ${mode === 'ad' ? 'tabular-nums text-xs' : ''}`}>{g.label}</div>
-                {g.sub && <div className="text-[11px] text-slate-400">{g.sub}</div>}
+                <div className={`${g.none ? 'text-slate-400' : 'font-medium'} ${mode === 'ad' ? 'tabular-nums text-sm' : ''}`}>{g.label}</div>
+                {g.sub && <div className="text-sm text-slate-400">{g.sub}</div>}
               </td>
               {columns.map((c) => (
                 <td
@@ -375,14 +375,14 @@ function GroupTable({ rows, mode, columns }) {
 function EmptyRow({ cols }) {
   return (
     <tr>
-      <td colSpan={cols} className="px-4 py-6 text-sm text-slate-500">Không có dữ liệu trong khoảng ngày này.</td>
+      <td colSpan={cols} className="px-4 py-6 text-base text-slate-500">Không có dữ liệu trong khoảng ngày này.</td>
     </tr>
   )
 }
 
 function ErrorText({ error }) {
   if (!error) return null
-  return <div className="text-[11px] text-red-600 whitespace-normal max-w-md mt-1">{error}</div>
+  return <div className="text-sm text-red-600 whitespace-normal max-w-md mt-1">{error}</div>
 }
 
 export default function MetaSync() {
@@ -407,12 +407,12 @@ export default function MetaSync() {
   }
 
   if (isLoading) {
-    return <div className="p-8 text-sm text-slate-500">Đang tải trạng thái đồng bộ…</div>
+    return <div className="p-8 text-base text-slate-500">Đang tải trạng thái đồng bộ…</div>
   }
   if (error || !data) {
     return (
       <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-base text-red-700">
           Không tải được trạng thái: {error?.response?.data?.message || error?.message || 'lỗi không rõ'}
         </div>
       </div>
@@ -452,15 +452,15 @@ export default function MetaSync() {
     <div className="space-y-4 w-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-slate-800">Đồng bộ dữ liệu lên Meta</h1>
-          <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+          <h1 className="text-2xl font-semibold text-slate-800">Đồng bộ dữ liệu lên Meta</h1>
+          <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-1">
             <ShieldCheck className="h-3.5 w-3.5" />
             SĐT, họ tên và tỉnh/thành được mã hóa SHA-256 trước khi gửi; Meta chỉ dùng để so khớp người.
           </p>
         </div>
         <button
           onClick={() => refetch()}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-gray-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-base text-slate-700 hover:bg-gray-50"
         >
           <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
           Tải lại
@@ -508,21 +508,21 @@ export default function MetaSync() {
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-slate-600">Xem sự kiện theo ngày:</span>
+          <span className="text-sm font-medium text-slate-600">Xem sự kiện theo ngày:</span>
           <input
             type="date"
             value={range.from}
             max={range.to}
             onChange={(e) => setCustom('from', e.target.value)}
-            className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+            className="px-2 py-1.5 border border-gray-200 rounded-lg text-sm"
           />
-          <span className="text-gray-400 text-xs">–</span>
+          <span className="text-gray-400 text-sm">–</span>
           <input
             type="date"
             value={range.to}
             min={range.from}
             onChange={(e) => setCustom('to', e.target.value)}
-            className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs"
+            className="px-2 py-1.5 border border-gray-200 rounded-lg text-sm"
           />
           {isFetching && <RefreshCw className="h-3.5 w-3.5 animate-spin text-slate-400" />}
         </div>
@@ -532,7 +532,7 @@ export default function MetaSync() {
               key={p.id}
               type="button"
               onClick={() => applyPreset(p.id)}
-              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+              className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                 preset === p.id ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >
@@ -540,7 +540,7 @@ export default function MetaSync() {
             </button>
           ))}
         </div>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-sm text-slate-500">
           SĐT tính theo ngày khách nhắn tin, đơn hàng tính theo ngày đơn — chọn cùng ngày trong Trình quản lý quảng cáo Meta để đối chiếu cột
           “Khách hàng tiềm năng” và “Lượt mua”.
         </p>
@@ -554,7 +554,7 @@ export default function MetaSync() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${tab === key ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-gray-50'}`}
+            className={`px-3 py-1.5 rounded-lg text-base font-medium ${tab === key ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-gray-50'}`}
           >
             {label}
           </button>
@@ -570,8 +570,8 @@ export default function MetaSync() {
               ['Lỗi', leads.rangeTotals?.failed, true],
             ].map(([label, value, isError]) => (
               <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3">
-                <div className="text-[11px] text-slate-500">{label}</div>
-                <div className={`text-xl font-semibold tabular-nums ${isError && Number(value) > 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                <div className="text-sm text-slate-500">{label}</div>
+                <div className={`text-3xl font-semibold tabular-nums ${isError && Number(value) > 0 ? 'text-red-600' : 'text-slate-800'}`}>
                   {nf.format(value ?? 0)}
                 </div>
               </div>
@@ -597,14 +597,14 @@ export default function MetaSync() {
                 {(leads.byPage || [])
                   .filter((p) => p.lastError)
                   .map((p) => (
-                    <div key={p.pageId} className="text-xs text-red-600">
+                    <div key={p.pageId} className="text-sm text-red-600">
                       <b>{p.pageName || p.pageId}</b>: {p.lastError}
                     </div>
                   ))}
               </div>
             )}
             {(leads.daily || []).length > 1 && (
-              <div className="border-t border-gray-100 px-4 py-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+              <div className="border-t border-gray-100 px-4 py-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
                 <span className="text-slate-500">Theo ngày:</span>
                 {(leads.daily || []).map((d) => (
                   <span key={d.date} className="tabular-nums">
@@ -639,7 +639,7 @@ export default function MetaSync() {
                       <td className={td}>{r.customerName || '—'}</td>
                       <td className={td}>{r.accountName || <span className="text-slate-400">—</span>}</td>
                       <td className={td}>{r.pageName || r.pageId}</td>
-                      <td className={`${td} tabular-nums text-xs`}>{r.adId || <span className="text-slate-400">không có</span>}</td>
+                      <td className={`${td} tabular-nums text-sm`}>{r.adId || <span className="text-slate-400">không có</span>}</td>
                       <td className={td}>
                         <EventStatus sentAt={r.sentAt} error={r.error} />
                         <ErrorText error={!r.sentAt && r.error} />
@@ -662,8 +662,8 @@ export default function MetaSync() {
               ['Đơn lỗi', nf.format(purchases.rangeTotals?.failed ?? 0)],
             ].map(([label, value]) => (
               <div key={label} className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 min-w-0">
-                <div className="text-[11px] text-slate-500">{label}</div>
-                <div className="text-xl font-semibold tabular-nums text-slate-800 truncate">{value}</div>
+                <div className="text-sm text-slate-500">{label}</div>
+                <div className="text-3xl font-semibold tabular-nums text-slate-800 truncate">{value}</div>
               </div>
             ))}
           </div>
@@ -686,7 +686,7 @@ export default function MetaSync() {
           <Section
             title={`Đơn hàng (${nf.format((purchases.rows || []).length)})`}
             subtitle="Đơn hợp lệ, có doanh thu và có Messenger của khách (đơn Pancake trong Smoothgate)."
-            right={purchases.lastSentAt && <span className="text-xs text-slate-500">Gửi gần nhất {ago(purchases.lastSentAt)}</span>}
+            right={purchases.lastSentAt && <span className="text-sm text-slate-500">Gửi gần nhất {ago(purchases.lastSentAt)}</span>}
           >
             <div className="overflow-x-auto">
               <table className="min-w-full">
@@ -711,7 +711,7 @@ export default function MetaSync() {
                       <td className={`${td} text-right tabular-nums font-medium`}>{money(o.revenue)}</td>
                       <td className={td}>{o.accountName || <span className="text-slate-400">—</span>}</td>
                       <td className={td}>{o.pageName || o.pageId || '—'}</td>
-                      <td className={`${td} tabular-nums text-xs`}>{o.adId || <span className="text-slate-400">không có</span>}</td>
+                      <td className={`${td} tabular-nums text-sm`}>{o.adId || <span className="text-slate-400">không có</span>}</td>
                       <td className={`${td} tabular-nums`}>{fmtTime(o.orderAt)}</td>
                       <td className={td}>
                         <EventStatus sentAt={o.sentAt} error={o.error} />
