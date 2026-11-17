@@ -49,6 +49,20 @@ public class MetaCustomerAudience {
     @Column(name = "last_error", length = 500)
     private String lastError;
 
+    /** Matched people as Meta reports it (a range; -1 while Meta is still counting). */
+    @Column(name = "meta_count_lower")
+    private Long metaCountLower;
+
+    @Column(name = "meta_count_upper")
+    private Long metaCountUpper;
+
+    /** Meta's operation and delivery status, e.g. "200 Normal | delivery 200 ...". */
+    @Column(name = "meta_status", length = 500)
+    private String metaStatus;
+
+    @Column(name = "meta_checked_at")
+    private LocalDateTime metaCheckedAt;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 

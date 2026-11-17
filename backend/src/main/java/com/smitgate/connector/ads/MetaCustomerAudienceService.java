@@ -99,6 +99,44 @@ public class MetaCustomerAudienceService {
         }
     }
 
+    /** Reads back from Meta how many people each audience matched and whether it is ready for ads. */
+    @Scheduled(
+            fixedDelayString = "${app.meta-audiences.status-delay-ms:3600000}",
+            initialDelayString = "${app.meta-audiences.status-initial-delay-ms:120000}")
+    public synchronized void refreshStatuses() {
+        if (!enabled) {
+            return;
+        }
+        try {
+            for (DataSource ds : dataSourceRepository.findByTypeAndStatus(DataSource.Type.META_ADS, DataSource.Status.ACTIVE)) {
+                String token = dataSourceService.decryptSecret(ds);
+                for (MetaCustomerAudience row : audienceRepository.findByTenantId(ds.getTenantId())) {
+                    if (row.getExternalAudienceId() == null) continue;
+                    refreshStatus(token, row);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Meta audience status check failed: {}", e.getMessage());
+        }
+    }
+
+    private void refreshStatus(String token, MetaCustomerAudience row) {
+        try {
+            JsonNode a = get(row.getExternalAudienceId(),
+                    "approximate_count_lower_bound,approximate_count_upper_bound,operation_status,delivery_status", token);
+            row.setMetaCountLower(a.path("approximate_count_lower_bound").asLong(-1));
+            row.setMetaCountUpper(a.path("approximate_count_upper_bound").asLong(-1));
+            row.setMetaStatus(truncate("operation " + a.path("operation_status").path("code").asText("?")
+                    + " " + a.path("operation_status").path("description").asText("")
+                    + " | delivery " + a.path("delivery_status").path("code").asText("?")
+                    + " " + a.path("delivery_status").path("description").asText("")));
+        } catch (Exception e) {
+            row.setMetaStatus(truncate("Lỗi đọc trạng thái: " + e.getMessage()));
+        }
+        row.setMetaCheckedAt(LocalDateTime.now(VIETNAM_ZONE));
+        audienceRepository.save(row);
+    }
+
     void syncDataSource(DataSource ds) {
         Long tenantId = ds.getTenantId();
         List<AdAccount> accounts = adAccountRepository.findByTenantIdAndDataSourceId(tenantId, ds.getId()).stream()
@@ -300,15 +338,26 @@ public class MetaCustomerAudienceService {
         return value.length() <= 500 ? value : value.substring(0, 500);
     }
 
+    private JsonNode get(String path, String fields, String token) {
+        return call(() -> webClientBuilder.build().get()
+                .uri(uri -> uri.scheme("https").host("graph.facebook.com").path("/" + apiVersion + "/" + path)
+                        .queryParam("fields", fields).queryParam("access_token", token).build())
+                .retrieve().bodyToMono(JsonNode.class).block(Duration.ofSeconds(60)));
+    }
+
     private JsonNode post(String path, MultiValueMap<String, String> form, String token) {
         MultiValueMap<String, String> body = new LinkedMultiValueMap<>(form);
         body.add("access_token", token);
+        return call(() -> webClientBuilder.build().post()
+                .uri(GRAPH_BASE + "/" + apiVersion + "/" + path)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(BodyInserters.fromFormData(body))
+                .retrieve().bodyToMono(JsonNode.class).block(Duration.ofSeconds(60)));
+    }
+
+    private JsonNode call(java.util.function.Supplier<JsonNode> request) {
         try {
-            JsonNode res = webClientBuilder.build().post()
-                    .uri(GRAPH_BASE + "/" + apiVersion + "/" + path)
-                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                    .body(BodyInserters.fromFormData(body))
-                    .retrieve().bodyToMono(JsonNode.class).block(Duration.ofSeconds(60));
+            JsonNode res = request.get();
             if (res == null) throw new IllegalStateException("Meta không phản hồi");
             return res;
         } catch (WebClientResponseException e) {
