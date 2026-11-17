@@ -76,6 +76,10 @@ public class MetaCustomerAudienceService {
     @Value("${app.meta-audiences.account-ids:}")
     private String accountIdsFilter;
 
+    /** Comma-separated "act_..." ids never to sync (e.g. a personal account Meta won't allow lists on). */
+    @Value("${app.meta-audiences.exclude-account-ids:}")
+    private String excludedAccountIds;
+
     @Scheduled(
             fixedDelayString = "${app.meta-audiences.fixed-delay-ms:86400000}",
             initialDelayString = "${app.meta-audiences.initial-delay-ms:600000}")
@@ -304,11 +308,16 @@ public class MetaCustomerAudienceService {
         });
     }
 
-    private boolean isIncluded(String externalAccountId) {
+    /** Whether this ad account gets Smoothgate's audiences (and is shown on the Meta sync page). */
+    public boolean isIncluded(String externalAccountId) {
+        if (idSet(excludedAccountIds).contains(externalAccountId)) return false;
         if (accountIdsFilter == null || accountIdsFilter.isBlank()) return true;
-        Set<String> allowed = Arrays.stream(accountIdsFilter.split(","))
-                .map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
-        return allowed.contains(externalAccountId);
+        return idSet(accountIdsFilter).contains(externalAccountId);
+    }
+
+    private static Set<String> idSet(String csv) {
+        if (csv == null || csv.isBlank()) return Set.of();
+        return Arrays.stream(csv.split(",")).map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
     }
 
     private static String requireId(JsonNode res) {
