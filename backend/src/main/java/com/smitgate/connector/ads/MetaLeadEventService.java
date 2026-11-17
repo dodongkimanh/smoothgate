@@ -23,8 +23,9 @@ import java.util.Set;
  * Reports Messenger customers who left a phone number (found in the company CRM) to Meta as Lead events,
  * so ad sets can optimize for people who give a phone instead of people who merely open a chat.
  *
- * <p>One event per customer and Page (event_id = page + PSID), sent once. The event time is when
- * Smoothgate first saw the phone. Meta only accepts events up to 7 days old, so only leads from the last
+ * <p>One event per customer and Page (event_id = page + PSID), sent once. The event time is when the
+ * customer messaged (CRM row time), so Meta credits the ad that started the conversation rather than an ad
+ * shown to them later. Meta only accepts events up to 7 days old, so only leads from the last
  * 7 days are considered and a failed send is retried until it gets too old.
  */
 @Slf4j
@@ -95,7 +96,7 @@ public class MetaLeadEventService {
             e.setCrmRowId(lead.rowId());
             e.setPhoneHash(MetaPurchaseEventService.sha256(MetaPurchaseEventService.normalizePhone(lead.phone())));
             e.setAdId(adIdOf(lead.adId()));
-            e.setEventTime(now);
+            e.setEventTime(eventTime(lead, now));
             fresh.add(e);
         });
         if (!fresh.isEmpty()) {
@@ -130,6 +131,15 @@ public class MetaLeadEventService {
                 leadEventRepository.saveAll(batch);
             }
         });
+    }
+
+    /** When the customer messaged, kept inside Meta's 7-day window and never in the future. */
+    static LocalDateTime eventTime(CrmCustomerSource.PhoneLead lead, LocalDateTime now) {
+        if (lead.createdAt() == null) return now;
+        LocalDateTime t = LocalDateTime.ofInstant(lead.createdAt(), VIETNAM_ZONE);
+        LocalDateTime oldest = now.minus(MAX_EVENT_AGE).plusMinutes(30);
+        if (t.isAfter(now)) return now;
+        return t.isBefore(oldest) ? oldest : t;
     }
 
     /** One CRM row per customer: the first one with a usable phone. */

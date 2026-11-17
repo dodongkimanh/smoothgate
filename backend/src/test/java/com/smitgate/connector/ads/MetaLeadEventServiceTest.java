@@ -67,4 +67,20 @@ class MetaLeadEventServiceTest {
         assertEquals(List.of("abc"), user.get("ph"));
         assertTrue(user.containsKey("country"));
     }
+
+    @Test
+    void usesTheMessageTimeInsideMetasSevenDayWindow() {
+        LocalDateTime now = LocalDateTime.of(2026, 11, 17, 21, 0);
+        Instant messaged = LocalDateTime.of(2026, 11, 12, 7, 28).atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant();
+        CrmCustomerSource.PhoneLead recent = new CrmCustomerSource.PhoneLead(1, "111", "900", "0912345678", null, null, messaged);
+        assertEquals(LocalDateTime.of(2026, 11, 12, 7, 28), MetaLeadEventService.eventTime(recent, now));
+
+        Instant tooOld = now.minusDays(8).atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant();
+        CrmCustomerSource.PhoneLead old = new CrmCustomerSource.PhoneLead(1, "111", "900", "0912345678", null, null, tooOld);
+        assertTrue(MetaLeadEventService.eventTime(old, now).isAfter(now.minusDays(7)));
+
+        Instant future = now.plusHours(2).atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant();
+        CrmCustomerSource.PhoneLead ahead = new CrmCustomerSource.PhoneLead(1, "111", "900", "0912345678", null, null, future);
+        assertEquals(now, MetaLeadEventService.eventTime(ahead, now));
+    }
 }

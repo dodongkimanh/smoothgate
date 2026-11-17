@@ -37,7 +37,7 @@ public class MetaLeadEvent {
     @Column(name = "ad_id", length = 64)
     private String adId;
 
-    /** When Smoothgate first saw the phone (Vietnam time). */
+    /** When the customer messaged the Page (Vietnam time), within Meta's 7-day window. */
     @Column(name = "event_time", nullable = false)
     private LocalDateTime eventTime;
 
