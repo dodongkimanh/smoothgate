@@ -270,6 +270,108 @@ function EventStatus({ sentAt, error }) {
   return <Badge tone="idle">Đang chờ</Badge>
 }
 
+const GROUPS = [
+  ['account', 'Theo TKQC'],
+  ['page', 'Theo Page'],
+  ['ad', 'Theo quảng cáo'],
+]
+
+function GroupSwitch({ value, onChange }) {
+  return (
+    <div className="flex gap-1 rounded-lg bg-slate-100 p-0.5">
+      {GROUPS.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          className={`px-2.5 py-1 rounded-md text-xs font-medium ${value === key ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Sums per-ad rows by ad account, Page or ad; metric columns are added up. */
+function groupRows(rows, mode, keys) {
+  const groups = new Map()
+  for (const r of rows) {
+    let key
+    let label
+    let sub
+    if (mode === 'account') {
+      key = r.accountId || '_none'
+      label = r.accountName || (r.adId ? 'Chưa xác định TKQC' : 'Không qua quảng cáo')
+      sub = r.accountId || ''
+    } else if (mode === 'page') {
+      key = r.pageId || '_none'
+      label = r.pageName || r.pageId || 'Không rõ page'
+      sub = r.pageId || ''
+    } else {
+      key = `${r.adId || '_none'}|${r.pageId || ''}`
+      label = r.adId || 'Không có ID quảng cáo (khách tự nhắn)'
+      sub = [r.accountName, r.pageName || r.pageId].filter(Boolean).join(' · ')
+    }
+    if (!groups.has(key)) groups.set(key, { key, label, sub, none: key.startsWith('_none'), ...Object.fromEntries(keys.map((k) => [k, 0])) })
+    const g = groups.get(key)
+    for (const k of keys) g[k] += Number(r[k]) || 0
+  }
+  return [...groups.values()].sort((a, b) => (a.none - b.none) || (b[keys[0]] - a[keys[0]]))
+}
+
+function GroupTable({ rows, mode, columns }) {
+  const keys = columns.map((c) => c.key)
+  const groups = groupRows(rows, mode, keys)
+  const totals = Object.fromEntries(keys.map((k) => [k, groups.reduce((sum, g) => sum + g[k], 0)]))
+  const firstLabel = { account: 'Tài khoản quảng cáo', page: 'Page', ad: 'ID quảng cáo' }[mode]
+  return (
+    <div className="overflow-x-auto max-h-[480px]">
+      <table className="min-w-full">
+        <thead className="bg-slate-50 sticky top-0">
+          <tr>
+            <th className={th}>{firstLabel}</th>
+            {columns.map((c) => (
+              <th key={c.key} className={`${th} text-right`}>{c.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {groups.length === 0 && <EmptyRow cols={columns.length + 1} />}
+          {groups.map((g) => (
+            <tr key={g.key}>
+              <td className={td}>
+                <div className={`${g.none ? 'text-slate-400' : 'font-medium'} ${mode === 'ad' ? 'tabular-nums text-xs' : ''}`}>{g.label}</div>
+                {g.sub && <div className="text-[11px] text-slate-400">{g.sub}</div>}
+              </td>
+              {columns.map((c) => (
+                <td
+                  key={c.key}
+                  className={`${td} text-right tabular-nums ${c.strong ? 'font-semibold' : ''} ${
+                    c.dimZero && !g[c.key] ? 'text-slate-300' : c.tone || ''
+                  }`}
+                >
+                  {c.format(g[c.key])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+        {groups.length > 1 && (
+          <tfoot className="bg-slate-50 border-t border-gray-200">
+            <tr>
+              <td className={`${td} font-semibold`}>Tổng</td>
+              {columns.map((c) => (
+                <td key={c.key} className={`${td} text-right tabular-nums font-semibold`}>{c.format(totals[c.key])}</td>
+              ))}
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    </div>
+  )
+}
+
 function EmptyRow({ cols }) {
   return (
     <tr>
@@ -285,6 +387,7 @@ function ErrorText({ error }) {
 
 export default function MetaSync() {
   const [tab, setTab] = useState('leads')
+  const [groupBy, setGroupBy] = useState('account')
   const [preset, setPreset] = useState('TODAY')
   const [range, setRange] = useState(() => presetRange('TODAY'))
   const { data, isLoading, isFetching, error, refetch } = useQuery({
@@ -403,16 +506,6 @@ export default function MetaSync() {
         />
       </div>
 
-      <Section
-        title="Tệp đối tượng trên từng tài khoản quảng cáo"
-        subtitle="Số người Meta khớp được với SĐT đã gửi. Di chuột lên ô để xem chi tiết trạng thái hoặc lỗi."
-        right={accountsWithErrors.size > 0 && (
-          <Badge tone="bad">{accountsWithErrors.size} tài khoản lỗi: {[...accountsWithErrors].join(', ')}</Badge>
-        )}
-      >
-        <AudienceTable audiences={audiences} />
-      </Section>
-
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-600">Xem sự kiện theo ngày:</span>
@@ -485,77 +578,42 @@ export default function MetaSync() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <Section title="Theo quảng cáo" subtitle="So với cột “Khách hàng tiềm năng” của từng quảng cáo trên Meta (Meta có thể đếm thấp hơn).">
-              <div className="overflow-x-auto max-h-[420px]">
-                <table className="min-w-full">
-                  <thead className="bg-slate-50 sticky top-0">
-                    <tr>
-                      <th className={th}>ID quảng cáo</th>
-                      <th className={th}>Page</th>
-                      <th className={`${th} text-right`}>SĐT</th>
-                      <th className={`${th} text-right`}>Đã gửi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {(leads.byAd || []).length === 0 && <EmptyRow cols={4} />}
-                    {(leads.byAd || []).map((a) => (
-                      <tr key={`${a.adId}-${a.pageId}`}>
-                        <td className={`${td} tabular-nums text-xs`}>
-                          {a.adId || <span className="text-slate-400">không ghi ID (khách tự nhắn)</span>}
-                        </td>
-                        <td className={td}>{a.pageName || a.pageId}</td>
-                        <td className={`${td} text-right tabular-nums font-medium`}>{nf.format(a.total)}</td>
-                        <td className={`${td} text-right tabular-nums text-emerald-700`}>{nf.format(a.sent)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <Section
+            title="Số SĐT đã gửi"
+            subtitle="So với cột “Khách hàng tiềm năng” trên Meta ở cùng cấp (TKQC / quảng cáo). Meta có thể đếm thấp hơn."
+            right={<GroupSwitch value={groupBy} onChange={setGroupBy} />}
+          >
+            <GroupTable
+              rows={leads.byAd || []}
+              mode={groupBy}
+              columns={[
+                { key: 'total', label: 'SĐT', format: (v) => nf.format(v), strong: true },
+                { key: 'sent', label: 'Đã gửi', format: (v) => nf.format(v), tone: 'text-emerald-700' },
+                { key: 'failed', label: 'Lỗi', format: (v) => nf.format(v), tone: 'text-red-600', dimZero: true },
+              ]}
+            />
+            {(leads.byPage || []).some((p) => p.lastError) && (
+              <div className="border-t border-gray-100 px-4 py-3 space-y-1">
+                {(leads.byPage || [])
+                  .filter((p) => p.lastError)
+                  .map((p) => (
+                    <div key={p.pageId} className="text-xs text-red-600">
+                      <b>{p.pageName || p.pageId}</b>: {p.lastError}
+                    </div>
+                  ))}
               </div>
-            </Section>
-
-            <Section title="Theo page">
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className={th}>Page</th>
-                      <th className={`${th} text-right`}>SĐT</th>
-                      <th className={`${th} text-right`}>Đã gửi</th>
-                      <th className={`${th} text-right`}>Lỗi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {(leads.byPage || []).length === 0 && <EmptyRow cols={4} />}
-                    {(leads.byPage || []).map((p) => (
-                      <tr key={p.pageId}>
-                        <td className={td}>
-                          <div className="font-medium">{p.pageName || 'Page chưa rõ tên'}</div>
-                          <div className="text-[11px] text-slate-400">{p.pageId}</div>
-                          <ErrorText error={p.lastError} />
-                        </td>
-                        <td className={`${td} text-right tabular-nums`}>{nf.format(p.total)}</td>
-                        <td className={`${td} text-right tabular-nums text-emerald-700`}>{nf.format(p.sent)}</td>
-                        <td className={`${td} text-right tabular-nums ${Number(p.failed) > 0 ? 'text-red-600 font-semibold' : 'text-slate-400'}`}>
-                          {nf.format(p.failed)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {(leads.daily || []).length > 1 && (
-                  <div className="border-t border-gray-100 px-4 py-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-                    <span className="text-slate-500">Theo ngày:</span>
-                    {(leads.daily || []).map((d) => (
-                      <span key={d.date} className="tabular-nums">
-                        {fmtDay(d.date).slice(0, 5)}: <b>{nf.format(d.total)}</b>
-                      </span>
-                    ))}
-                  </div>
-                )}
+            )}
+            {(leads.daily || []).length > 1 && (
+              <div className="border-t border-gray-100 px-4 py-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+                <span className="text-slate-500">Theo ngày:</span>
+                {(leads.daily || []).map((d) => (
+                  <span key={d.date} className="tabular-nums">
+                    {fmtDay(d.date).slice(0, 5)}: <b>{nf.format(d.total)}</b>
+                  </span>
+                ))}
               </div>
-            </Section>
-          </div>
+            )}
+          </Section>
 
           <Section
             title={`Danh sách khách (${nf.format((leads.rows || []).length)})`}
@@ -567,17 +625,19 @@ export default function MetaSync() {
                   <tr>
                     <th className={th}>Khách nhắn lúc</th>
                     <th className={th}>Khách hàng</th>
+                    <th className={th}>TKQC</th>
                     <th className={th}>Page</th>
                     <th className={th}>ID quảng cáo</th>
                     <th className={th}>Trạng thái</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {(leads.rows || []).length === 0 && <EmptyRow cols={5} />}
+                  {(leads.rows || []).length === 0 && <EmptyRow cols={6} />}
                   {(leads.rows || []).map((r) => (
                     <tr key={r.id}>
                       <td className={`${td} tabular-nums`}>{fmtTime(r.eventTime)}</td>
                       <td className={td}>{r.customerName || '—'}</td>
+                      <td className={td}>{r.accountName || <span className="text-slate-400">—</span>}</td>
                       <td className={td}>{r.pageName || r.pageId}</td>
                       <td className={`${td} tabular-nums text-xs`}>{r.adId || <span className="text-slate-400">không có</span>}</td>
                       <td className={td}>
@@ -608,30 +668,19 @@ export default function MetaSync() {
             ))}
           </div>
 
-          <Section title="Theo quảng cáo" subtitle="So với cột “Lượt mua trên Meta” và “Giá trị chuyển đổi” của từng quảng cáo.">
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className={th}>ID quảng cáo</th>
-                    <th className={th}>Page</th>
-                    <th className={`${th} text-right`}>Đơn đã gửi</th>
-                    <th className={`${th} text-right`}>Giá trị</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {(purchases.byAd || []).length === 0 && <EmptyRow cols={4} />}
-                  {(purchases.byAd || []).map((a) => (
-                    <tr key={`${a.adId}-${a.pageId}`}>
-                      <td className={`${td} tabular-nums text-xs`}>{a.adId || <span className="text-slate-400">không có</span>}</td>
-                      <td className={td}>{a.pageName || a.pageId || '—'}</td>
-                      <td className={`${td} text-right tabular-nums font-medium`}>{nf.format(a.sent)}</td>
-                      <td className={`${td} text-right tabular-nums`}>{money(a.value)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <Section
+            title="Đơn hàng đã gửi"
+            subtitle="So với cột “Lượt mua trên Meta” và “Giá trị chuyển đổi” ở cùng cấp (TKQC / quảng cáo)."
+            right={<GroupSwitch value={groupBy} onChange={setGroupBy} />}
+          >
+            <GroupTable
+              rows={purchases.byAd || []}
+              mode={groupBy}
+              columns={[
+                { key: 'sent', label: 'Đơn đã gửi', format: (v) => nf.format(v), strong: true },
+                { key: 'value', label: 'Giá trị', format: (v) => money(v) },
+              ]}
+            />
           </Section>
 
           <Section
@@ -646,6 +695,7 @@ export default function MetaSync() {
                     <th className={th}>Mã đơn</th>
                     <th className={th}>Khách hàng</th>
                     <th className={`${th} text-right`}>Giá trị</th>
+                    <th className={th}>TKQC</th>
                     <th className={th}>Page</th>
                     <th className={th}>ID quảng cáo</th>
                     <th className={th}>Ngày đơn</th>
@@ -653,12 +703,13 @@ export default function MetaSync() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {(purchases.rows || []).length === 0 && <EmptyRow cols={7} />}
+                  {(purchases.rows || []).length === 0 && <EmptyRow cols={8} />}
                   {(purchases.rows || []).map((o) => (
                     <tr key={o.orderId}>
                       <td className={`${td} tabular-nums`}>#{o.orderId}</td>
                       <td className={td}>{o.customerName || '—'}</td>
                       <td className={`${td} text-right tabular-nums font-medium`}>{money(o.revenue)}</td>
+                      <td className={td}>{o.accountName || <span className="text-slate-400">—</span>}</td>
                       <td className={td}>{o.pageName || o.pageId || '—'}</td>
                       <td className={`${td} tabular-nums text-xs`}>{o.adId || <span className="text-slate-400">không có</span>}</td>
                       <td className={`${td} tabular-nums`}>{fmtTime(o.orderAt)}</td>
@@ -674,6 +725,16 @@ export default function MetaSync() {
           </Section>
         </div>
       )}
+
+      <Section
+        title="Tệp đối tượng trên từng tài khoản quảng cáo"
+        subtitle="Số người Meta khớp được với SĐT đã gửi (cập nhật mỗi ngày, không phụ thuộc ngày đang chọn). Di chuột lên ô để xem chi tiết."
+        right={accountsWithErrors.size > 0 && (
+          <Badge tone="bad">{accountsWithErrors.size} tài khoản lỗi: {[...accountsWithErrors].join(', ')}</Badge>
+        )}
+      >
+        <AudienceTable audiences={audiences} />
+      </Section>
     </div>
   )
 }

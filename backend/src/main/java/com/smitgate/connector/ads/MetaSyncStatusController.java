@@ -45,6 +45,7 @@ public class MetaSyncStatusController {
     private final MetaLeadEventService leadEventService;
     private final MetaPurchaseEventService purchaseEventService;
     private final MetaCustomerAudienceService audienceService;
+    private final MetaAdAccountResolver adAccountResolver;
 
     @GetMapping("/status")
     public ResponseEntity<ApiResponse<Map<String, Object>>> status(
@@ -119,7 +120,8 @@ public class MetaSyncStatusController {
         out.put("byPage", byPage);
 
         List<Map<String, Object>> byAd = jdbc.queryForList("""
-                SELECT ad_id AS "adId", page_id AS "pageId", count(*) AS total, count(sent_at) AS sent
+                SELECT ad_id AS "adId", page_id AS "pageId", count(*) AS total, count(sent_at) AS sent,
+                       count(*) FILTER (WHERE sent_at IS NULL AND last_error IS NOT NULL) AS failed
                 FROM meta_lead_events WHERE tenant_id = ? AND event_time >= ? AND event_time < ?
                 GROUP BY ad_id, page_id ORDER BY total DESC, ad_id
                 """, tenantId, start, end);
@@ -149,6 +151,7 @@ public class MetaSyncStatusController {
             r.put("customerName", row instanceof Number n ? names.get(n.longValue()) : null);
         });
         out.put("rows", rows);
+        attachAccounts(tenantId, byAd, rows);
         return out;
     }
 
@@ -187,7 +190,38 @@ public class MetaSyncStatusController {
                 """.formatted(ISO) + inRange + " ORDER BY created_at_external DESC LIMIT " + MAX_ROWS, tenantId, start, end));
         rows.forEach(r -> r.put("pageName", pageNames.get(String.valueOf(r.get("pageId")))));
         out.put("rows", rows);
+        attachAccounts(tenantId, byAd, rows);
         return out;
+    }
+
+    /** Adds the ad account (id and Smoothgate name) of each row's ad, so the page can group by account. */
+    @SafeVarargs
+    private void attachAccounts(Long tenantId, List<Map<String, Object>>... lists) {
+        Set<String> adIds = new HashSet<>();
+        for (List<Map<String, Object>> list : lists) {
+            list.forEach(r -> {
+                if (r.get("adId") != null) adIds.add(String.valueOf(r.get("adId")));
+            });
+        }
+        Map<String, String> accountByAd;
+        try {
+            accountByAd = adAccountResolver.accountsOf(tenantId, adIds);
+        } catch (Exception e) {
+            log.warn("Ad accounts of ads unavailable: {}", e.getMessage());
+            accountByAd = Map.of();
+        }
+        Map<String, String> names = new java.util.HashMap<>();
+        jdbc.query("SELECT external_account_id, name FROM ad_accounts WHERE tenant_id = ?",
+                rs -> {
+                    names.put(rs.getString(1), rs.getString(2));
+                }, tenantId);
+        for (List<Map<String, Object>> list : lists) {
+            for (Map<String, Object> r : list) {
+                String act = r.get("adId") == null ? null : accountByAd.get(String.valueOf(r.get("adId")));
+                r.put("accountId", act);
+                r.put("accountName", act == null ? null : names.getOrDefault(act, act));
+            }
+        }
     }
 
     private static String iso(java.time.LocalDateTime t) {
