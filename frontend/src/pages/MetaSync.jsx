@@ -326,7 +326,7 @@ function GroupTable({ rows, mode, columns }) {
   const totals = Object.fromEntries(keys.map((k) => [k, groups.reduce((sum, g) => sum + g[k], 0)]))
   const firstLabel = { account: 'Tài khoản quảng cáo', page: 'Page', ad: 'ID quảng cáo' }[mode]
   return (
-    <div className="overflow-x-auto max-h-[480px]">
+    <div className="overflow-x-auto">
       <table className="min-w-full">
         <thead className="bg-slate-50 sticky top-0">
           <tr>
@@ -449,7 +449,7 @@ export default function MetaSync() {
   const accountsWithErrors = new Set(lists.filter((a) => audienceTone(a) === 'bad').map((a) => a.account))
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 max-w-[1600px] mx-auto">
+    <div className="space-y-4 w-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-slate-800">Đồng bộ dữ liệu lên Meta</h1>
@@ -619,7 +619,7 @@ export default function MetaSync() {
             title={`Danh sách khách (${nf.format((leads.rows || []).length)})`}
             subtitle="Thời gian là lúc khách nhắn tin; Meta tính cho quảng cáo đã đưa khách tới."
           >
-            <div className="overflow-x-auto max-h-[600px]">
+            <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead className="bg-slate-50 sticky top-0">
                   <tr>
@@ -688,7 +688,7 @@ export default function MetaSync() {
             subtitle="Đơn hợp lệ, có doanh thu và có Messenger của khách (đơn Pancake trong Smoothgate)."
             right={purchases.lastSentAt && <span className="text-xs text-slate-500">Gửi gần nhất {ago(purchases.lastSentAt)}</span>}
           >
-            <div className="overflow-x-auto max-h-[600px]">
+            <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead className="bg-slate-50 sticky top-0">
                   <tr>
