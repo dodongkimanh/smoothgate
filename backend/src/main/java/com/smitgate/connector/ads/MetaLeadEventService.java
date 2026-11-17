@@ -159,7 +159,7 @@ public class MetaLeadEventService {
                 userData.put("country", List.of(MetaPurchaseEventService.sha256("vn")));
             }
             Map<String, Object> event = new LinkedHashMap<>();
-            event.put("event_name", "Lead");
+            event.put("event_name", "LeadSubmitted");
             event.put("event_time", e.getEventTime().atZone(VIETNAM_ZONE).toEpochSecond());
             event.put("event_id", "smoothgate-lead-" + e.getPageId() + "-" + e.getPsid());
             event.put("action_source", "business_messaging");

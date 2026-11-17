@@ -41,7 +41,7 @@ class MetaLeadEventServiceTest {
                 MetaLeadEventService.firstLeadPerCustomer(List.of(lead(2, "111", "900", "0912345678")));
 
         Map<String, Object> event = MetaLeadEventService.toEvents(List.of(e), leads).get(0);
-        assertEquals("Lead", event.get("event_name"));
+        assertEquals("LeadSubmitted", event.get("event_name"));
         assertEquals("smoothgate-lead-111-900", event.get("event_id"));
         assertEquals("business_messaging", event.get("action_source"));
         assertEquals("messenger", event.get("messaging_channel"));
