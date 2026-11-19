@@ -9,12 +9,13 @@ import java.util.regex.Pattern;
 
 /**
  * One customer as Meta's customer-list matching wants it: normalized (not yet hashed) phone, first and last name,
- * gender and province. Fields other than the phone may be null.
+ * gender, province and birth year. Fields other than the phone may be null.
  *
  * <p>Normalization follows Meta's rules: lowercase, no punctuation; names keep their UTF-8 letters,
  * the province is folded to a-z with no spaces ("Tỉnh Hải Dương" → "haiduong").
  */
-public record CustomerContact(String phone, String firstName, String lastName, String gender, String state) {
+public record CustomerContact(String phone, String firstName, String lastName, String gender, String state,
+                              String birthYear) {
 
     private static final Pattern GENDER_IN_JSON = Pattern.compile("\"gender\":\\s*\"(male|female)\"");
 
@@ -23,7 +24,23 @@ public record CustomerContact(String phone, String firstName, String lastName, S
         String phone = MetaPurchaseEventService.normalizePhone(rawPhone);
         if (phone == null) return null;
         String[] names = splitName(rawName);
-        return new CustomerContact(phone, names[0], names[1], normalizeGender(rawGender), provinceOf(address));
+        return new CustomerContact(phone, names[0], names[1], normalizeGender(rawGender), provinceOf(address), null);
+    }
+
+    /** Gender and birth year a salesperson typed into the CRM for this phone; null when neither is usable. */
+    public static CustomerContact profile(String rawPhone, String rawGender, Integer birthYear, int currentYear) {
+        String phone = MetaPurchaseEventService.normalizePhone(rawPhone);
+        if (phone == null) return null;
+        String gender = normalizeGender(rawGender);
+        String year = normalizeBirthYear(birthYear, currentYear);
+        if (gender == null && year == null) return null;
+        return new CustomerContact(phone, null, null, gender, null, year);
+    }
+
+    /** Meta's DOBY is four digits; anything outside 1900 .. (this year - 10) is a typo, not a customer. */
+    static String normalizeBirthYear(Integer year, int currentYear) {
+        if (year == null || year < 1900 || year > currentYear - 10) return null;
+        return String.valueOf(year);
     }
 
     /** Fills this contact's missing fields from another record of the same phone. */
@@ -33,7 +50,8 @@ public record CustomerContact(String phone, String firstName, String lastName, S
                 firstName != null ? firstName : other.firstName,
                 lastName != null ? lastName : other.lastName,
                 gender != null ? gender : other.gender,
-                state != null ? state : other.state);
+                state != null ? state : other.state,
+                birthYear != null ? birthYear : other.birthYear);
     }
 
     /** Pancake keeps the customer's gender in the order payload ("gender":"male"). */

@@ -54,6 +54,26 @@ public class CrmCustomerSource {
                 + "WHERE COALESCE(tinh_trang, '') NOT IN " + NOT_SOLD);
     }
 
+    /**
+     * Gender and birth year the sales team typed on CRM leads ("gioi_tinh", "nam_sinh"), keyed by normalized phone.
+     * The newest row wins when one phone has several.
+     */
+    public Map<String, CustomerContact> profiles() {
+        Map<String, CustomerContact> out = new HashMap<>();
+        if (jdbc == null) return out;
+        int currentYear = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).getYear();
+        jdbc.query("SELECT \"Sdt\", gioi_tinh, nam_sinh FROM public.data_dulieukhach "
+                        + "WHERE COALESCE(\"Sdt\", '') <> '' AND (nam_sinh IS NOT NULL OR COALESCE(gioi_tinh, '') <> '') "
+                        + "ORDER BY created_at",
+                rs -> {
+                    int year = rs.getInt(3);
+                    CustomerContact p = CustomerContact.profile(rs.getString(1), rs.getString(2),
+                            rs.wasNull() ? null : year, currentYear);
+                    if (p != null) out.merge(p.phone(), p, (older, newer) -> newer.mergedWith(older));
+                });
+        return out;
+    }
+
     /** A CRM lead from a Messenger conversation that already has a phone number. */
     public record PhoneLead(long rowId, String pageId, String psid, String phone, String name, String adId,
                             Instant createdAt) {

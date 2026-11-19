@@ -11,6 +11,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
@@ -25,7 +28,9 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,8 +42,11 @@ import java.util.stream.Collectors;
  * (everyone who left a phone, and buyers only), and creates a lookalike of each once Meta accepts it.
  * The lists are replaced in full on every run, so new customers flow into the lookalikes automatically.
  *
- * <p>Each customer is sent as phone, first/last name, gender, province and country to raise the match rate;
- * every value is normalized and SHA-256 hashed before it leaves the server, so Meta never sees it in clear.
+ * <p>Each customer is sent as phone, first/last name, gender, province, birth year and country to raise the match
+ * rate; every value is normalized and SHA-256 hashed before it leaves the server, so Meta never sees it in clear.
+ *
+ * <p>The upload runs once a day at 23:59 (Vietnam time) so the day's new leads and orders are all included, and
+ * every run is logged in meta_audience_sync_log with how many people joined or left each list.
  */
 @Slf4j
 @Service
@@ -49,7 +57,7 @@ public class MetaCustomerAudienceService {
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     /** Meta accepts at most 10,000 entries per upload request. */
     static final int BATCH_SIZE = 10_000;
-    static final List<String> SCHEMA = List.of("PHONE", "FN", "LN", "GEN", "ST", "COUNTRY");
+    static final List<String> SCHEMA = List.of("PHONE", "FN", "LN", "GEN", "ST", "DOBY", "COUNTRY");
 
     private static final Map<MetaCustomerAudience.Kind, String> NAMES = Map.of(
             MetaCustomerAudience.Kind.BUYERS, "Smoothgate | Khách đã mua (SĐT)",
@@ -65,6 +73,8 @@ public class MetaCustomerAudienceService {
     private final DataSourceService dataSourceService;
     private final WebClient.Builder webClientBuilder;
     private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbcTemplate;
+    private final PlatformTransactionManager transactionManager;
 
     @Value("${app.facebook.api-version}")
     private String apiVersion;
@@ -80,9 +90,7 @@ public class MetaCustomerAudienceService {
     @Value("${app.meta-audiences.exclude-account-ids:}")
     private String excludedAccountIds;
 
-    @Scheduled(
-            fixedDelayString = "${app.meta-audiences.fixed-delay-ms:86400000}",
-            initialDelayString = "${app.meta-audiences.initial-delay-ms:600000}")
+    @Scheduled(cron = "${app.meta-audiences.cron:0 59 23 * * *}", zone = "Asia/Ho_Chi_Minh")
     public synchronized void syncAll() {
         if (!enabled) {
             return;
@@ -155,9 +163,12 @@ public class MetaCustomerAudienceService {
         List<CustomerContact> crmAll = crmCustomerSource.allContacts();
         List<CustomerContact> pancakeBuyers = pancakeContacts(tenantId, OrderStatusClassifier.validStatusesForAggregation(), true);
         List<CustomerContact> pancakeAll = pancakeContacts(tenantId, OrderStatusClassifier.leadStatusesForAggregation(), false);
+        Map<String, CustomerContact> profiles = crmCustomerSource.profiles();
         // Buyers' records first so their order address and name win over a bare lead record.
-        List<List<String>> buyers = hashRows(merge(crmBuyers, pancakeBuyers));
-        List<List<String>> allPhones = hashRows(merge(crmBuyers, pancakeBuyers, crmAll, pancakeAll));
+        Collection<CustomerContact> buyerContacts = enrich(merge(crmBuyers, pancakeBuyers), profiles);
+        Collection<CustomerContact> allContacts = enrich(merge(crmBuyers, pancakeBuyers, crmAll, pancakeAll), profiles);
+        List<List<String>> buyers = hashRows(buyerContacts);
+        List<List<String>> allPhones = hashRows(allContacts);
         String token = dataSourceService.decryptSecret(ds);
 
         Map<String, MetaCustomerAudience> rows = new LinkedHashMap<>();
@@ -165,22 +176,92 @@ public class MetaCustomerAudienceService {
             rows.put(row.getAdAccountId() + ":" + row.getKind(), row);
         }
 
+        int accountsOk = 0;
         for (AdAccount account : accounts) {
             MetaCustomerAudience buyerList = row(rows, tenantId, account, MetaCustomerAudience.Kind.BUYERS);
             MetaCustomerAudience allList = row(rows, tenantId, account, MetaCustomerAudience.Kind.ALL_PHONES);
-            syncList(token, account, buyerList, buyers);
-            syncList(token, account, allList, allPhones);
+            boolean buyersSent = syncList(token, account, buyerList, buyers);
+            boolean allSent = syncList(token, account, allList, allPhones);
+            if (buyersSent && allSent) accountsOk++;
             ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_BUYERS), buyerList, 0.01);
             ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_ALL_PHONES), allList, 0.02);
         }
         log.info("Meta customer audiences: tenant {} synced {} accounts ({} buyers, {} people; CRM {} buyers / {} rows)",
                 tenantId, accounts.size(), buyers.size(), allPhones.size(), crmBuyers.size(), crmAll.size());
+        try {
+            logRun(tenantId, buyerContacts, allContacts, accountsOk, accounts.size() - accountsOk);
+        } catch (Exception e) {
+            log.warn("Meta customer audiences: could not log the run: {}", e.getMessage());
+        }
     }
 
-    private void syncList(String token, AdAccount account, MetaCustomerAudience row, List<List<String>> hashes) {
+    /**
+     * Records this upload and how many phones joined or left each list since the previous one. The first run has
+     * nothing to compare with, so its joined/left counts stay empty.
+     */
+    private void logRun(Long tenantId, Collection<CustomerContact> buyerContacts, Collection<CustomerContact> allContacts,
+                        int accountsOk, int accountsFailed) {
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            int[] buyerDiff = replaceSentPhones(tenantId, MetaCustomerAudience.Kind.BUYERS, buyerContacts);
+            int[] allDiff = replaceSentPhones(tenantId, MetaCustomerAudience.Kind.ALL_PHONES, allContacts);
+            jdbcTemplate.update("INSERT INTO meta_audience_sync_log (tenant_id, synced_at, buyers, all_phones, "
+                            + "added_buyers, removed_buyers, added_phones, removed_phones, with_birth_year, "
+                            + "buyers_with_birth_year, with_gender, with_province, accounts_ok, accounts_failed) "
+                            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    tenantId, LocalDateTime.now(VIETNAM_ZONE), buyerContacts.size(), allContacts.size(),
+                    buyerDiff == null ? null : buyerDiff[0], buyerDiff == null ? null : buyerDiff[1],
+                    allDiff == null ? null : allDiff[0], allDiff == null ? null : allDiff[1],
+                    count(allContacts, c -> c.birthYear() != null), count(buyerContacts, c -> c.birthYear() != null),
+                    count(allContacts, c -> c.gender() != null), count(allContacts, c -> c.state() != null),
+                    accountsOk, accountsFailed);
+        });
+    }
+
+    /** Swaps the stored phone hashes of one list for today's; returns {joined, left}, or null on the first run. */
+    private int[] replaceSentPhones(Long tenantId, MetaCustomerAudience.Kind kind, Collection<CustomerContact> contacts) {
+        Set<String> previous = new HashSet<>(jdbcTemplate.queryForList(
+                "SELECT phone_hash FROM meta_audience_sent_phones WHERE tenant_id = ? AND kind = ?",
+                String.class, tenantId, kind.name()));
+        Set<String> current = new LinkedHashSet<>();
+        for (CustomerContact c : contacts) current.add(MetaPurchaseEventService.sha256(c.phone()));
+        int[] diff = previous.isEmpty() ? null : diff(previous, current);
+
+        jdbcTemplate.update("DELETE FROM meta_audience_sent_phones WHERE tenant_id = ? AND kind = ?", tenantId, kind.name());
+        List<Object[]> args = new ArrayList<>(current.size());
+        for (String h : current) args.add(new Object[]{tenantId, kind.name(), h});
+        jdbcTemplate.batchUpdate("INSERT INTO meta_audience_sent_phones (tenant_id, kind, phone_hash) VALUES (?, ?, ?)", args);
+        return diff;
+    }
+
+    /** {how many in current are not in previous, how many in previous are not in current}. */
+    static int[] diff(Set<String> previous, Set<String> current) {
+        int added = 0;
+        for (String h : current) if (!previous.contains(h)) added++;
+        int removed = 0;
+        for (String h : previous) if (!current.contains(h)) removed++;
+        return new int[]{added, removed};
+    }
+
+    /** Fills gender and birth year from what sales typed in the CRM; fields already known are kept. */
+    static Collection<CustomerContact> enrich(Collection<CustomerContact> contacts, Map<String, CustomerContact> profiles) {
+        if (profiles.isEmpty()) return contacts;
+        List<CustomerContact> out = new ArrayList<>(contacts.size());
+        for (CustomerContact c : contacts) out.add(c.mergedWith(profiles.get(c.phone())));
+        return out;
+    }
+
+    private static int count(Collection<CustomerContact> contacts, java.util.function.Predicate<CustomerContact> test) {
+        int n = 0;
+        for (CustomerContact c : contacts) if (test.test(c)) n++;
+        return n;
+    }
+
+    /** Uploads one list; true when Meta accepted it. */
+    private boolean syncList(String token, AdAccount account, MetaCustomerAudience row, List<List<String>> hashes) {
         if (hashes.isEmpty()) {
-            return;
+            return false;
         }
+        boolean sent = false;
         try {
             if (row.getExternalAudienceId() == null) {
                 MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
@@ -198,6 +279,7 @@ public class MetaCustomerAudienceService {
             row.setLastSyncedAt(LocalDateTime.now(VIETNAM_ZONE));
             row.setLastCount(hashes.size());
             row.setLastError(null);
+            sent = true;
         } catch (Exception e) {
             String message = explain(e.getMessage(), account);
             if (isMissingObject(message)) {
@@ -208,6 +290,7 @@ public class MetaCustomerAudienceService {
             log.warn("Meta customer audience {} for {} failed: {}", row.getKind(), account.getExternalAccountId(), message);
         }
         audienceRepository.save(row);
+        return sent;
     }
 
     /** Created once from a synced list; Meta refreshes a lookalike on its own as its source list changes. */
@@ -280,7 +363,7 @@ public class MetaCustomerAudienceService {
         List<List<String>> rows = new ArrayList<>(contacts.size());
         for (CustomerContact c : contacts) {
             rows.add(List.of(hash(c.phone()), hash(c.firstName()), hash(c.lastName()),
-                    hash(c.gender()), hash(c.state()), hash("vn")));
+                    hash(c.gender()), hash(c.state()), hash(c.birthYear()), hash("vn")));
         }
         return rows;
     }

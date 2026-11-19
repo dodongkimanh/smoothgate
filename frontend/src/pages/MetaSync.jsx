@@ -208,7 +208,7 @@ function AudienceTable({ audiences }) {
     byAccount.get(row.account)[row.kind] = row
   }
   if (accounts.length === 0) {
-    return <p className="px-4 py-6 text-base text-slate-500">Chưa có tệp nào. Lần đồng bộ đầu chạy khoảng 10 phút sau khi máy chủ khởi động.</p>
+    return <p className="px-4 py-6 text-base text-slate-500">Chưa có tệp nào. Smoothgate gửi tệp mỗi ngày lúc 23h59.</p>
   }
   return (
     <div className="overflow-x-auto">
@@ -259,6 +259,73 @@ function AudienceTable({ audiences }) {
               </tr>
             )
           })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function Change({ added, removed }) {
+  if (added == null && removed == null) return <span className="text-slate-400">lần đầu</span>
+  return (
+    <span className="tabular-nums">
+      <span className={added > 0 ? 'text-emerald-700 font-medium' : 'text-slate-400'}>+{nf.format(added || 0)}</span>
+      {removed > 0 && <span className="text-rose-600"> / −{nf.format(removed)}</span>}
+    </span>
+  )
+}
+
+function pct(part, total) {
+  if (!total) return ''
+  const p = (100 * part) / total
+  return ` (${p > 0 && p < 1 ? '<1' : Math.round(p)}%)`
+}
+
+function AudienceHistory({ rows }) {
+  if (rows.length === 0) {
+    return (
+      <p className="px-4 py-6 text-base text-slate-500">
+        Chưa có lần gửi nào được ghi lại. Smoothgate gửi tệp mỗi ngày lúc 23h59; lần đầu chỉ ghi tổng, từ lần thứ hai mới có số khách thêm/bớt.
+      </p>
+    )
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full">
+        <thead className="bg-slate-50">
+          <tr>
+            <th className={th}>Lần gửi</th>
+            <th className={th}>Khách đã mua</th>
+            <th className={th}>Mua mới thêm / bớt</th>
+            <th className={th}>Tất cả SĐT</th>
+            <th className={th}>SĐT mới thêm / bớt</th>
+            <th className={th}>Có năm sinh<div className="normal-case font-normal tracking-normal text-slate-400">khách mua · tất cả</div></th>
+            <th className={th}>Có giới tính</th>
+            <th className={th}>Có tỉnh</th>
+            <th className={th}>Tài khoản QC</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map((r) => (
+            <tr key={r.syncedAt}>
+              <td className={td}>{fmtTime(r.syncedAt)}</td>
+              <td className={`${td} tabular-nums font-medium`}>{nf.format(r.buyers)}</td>
+              <td className={td}><Change added={r.addedBuyers} removed={r.removedBuyers} /></td>
+              <td className={`${td} tabular-nums font-medium`}>{nf.format(r.allPhones)}</td>
+              <td className={td}><Change added={r.addedPhones} removed={r.removedPhones} /></td>
+              <td className={`${td} tabular-nums`}>
+                {nf.format(r.buyersWithBirthYear)}{pct(r.buyersWithBirthYear, r.buyers)}
+                <span className="text-slate-400"> · {nf.format(r.withBirthYear)}</span>
+              </td>
+              <td className={`${td} tabular-nums`}>{nf.format(r.withGender)}{pct(r.withGender, r.allPhones)}</td>
+              <td className={`${td} tabular-nums`}>{nf.format(r.withProvince)}{pct(r.withProvince, r.allPhones)}</td>
+              <td className={td}>
+                {r.accountsFailed > 0
+                  ? <Badge tone="bad">{r.accountsOk} ổn · {r.accountsFailed} lỗi</Badge>
+                  : <Badge tone="ok">{r.accountsOk} / {r.accountsOk} ổn</Badge>}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -420,7 +487,7 @@ export default function MetaSync() {
     )
   }
 
-  const { jobs = {}, audiences = [], leads = {}, purchases = {} } = data
+  const { jobs = {}, audiences = [], audienceHistory = [], leads = {}, purchases = {} } = data
 
   const lists = audiences.filter((a) => a.kind === 'BUYERS' || a.kind === 'ALL_PHONES')
   const okLists = lists.filter((a) => audienceTone(a) !== 'bad')
@@ -497,7 +564,7 @@ export default function MetaSync() {
           status={statusText[audienceTone_]}
           note={audienceNote}
           lines={[
-            ['Gửi lần cuối (mỗi ngày)', lastAudienceSync ? ago(lastAudienceSync) : '—'],
+            ['Gửi lần cuối (mỗi ngày 23h59)', lastAudienceSync ? ago(lastAudienceSync) : '—'],
             ['Tài khoản QC ổn', `${new Set(okLists.map((a) => a.account)).size} / ${new Set(lists.map((a) => a.account)).size}`],
             ['Tất cả SĐT đã gửi', allPhones ? nf.format(allPhones.lastCount) : '—'],
             ['Khách đã mua đã gửi', buyers ? nf.format(buyers.lastCount) : '—'],
@@ -759,6 +826,13 @@ export default function MetaSync() {
         )}
       >
         <AudienceTable audiences={audiences} />
+      </Section>
+
+      <Section
+        title="Lịch sử gửi tệp lên Meta"
+        subtitle="Mỗi ngày 23h59 Smoothgate gửi lại toàn bộ tệp. Cột thêm / bớt là số SĐT mới vào hoặc rời tệp so với lần gửi trước. Mọi thông tin được mã hoá trước khi gửi."
+      >
+        <AudienceHistory rows={audienceHistory} />
       </Section>
     </div>
   )

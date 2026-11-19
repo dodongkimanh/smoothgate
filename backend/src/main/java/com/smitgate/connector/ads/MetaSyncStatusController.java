@@ -73,6 +73,7 @@ public class MetaSyncStatusController {
         out.put("jobs", jobs);
         out.put("range", Map.of("from", from.toString(), "to", to.toString()));
         out.put("audiences", audiences(tenantId));
+        out.put("audienceHistory", audienceHistory(tenantId));
         out.put("leads", leads(tenantId, pageNames, start, end));
         out.put("purchases", purchases(tenantId, pageNames, start, end));
         return ResponseEntity.ok(ApiResponse.ok(out));
@@ -90,6 +91,20 @@ public class MetaSyncStatusController {
                 """.formatted(ISO), tenantId));
         rows.removeIf(r -> !audienceService.isIncluded(String.valueOf(r.get("accountId"))));
         return rows;
+    }
+
+    /** The last 30 daily uploads of the customer lists, newest first. */
+    private List<Map<String, Object>> audienceHistory(Long tenantId) {
+        return jdbc.queryForList("""
+                SELECT to_char(synced_at, %s) AS "syncedAt", buyers, all_phones AS "allPhones",
+                       added_buyers AS "addedBuyers", removed_buyers AS "removedBuyers",
+                       added_phones AS "addedPhones", removed_phones AS "removedPhones",
+                       with_birth_year AS "withBirthYear", buyers_with_birth_year AS "buyersWithBirthYear",
+                       with_gender AS "withGender", with_province AS "withProvince",
+                       accounts_ok AS "accountsOk", accounts_failed AS "accountsFailed"
+                FROM meta_audience_sync_log WHERE tenant_id = ?
+                ORDER BY synced_at DESC LIMIT 30
+                """.formatted(ISO), tenantId);
     }
 
     private Map<String, Object> leads(Long tenantId, Map<String, String> pageNames, Timestamp start, Timestamp end) {

@@ -15,7 +15,7 @@ class MetaCustomerAudienceServiceTest {
         CustomerContact c = CustomerContact.of("0912 345 678", "  Nguyễn Văn An ", "male",
                 "khu 9, Thị trấn Thanh Hà, Huyện Thanh Hà, Tỉnh Hải Dương");
 
-        assertThat(c).isEqualTo(new CustomerContact("84912345678", "an", "nguyễn", "m", "haiduong"));
+        assertThat(c).isEqualTo(new CustomerContact("84912345678", "an", "nguyễn", "m", "haiduong", null));
         assertThat(CustomerContact.of("12345", "An", null, null)).isNull();
     }
 
@@ -35,25 +35,51 @@ class MetaCustomerAudienceServiceTest {
 
     @Test
     void mergeKeepsOnePerPhoneAndFillsMissingFields() {
-        CustomerContact buyer = new CustomerContact("84912345678", "an", "nguyễn", null, "haiduong");
-        CustomerContact lead = new CustomerContact("84912345678", "anh", "tran", "m", null);
-        CustomerContact other = new CustomerContact("84987654321", "binh", null, null, null);
+        CustomerContact buyer = new CustomerContact("84912345678", "an", "nguyễn", null, "haiduong", null);
+        CustomerContact lead = new CustomerContact("84912345678", "anh", "tran", "m", null, null);
+        CustomerContact other = new CustomerContact("84987654321", "binh", null, null, null, null);
 
         Collection<CustomerContact> merged = MetaCustomerAudienceService.merge(List.of(buyer), List.of(lead, other));
 
         assertThat(merged).containsExactly(
-                new CustomerContact("84912345678", "an", "nguyễn", "m", "haiduong"), other);
+                new CustomerContact("84912345678", "an", "nguyễn", "m", "haiduong", null), other);
     }
 
     @Test
     void rowsAreHashedInSchemaOrderWithEmptyForMissing() {
         List<List<String>> rows = MetaCustomerAudienceService.hashRows(
-                List.of(new CustomerContact("84912345678", "an", null, null, null)));
+                List.of(new CustomerContact("84912345678", "an", null, null, null, null)));
 
-        assertThat(MetaCustomerAudienceService.SCHEMA).containsExactly("PHONE", "FN", "LN", "GEN", "ST", "COUNTRY");
+        assertThat(MetaCustomerAudienceService.SCHEMA).containsExactly("PHONE", "FN", "LN", "GEN", "ST", "DOBY", "COUNTRY");
         assertThat(rows.get(0)).containsExactly(
                 MetaPurchaseEventService.sha256("84912345678"), MetaPurchaseEventService.sha256("an"),
-                "", "", "", MetaPurchaseEventService.sha256("vn"));
+                "", "", "", "", MetaPurchaseEventService.sha256("vn"));
+    }
+
+    @Test
+    void crmProfileGivesGenderAndPlausibleBirthYear() {
+        assertThat(CustomerContact.profile("0912345678", "Nữ", 1972, 2026))
+                .isEqualTo(new CustomerContact("84912345678", null, null, "f", null, "1972"));
+        assertThat(CustomerContact.profile("0912345678", "Nam", 72, 2026).birthYear()).isNull();
+        assertThat(CustomerContact.profile("0912345678", null, 2020, 2026)).isNull();
+        assertThat(CustomerContact.profile("0912345678", "", null, 2026)).isNull();
+    }
+
+    @Test
+    void enrichFillsBirthYearWithoutOverwritingKnownFields() {
+        CustomerContact buyer = new CustomerContact("84912345678", "an", "nguyễn", "m", "haiduong", null);
+        CustomerContact profile = new CustomerContact("84912345678", null, null, "f", null, "1975");
+
+        Collection<CustomerContact> out = MetaCustomerAudienceService.enrich(List.of(buyer),
+                java.util.Map.of("84912345678", profile));
+
+        assertThat(out).containsExactly(new CustomerContact("84912345678", "an", "nguyễn", "m", "haiduong", "1975"));
+    }
+
+    @Test
+    void diffCountsJoinedAndLeft() {
+        assertThat(MetaCustomerAudienceService.diff(java.util.Set.of("a", "b", "c"), java.util.Set.of("b", "c", "d", "e")))
+                .containsExactly(2, 1);
     }
 
     @Test
