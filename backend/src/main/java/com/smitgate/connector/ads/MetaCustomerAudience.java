@@ -11,12 +11,15 @@ import java.time.LocalDateTime;
 @Table(name = "meta_customer_audiences")
 public class MetaCustomerAudience {
 
-    /** Customer lists are uploaded from Pancake phones; lookalikes are created from them once. */
+    /**
+     * Customer lists are uploaded from CRM/Pancake phones, or (PSID_*) from the Messenger page-scoped ids of the same
+     * customers; lookalikes are created from them once.
+     */
     public enum Kind {
-        BUYERS, ALL_PHONES, LAL_BUYERS, LAL_ALL_PHONES;
+        BUYERS, ALL_PHONES, LAL_BUYERS, LAL_ALL_PHONES, PSID_BUYERS, PSID_ALL_PHONES, LAL_PSID_BUYERS;
 
         public boolean isLookalike() {
-            return this == LAL_BUYERS || this == LAL_ALL_PHONES;
+            return this == LAL_BUYERS || this == LAL_ALL_PHONES || this == LAL_PSID_BUYERS;
         }
     }
 

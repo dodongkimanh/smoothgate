@@ -1,7 +1,7 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
 import { RefreshCw, Users, PhoneCall, ShoppingBag, CheckCircle2, AlertTriangle, XCircle, Clock, ShieldCheck } from 'lucide-react'
-import { getMetaSyncStatus } from '../services/api'
+import { getMetaSyncStatus, runMetaAudiencesNow } from '../services/api'
 
 const DATE_PRESETS = [
   { id: 'LIFETIME', label: 'Tối đa' },
@@ -71,6 +71,9 @@ const KINDS = [
   { key: 'ALL_PHONES', label: 'Tất cả khách để lại SĐT', hint: 'SĐT, họ tên' },
   { key: 'LAL_BUYERS', label: 'LAL 1% khách đã mua', hint: 'Meta tự cập nhật' },
   { key: 'LAL_ALL_PHONES', label: 'LAL 2% tất cả SĐT', hint: 'Meta tự cập nhật' },
+  { key: 'PSID_BUYERS', label: 'Khách đã mua (PSID)', hint: 'mã Messenger theo page', psid: true },
+  { key: 'PSID_ALL_PHONES', label: 'Tất cả khách để lại SĐT (PSID)', hint: 'mã Messenger theo page', psid: true },
+  { key: 'LAL_PSID_BUYERS', label: 'LAL 1% khách đã mua (PSID)', hint: 'Meta tự cập nhật', psid: true },
 ]
 
 const nf = new Intl.NumberFormat('vi-VN')
@@ -210,13 +213,15 @@ function AudienceTable({ audiences }) {
   if (accounts.length === 0) {
     return <p className="px-4 py-6 text-base text-slate-500">Chưa có tệp nào. Smoothgate gửi tệp mỗi ngày lúc 23h59.</p>
   }
+  // PSID lists are being tried on a few accounts first; show their columns only once one exists.
+  const kinds = KINDS.filter((k) => !k.psid || audiences.some((a) => a.kind === k.key))
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full">
         <thead className="bg-slate-50">
           <tr>
             <th className={th}>Tài khoản</th>
-            {KINDS.map((k) => (
+            {kinds.map((k) => (
               <th key={k.key} className={th}>
                 {k.label}
                 <div className="normal-case font-normal tracking-normal text-slate-400">{k.hint}</div>
@@ -232,7 +237,7 @@ function AudienceTable({ audiences }) {
             return (
               <tr key={account}>
                 <td className={`${td} font-medium`}>{account}</td>
-                {KINDS.map((k) => {
+                {kinds.map((k) => {
                   const row = rows[k.key]
                   if (!row) return <td key={k.key} className={td}>—</td>
                   const tone = audienceTone(row)
@@ -243,7 +248,7 @@ function AudienceTable({ audiences }) {
                       <div className="flex flex-col gap-1">
                         <span className="tabular-nums font-medium">{matchedSize(row)}</span>
                         <span className="text-sm text-slate-500 tabular-nums">
-                          {row.lastCount != null ? `gửi ${nf.format(row.lastCount)} SĐT` : k.key.startsWith('LAL') ? 'người tương tự' : ''}
+                          {row.lastCount != null ? `gửi ${nf.format(row.lastCount)} ${k.psid ? 'PSID' : 'SĐT'}` : k.key.startsWith('LAL') ? 'người tương tự' : ''}
                         </span>
                         <Badge tone={tone}>
                           {tone === 'bad' ? 'Lỗi' : op ? op.text : row.lastError ? 'Lỗi lần gửi cuối' : 'Chưa kiểm tra'}
@@ -464,6 +469,16 @@ export default function MetaSync() {
     refetchInterval: 60000,
     placeholderData: keepPreviousData,
   })
+  const [runRequested, setRunRequested] = useState(false)
+  const runAudiences = async () => {
+    setRunRequested(true)
+    try {
+      await runMetaAudiencesNow()
+    } finally {
+      // By then the server reports the run itself (audienceRunning), which keeps the button disabled.
+      setTimeout(() => refetch().finally(() => setRunRequested(false)), 3000)
+    }
+  }
   const applyPreset = (id) => {
     setPreset(id)
     setRange(presetRange(id))
@@ -821,9 +836,22 @@ export default function MetaSync() {
       <Section
         title="Tệp đối tượng trên từng tài khoản quảng cáo"
         subtitle="Số người Meta khớp được với SĐT đã gửi (cập nhật mỗi ngày, không phụ thuộc ngày đang chọn). Di chuột lên ô để xem chi tiết."
-        right={accountsWithErrors.size > 0 && (
-          <Badge tone="bad">{accountsWithErrors.size} tài khoản lỗi: {[...accountsWithErrors].join(', ')}</Badge>
-        )}
+        right={
+          <div className="flex flex-wrap items-center gap-2">
+            {accountsWithErrors.size > 0 && (
+              <Badge tone="bad">{accountsWithErrors.size} tài khoản lỗi: {[...accountsWithErrors].join(', ')}</Badge>
+            )}
+            <button
+              onClick={runAudiences}
+              disabled={jobs.audienceRunning || runRequested}
+              title="Gửi lại toàn bộ tệp lên Meta ngay, không chờ 23h59. Mất vài phút."
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <RefreshCw className={`w-4 h-4 ${jobs.audienceRunning ? 'animate-spin' : ''}`} />
+              {jobs.audienceRunning ? 'Đang gửi tệp…' : runRequested ? 'Đã yêu cầu gửi' : 'Gửi tệp ngay'}
+            </button>
+          </div>
+        }
       >
         <AudienceTable audiences={audiences} />
       </Section>

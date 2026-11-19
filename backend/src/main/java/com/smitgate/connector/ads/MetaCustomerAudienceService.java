@@ -34,7 +34,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -63,7 +65,13 @@ public class MetaCustomerAudienceService {
             MetaCustomerAudience.Kind.BUYERS, "Smoothgate | Khách đã mua (SĐT)",
             MetaCustomerAudience.Kind.ALL_PHONES, "Smoothgate | Tất cả khách để lại SĐT",
             MetaCustomerAudience.Kind.LAL_BUYERS, "Smoothgate | LAL 1% khách đã mua",
-            MetaCustomerAudience.Kind.LAL_ALL_PHONES, "Smoothgate | LAL 2% tất cả SĐT");
+            MetaCustomerAudience.Kind.LAL_ALL_PHONES, "Smoothgate | LAL 2% tất cả SĐT",
+            MetaCustomerAudience.Kind.PSID_BUYERS, "Smoothgate | Khách đã mua (PSID)",
+            MetaCustomerAudience.Kind.PSID_ALL_PHONES, "Smoothgate | Tất cả khách để lại SĐT (PSID)",
+            MetaCustomerAudience.Kind.LAL_PSID_BUYERS, "Smoothgate | LAL 1% khách đã mua (PSID)");
+
+    /** Meta's customer-file key for Messenger page-scoped ids; each upload names the Page that issued them. */
+    static final String PSID_SCHEMA = "PAGEUID";
 
     private final OrderRepository orderRepository;
     private final CrmCustomerSource crmCustomerSource;
@@ -90,11 +98,40 @@ public class MetaCustomerAudienceService {
     @Value("${app.meta-audiences.exclude-account-ids:}")
     private String excludedAccountIds;
 
+    /**
+     * Ad accounts that also get the PSID lists (comma-separated act_ ids, or "all"). Starts with TKQC03TQ only,
+     * to check Meta's match rate before rolling out.
+     */
+    @Value("${app.meta-audiences.psid-account-ids:act_2318573541849897}")
+    private String psidAccountIds;
+
+    private final AtomicBoolean running = new AtomicBoolean(false);
+
+    public boolean isRunning() {
+        return running.get();
+    }
+
+    /** Starts an upload now in the background (the "Gửi tệp ngay" button); false if one is already running. */
+    public boolean runNow() {
+        if (running.get()) return false;
+        CompletableFuture.runAsync(this::syncAll);
+        return true;
+    }
+
     @Scheduled(cron = "${app.meta-audiences.cron:0 59 23 * * *}", zone = "Asia/Ho_Chi_Minh")
     public synchronized void syncAll() {
         if (!enabled) {
             return;
         }
+        running.set(true);
+        try {
+            syncAllSources();
+        } finally {
+            running.set(false);
+        }
+    }
+
+    private void syncAllSources() {
         List<DataSource> sources;
         try {
             sources = dataSourceRepository.findByTypeAndStatus(DataSource.Type.META_ADS, DataSource.Status.ACTIVE);
@@ -169,6 +206,12 @@ public class MetaCustomerAudienceService {
         Collection<CustomerContact> allContacts = enrich(merge(crmBuyers, pancakeBuyers, crmAll, pancakeAll), profiles);
         List<List<String>> buyers = hashRows(buyerContacts);
         List<List<String>> allPhones = hashRows(allContacts);
+        boolean anyPsidAccount = accounts.stream().anyMatch(a -> isPsidIncluded(a.getExternalAccountId()));
+        List<CrmCustomerSource.PagePsid> psids = anyPsidAccount ? crmCustomerSource.pagePsids() : List.of();
+        Set<String> buyerPhones = new HashSet<>();
+        for (CustomerContact c : buyerContacts) buyerPhones.add(c.phone());
+        Map<String, List<String>> psidAll = psidsByPage(psids, null);
+        Map<String, List<String>> psidBuyers = psidsByPage(psids, buyerPhones);
         String token = dataSourceService.decryptSecret(ds);
 
         Map<String, MetaCustomerAudience> rows = new LinkedHashMap<>();
@@ -183,6 +226,13 @@ public class MetaCustomerAudienceService {
             boolean buyersSent = syncList(token, account, buyerList, buyers);
             boolean allSent = syncList(token, account, allList, allPhones);
             if (buyersSent && allSent) accountsOk++;
+            if (isPsidIncluded(account.getExternalAccountId()) && !psidAll.isEmpty()) {
+                MetaCustomerAudience psidBuyerList = row(rows, tenantId, account, MetaCustomerAudience.Kind.PSID_BUYERS);
+                syncPsidList(token, account, psidBuyerList, psidBuyers);
+                syncPsidList(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.PSID_ALL_PHONES), psidAll);
+                ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_PSID_BUYERS),
+                        psidBuyerList, 0.01);
+            }
             ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_BUYERS), buyerList, 0.01);
             ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_ALL_PHONES), allList, 0.02);
         }
@@ -256,11 +306,50 @@ public class MetaCustomerAudienceService {
         return n;
     }
 
+    /** Page id → that Page's distinct PSIDs, for every customer or only those whose phone is in {@code onlyPhones}. */
+    static Map<String, List<String>> psidsByPage(List<CrmCustomerSource.PagePsid> psids, Set<String> onlyPhones) {
+        Map<String, Set<String>> byPage = new LinkedHashMap<>();
+        for (CrmCustomerSource.PagePsid p : psids) {
+            if (onlyPhones != null && !onlyPhones.contains(p.phone())) continue;
+            byPage.computeIfAbsent(p.pageId(), k -> new LinkedHashSet<>()).add(p.psid());
+        }
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        byPage.forEach((page, ids) -> out.put(page, new ArrayList<>(ids)));
+        return out;
+    }
+
+    /** Whether this ad account also gets the PSID lists. */
+    boolean isPsidIncluded(String externalAccountId) {
+        if (psidAccountIds == null || psidAccountIds.isBlank()) return false;
+        if (psidAccountIds.trim().equalsIgnoreCase("all")) return true;
+        return idSet(psidAccountIds).contains(externalAccountId);
+    }
+
     /** Uploads one list; true when Meta accepted it. */
     private boolean syncList(String token, AdAccount account, MetaCustomerAudience row, List<List<String>> hashes) {
         if (hashes.isEmpty()) {
             return false;
         }
+        return syncAudience(token, account, row, hashes.size(),
+                (audienceId, edge) -> upload(token, audienceId, edge, hashes));
+    }
+
+    /** Uploads one PSID list, one request per Page (Meta needs the Page that issued each id); true when accepted. */
+    private boolean syncPsidList(String token, AdAccount account, MetaCustomerAudience row, Map<String, List<String>> byPage) {
+        int total = byPage.values().stream().mapToInt(List::size).sum();
+        if (total == 0) {
+            return false;
+        }
+        return syncAudience(token, account, row, total,
+                (audienceId, edge) -> uploadPsids(token, audienceId, edge, byPage, total));
+    }
+
+    @FunctionalInterface
+    private interface Uploader {
+        void upload(String audienceId, String edge) throws Exception;
+    }
+
+    private boolean syncAudience(String token, AdAccount account, MetaCustomerAudience row, int count, Uploader uploader) {
         boolean sent = false;
         try {
             if (row.getExternalAudienceId() == null) {
@@ -275,9 +364,9 @@ public class MetaCustomerAudienceService {
             }
             // The first upload adds; later ones replace the whole list so removed or changed phones drop out.
             String edge = row.getLastSyncedAt() == null ? "users" : "usersreplace";
-            upload(token, row.getExternalAudienceId(), edge, hashes);
+            uploader.upload(row.getExternalAudienceId(), edge);
             row.setLastSyncedAt(LocalDateTime.now(VIETNAM_ZONE));
-            row.setLastCount(hashes.size());
+            row.setLastCount(count);
             row.setLastError(null);
             sent = true;
         } catch (Exception e) {
@@ -333,6 +422,37 @@ public class MetaCustomerAudienceService {
             JsonNode res = post(audienceId + "/" + edge, form, token);
             if (!res.has("num_received")) {
                 throw new IllegalStateException("Meta không xác nhận danh sách: " + res);
+            }
+        }
+    }
+
+    /** One upload session for the whole list; each request carries one Page's ids (raw, Meta does not take them hashed). */
+    private void uploadPsids(String token, String audienceId, String edge, Map<String, List<String>> byPage, int total)
+            throws Exception {
+        List<Map.Entry<String, List<String>>> requests = new ArrayList<>();
+        byPage.forEach((page, ids) -> {
+            for (List<String> batch : batches(ids)) requests.add(Map.entry(page, batch));
+        });
+        long sessionId = ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE);
+        for (int i = 0; i < requests.size(); i++) {
+            Map<String, Object> session = new LinkedHashMap<>();
+            session.put("session_id", sessionId);
+            session.put("batch_seq", i + 1);
+            session.put("last_batch_flag", i == requests.size() - 1);
+            session.put("estimated_num_total", total);
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("schema", PSID_SCHEMA);
+            payload.put("is_raw", true);
+            payload.put("page_ids", List.of(requests.get(i).getKey()));
+            payload.put("data", requests.get(i).getValue());
+
+            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+            form.add("session", objectMapper.writeValueAsString(session));
+            form.add("payload", objectMapper.writeValueAsString(payload));
+            JsonNode res = post(audienceId + "/" + edge, form, token);
+            if (!res.has("num_received")) {
+                throw new IllegalStateException("Meta không xác nhận danh sách PSID (page " + requests.get(i).getKey() + "): " + res);
             }
         }
     }

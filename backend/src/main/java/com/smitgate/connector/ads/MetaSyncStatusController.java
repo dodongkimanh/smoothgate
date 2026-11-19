@@ -8,6 +8,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -68,6 +69,7 @@ public class MetaSyncStatusController {
         Map<String, Object> out = new LinkedHashMap<>();
         Map<String, Object> jobs = new LinkedHashMap<>();
         jobs.put("crmConfigured", crmCustomerSource.isConfigured());
+        jobs.put("audienceRunning", audienceService.isRunning());
         jobs.put("leadLastRunAt", iso(leadEventService.getLastRunAt()));
         jobs.put("purchaseLastRunAt", iso(purchaseEventService.getLastRunAt()));
         out.put("jobs", jobs);
@@ -77,6 +79,13 @@ public class MetaSyncStatusController {
         out.put("leads", leads(tenantId, pageNames, start, end));
         out.put("purchases", purchases(tenantId, pageNames, start, end));
         return ResponseEntity.ok(ApiResponse.ok(out));
+    }
+
+    /** Sends the customer lists to Meta now instead of waiting for 23:59; runs in the background. */
+    @PostMapping("/audiences/run")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> runAudiencesNow() {
+        boolean started = audienceService.runNow();
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("started", started, "running", true)));
     }
 
     private List<Map<String, Object>> audiences(Long tenantId) {

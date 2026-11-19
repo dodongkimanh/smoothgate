@@ -74,6 +74,27 @@ public class CrmCustomerSource {
         return out;
     }
 
+    /** A customer's Messenger id on one Page, with the customer's normalized phone. */
+    public record PagePsid(String phone, String pageId, String psid) {
+    }
+
+    /** Every CRM lead that left a phone and has a Page and a PSID. One customer can have one PSID per Page. */
+    public List<PagePsid> pagePsids() {
+        List<PagePsid> out = new ArrayList<>();
+        if (jdbc == null) return out;
+        jdbc.query("SELECT \"Sdt\", \"ID Trang\", \"PSID\" FROM public.data_dulieukhach "
+                        + "WHERE COALESCE(\"Sdt\", '') <> '' AND COALESCE(\"PSID\", '') <> '' AND COALESCE(\"ID Trang\", '') <> ''",
+                rs -> {
+                    String phone = MetaPurchaseEventService.normalizePhone(rs.getString(1));
+                    String page = rs.getString(2).trim();
+                    String psid = rs.getString(3).trim();
+                    if (phone != null && page.matches("\\d+") && psid.matches("\\d+")) {
+                        out.add(new PagePsid(phone, page, psid));
+                    }
+                });
+        return out;
+    }
+
     /** A CRM lead from a Messenger conversation that already has a phone number. */
     public record PhoneLead(long rowId, String pageId, String psid, String phone, String name, String adId,
                             Instant createdAt) {

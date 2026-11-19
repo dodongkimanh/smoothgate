@@ -77,6 +77,20 @@ class MetaCustomerAudienceServiceTest {
     }
 
     @Test
+    void psidsAreGroupedByPageAndCanBeLimitedToBuyers() {
+        List<CrmCustomerSource.PagePsid> psids = List.of(
+                new CrmCustomerSource.PagePsid("84911111111", "p1", "100"),
+                new CrmCustomerSource.PagePsid("84911111111", "p1", "100"),
+                new CrmCustomerSource.PagePsid("84911111111", "p2", "200"),
+                new CrmCustomerSource.PagePsid("84922222222", "p1", "101"));
+
+        assertThat(MetaCustomerAudienceService.psidsByPage(psids, null))
+                .containsExactly(java.util.Map.entry("p1", List.of("100", "101")), java.util.Map.entry("p2", List.of("200")));
+        assertThat(MetaCustomerAudienceService.psidsByPage(psids, java.util.Set.of("84922222222")))
+                .containsExactly(java.util.Map.entry("p1", List.of("101")));
+    }
+
+    @Test
     void diffCountsJoinedAndLeft() {
         assertThat(MetaCustomerAudienceService.diff(java.util.Set.of("a", "b", "c"), java.util.Set.of("b", "c", "d", "e")))
                 .containsExactly(2, 1);
