@@ -99,10 +99,9 @@ public class MetaCustomerAudienceService {
     private String excludedAccountIds;
 
     /**
-     * Ad accounts that also get the PSID lists (comma-separated act_ ids, or "all"). Starts with TKQC03TQ only,
-     * to check Meta's match rate before rolling out.
+     * Ad accounts that also get the PSID lists (comma-separated act_ ids, or "all").
      */
-    @Value("${app.meta-audiences.psid-account-ids:act_2318573541849897}")
+    @Value("${app.meta-audiences.psid-account-ids:all}")
     private String psidAccountIds;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -362,6 +361,12 @@ public class MetaCustomerAudienceService {
                 row.setLastSyncedAt(null);
                 audienceRepository.save(row);
             }
+            if (isStillReplacing(row, LocalDateTime.now(VIETNAM_ZONE))) {
+                // A new replace would restart Meta's matching from scratch; let the running one finish first.
+                log.info("Meta customer audience {} for {} is still being replaced by Meta; skipped tonight",
+                        row.getKind(), account.getExternalAccountId());
+                return true;
+            }
             // The first upload adds; later ones replace the whole list so removed or changed phones drop out.
             String edge = row.getLastSyncedAt() == null ? "users" : "usersreplace";
             uploader.upload(row.getExternalAudienceId(), edge);
@@ -380,6 +385,16 @@ public class MetaCustomerAudienceService {
         }
         audienceRepository.save(row);
         return sent;
+    }
+
+    /**
+     * Meta still reports the previous replace in progress (operation 414). Waits at most 3 days, then uploads anyway
+     * in case Meta's status is stuck.
+     */
+    static boolean isStillReplacing(MetaCustomerAudience row, LocalDateTime now) {
+        return row.getLastSyncedAt() != null
+                && row.getMetaStatus() != null && row.getMetaStatus().startsWith("operation 414")
+                && row.getLastSyncedAt().isAfter(now.minusDays(3));
     }
 
     /** Created once from a synced list; Meta refreshes a lookalike on its own as its source list changes. */
@@ -454,6 +469,8 @@ public class MetaCustomerAudienceService {
             if (!res.has("num_received")) {
                 throw new IllegalStateException("Meta không xác nhận danh sách PSID (page " + requests.get(i).getKey() + "): " + res);
             }
+            log.info("PSID upload {} page {}: sent {}, received {}, invalid {}", audienceId, requests.get(i).getKey(),
+                    requests.get(i).getValue().size(), res.path("num_received").asInt(), res.path("num_invalid_entries").asInt());
         }
     }
 

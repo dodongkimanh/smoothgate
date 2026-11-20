@@ -40,6 +40,8 @@ app:
   # so Meta refuses customer lists on it; the owner does not need it.
   meta-audiences:
     exclude-account-ids: ${META_AUDIENCES_EXCLUDE_ACCOUNT_IDS:act_446629503356197}
+    # Accounts that also get the Messenger-id (PSID) lists: comma-separated act_ ids, or "all".
+    psid-account-ids: ${META_AUDIENCES_PSID_ACCOUNT_IDS:all}
   # Read-only connection to the company CRM (crm-dulieukhachhang) for Meta customer audiences; blank = not used.
   crm:
     jdbc-url: ${CRM_DB_URL:}

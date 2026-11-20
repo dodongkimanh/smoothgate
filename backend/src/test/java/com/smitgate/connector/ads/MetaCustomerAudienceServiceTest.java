@@ -91,6 +91,22 @@ class MetaCustomerAudienceServiceTest {
     }
 
     @Test
+    void listStillBeingReplacedIsSkippedForUpToThreeDays() {
+        java.time.LocalDateTime now = java.time.LocalDateTime.of(2026, 11, 20, 23, 59);
+        MetaCustomerAudience row = new MetaCustomerAudience();
+        row.setLastSyncedAt(now.minusDays(1));
+        row.setMetaStatus("operation 414 Đang thay thế đối tượng này. | delivery 200 ok");
+        assertThat(MetaCustomerAudienceService.isStillReplacing(row, now)).isTrue();
+
+        row.setLastSyncedAt(now.minusDays(4));
+        assertThat(MetaCustomerAudienceService.isStillReplacing(row, now)).isFalse();
+
+        row.setLastSyncedAt(now.minusDays(1));
+        row.setMetaStatus("operation 200 Bình thường | delivery 200 ok");
+        assertThat(MetaCustomerAudienceService.isStillReplacing(row, now)).isFalse();
+    }
+
+    @Test
     void diffCountsJoinedAndLeft() {
         assertThat(MetaCustomerAudienceService.diff(java.util.Set.of("a", "b", "c"), java.util.Set.of("b", "c", "d", "e")))
                 .containsExactly(2, 1);
