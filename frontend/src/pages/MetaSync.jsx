@@ -152,6 +152,44 @@ function audienceTone(row) {
   return row.lastError ? 'bad' : 'idle'
 }
 
+function MetaLoginBox({ login }) {
+  if (!login || (!login.issuedAt && !login.error)) return null
+  const missing = login.pagesMissingEvents || []
+  const allowed = login.pageEventsPages || []
+  const tone = login.error || login.valid === false ? 'bad' : missing.length > 0 ? 'warn' : 'ok'
+  const t = TONE[tone]
+  return (
+    <div className={`rounded-xl border px-4 py-3 space-y-1.5 ${t.bg} border-gray-100`}>
+      <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 text-base font-medium ${t.text}`}>
+        <span>Kết nối Meta</span>
+        {login.error ? (
+          <span>{login.error}</span>
+        ) : (
+          <>
+            <span className="font-normal text-slate-700">
+              Kết nối lần cuối: <b>{fmtTime(login.issuedAt)}</b> ({ago(login.issuedAt)})
+            </span>
+            {login.valid === false && <span>Kết nối đã hết hiệu lực — vào Kết nối QC để kết nối lại.</span>}
+          </>
+        )}
+      </div>
+      {!login.error && (
+        <div className="text-sm text-slate-700">
+          Page được phép nhận sự kiện:{' '}
+          {allowed.length ? allowed.map((p) => p.pageName).join(', ') : <b>chưa có page nào</b>}
+        </div>
+      )}
+      {missing.length > 0 && (
+        <div className="text-sm text-amber-800">
+          <b>Chưa được cấp quyền gửi sự kiện:</b> {missing.map((p) => `${p.pageName} (${p.pageId})`).join(', ')}. Vào{' '}
+          <b>Kết nối QC</b> → kết nối lại Meta → bấm <b>“Chỉnh sửa quyền truy cập”</b> → tích thêm page này ở bước chọn Trang.
+          Nếu không thấy page trong danh sách, tài khoản Facebook đang kết nối chưa có quyền quản trị đầy đủ trên page.
+        </div>
+      )}
+    </div>
+  )
+}
+
 function HealthCard({ icon: Icon, title, tone, status, lines, note }) {
   const t = TONE[tone]
   const StatusIcon = t.icon
@@ -502,7 +540,7 @@ export default function MetaSync() {
     )
   }
 
-  const { jobs = {}, audiences = [], audienceHistory = [], leads = {}, purchases = {} } = data
+  const { jobs = {}, audiences = [], audienceHistory = [], leads = {}, purchases = {}, metaLogin = {} } = data
 
   const lists = audiences.filter((a) => a.kind === 'BUYERS' || a.kind === 'ALL_PHONES')
   const okLists = lists.filter((a) => audienceTone(a) !== 'bad')
@@ -612,6 +650,8 @@ export default function MetaSync() {
           ]}
         />
       </div>
+
+      <MetaLoginBox login={metaLogin} />
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-2">
         <div className="flex flex-wrap items-center gap-2">

@@ -47,6 +47,9 @@ public class MetaSyncStatusController {
     private final MetaPurchaseEventService purchaseEventService;
     private final MetaCustomerAudienceService audienceService;
     private final MetaAdAccountResolver adAccountResolver;
+    private final MetaAdsConnector metaAdsConnector;
+    private final com.smitgate.datasource.DataSourceRepository dataSourceRepository;
+    private final com.smitgate.datasource.DataSourceService dataSourceService;
 
     @GetMapping("/status")
     public ResponseEntity<ApiResponse<Map<String, Object>>> status(
@@ -73,6 +76,7 @@ public class MetaSyncStatusController {
         jobs.put("leadLastRunAt", iso(leadEventService.getLastRunAt()));
         jobs.put("purchaseLastRunAt", iso(purchaseEventService.getLastRunAt()));
         out.put("jobs", jobs);
+        out.put("metaLogin", metaLogin(tenantId, pageNames));
         out.put("range", Map.of("from", from.toString(), "to", to.toString()));
         out.put("audiences", audiences(tenantId));
         out.put("audienceHistory", audienceHistory(tenantId));
@@ -259,6 +263,46 @@ public class MetaSyncStatusController {
                 r.put("accountName", act == null ? null : names.getOrDefault(act, act));
             }
         }
+    }
+
+    /**
+     * The connected Facebook login as Meta reports it: when the owner last connected and which Pages may receive
+     * events. Pages Smoothgate sends leads for but that lack page_events are listed so the owner knows what to tick.
+     */
+    private Map<String, Object> metaLogin(Long tenantId, Map<String, String> pageNames) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        try {
+            com.smitgate.datasource.DataSource ds = dataSourceRepository
+                    .findByTypeAndStatus(com.smitgate.datasource.DataSource.Type.META_ADS, com.smitgate.datasource.DataSource.Status.ACTIVE)
+                    .stream().filter(d -> tenantId.equals(d.getTenantId())).findFirst().orElse(null);
+            if (ds == null) {
+                out.put("error", "Chưa kết nối Meta");
+                return out;
+            }
+            Map<String, Object> info = metaAdsConnector.inspectUserToken(tenantId, dataSourceService.decryptSecret(ds));
+            out.put("valid", info.get("valid"));
+            out.put("issuedAt", info.get("issuedAt"));
+            out.put("expiresAt", info.get("expiresAt"));
+            @SuppressWarnings("unchecked")
+            Map<String, List<String>> granular = (Map<String, List<String>>) info.get("granularScopes");
+            List<String> eventPages = granular.getOrDefault("page_events", List.of());
+            List<Map<String, Object>> pages = new ArrayList<>();
+            for (String id : eventPages) {
+                pages.add(Map.of("pageId", id, "pageName", pageNames.getOrDefault(id, id)));
+            }
+            out.put("pageEventsPages", pages);
+            List<Map<String, Object>> missing = new ArrayList<>();
+            for (Map<String, Object> r : jdbc.queryForList(
+                    "SELECT DISTINCT page_id FROM meta_lead_events WHERE tenant_id = ?", tenantId)) {
+                String id = String.valueOf(r.get("page_id"));
+                if (!eventPages.contains(id)) missing.add(Map.of("pageId", id, "pageName", pageNames.getOrDefault(id, id)));
+            }
+            out.put("pagesMissingEvents", missing);
+        } catch (Exception e) {
+            log.warn("Meta login check failed: {}", e.getMessage());
+            out.put("error", "Không kiểm tra được kết nối Meta: " + e.getMessage());
+        }
+        return out;
     }
 
     /** Meta's error in words the owner can act on. */

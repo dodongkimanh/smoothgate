@@ -460,6 +460,62 @@ public class MetaAdsConnector implements AdsConnector {
         return totalSynced;
     }
 
+    /**
+     * What the connected Facebook login allows, as Meta sees it: when it was granted, whether it is still valid,
+     * and which Pages got each granular permission (e.g. page_events). Uses the app token, so it works for
+     * any user who logged in through the app. Never returns the token itself.
+     */
+    public Map<String, Object> inspectUserToken(Long tenantId, String userToken) {
+        String appId = getAppId(tenantId);
+        String appSecret = getAppSecret(tenantId);
+        if (appId == null || appSecret == null || userToken == null) {
+            throw new IllegalStateException("Thiếu App ID/Secret hoặc chưa kết nối Meta");
+        }
+        URI uri = UriComponentsBuilder.fromUriString(GRAPH_BASE + "/" + apiVersion + "/debug_token")
+                .queryParam("input_token", userToken)
+                .queryParam("access_token", appId + "|" + appSecret)
+                .build().toUri();
+        JsonNode data;
+        try {
+            data = webClientBuilder.build().get().uri(uri).retrieve()
+                    .bodyToMono(JsonNode.class).block(Duration.ofSeconds(15))
+                    .path("data");
+        } catch (org.springframework.web.reactive.function.client.WebClientResponseException e) {
+            // The exception text contains the request URL (token and app secret) — report only Meta's message.
+            String msg = e.getStatusCode().toString();
+            try {
+                msg = objectMapper.readTree(e.getResponseBodyAsString()).path("error").path("message").asText(msg);
+            } catch (Exception ignored) {
+                // keep the status
+            }
+            throw new IllegalStateException("Meta: " + msg);
+        } catch (Exception e) {
+            throw new IllegalStateException("Meta không phản hồi");
+        }
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("valid", data.path("is_valid").asBoolean(false));
+        out.put("issuedAt", epochToVietnam(data.path("issued_at").asLong(0)));
+        out.put("expiresAt", epochToVietnam(data.path("expires_at").asLong(0)));
+        out.put("dataAccessExpiresAt", epochToVietnam(data.path("data_access_expires_at").asLong(0)));
+        Map<String, List<String>> targets = new java.util.LinkedHashMap<>();
+        for (JsonNode g : data.path("granular_scopes")) {
+            List<String> ids = new ArrayList<>();
+            g.path("target_ids").forEach(t -> ids.add(t.asText()));
+            targets.put(g.path("scope").asText(), ids);
+        }
+        out.put("granularScopes", targets);
+        List<String> scopes = new ArrayList<>();
+        data.path("scopes").forEach(sc -> scopes.add(sc.asText()));
+        out.put("scopes", scopes);
+        return out;
+    }
+
+    private static String epochToVietnam(long epochSeconds) {
+        if (epochSeconds <= 0) return null;
+        return java.time.LocalDateTime.ofInstant(java.time.Instant.ofEpochSecond(epochSeconds),
+                java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toString();
+    }
+
     private void assertMetaAppIsUsable(Long tenantId) {
         String appId = getAppId(tenantId);
         String appSecret = getAppSecret(tenantId);
