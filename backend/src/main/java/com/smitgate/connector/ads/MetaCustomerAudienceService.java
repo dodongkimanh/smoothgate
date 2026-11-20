@@ -68,7 +68,11 @@ public class MetaCustomerAudienceService {
             MetaCustomerAudience.Kind.LAL_ALL_PHONES, "Smoothgate | LAL 2% tất cả SĐT",
             MetaCustomerAudience.Kind.PSID_BUYERS, "Smoothgate | Khách đã mua (PSID)",
             MetaCustomerAudience.Kind.PSID_ALL_PHONES, "Smoothgate | Tất cả khách để lại SĐT (PSID)",
-            MetaCustomerAudience.Kind.LAL_PSID_BUYERS, "Smoothgate | LAL 1% khách đã mua (PSID)");
+            MetaCustomerAudience.Kind.LAL_PSID_BUYERS, "Smoothgate | LAL 1% khách đã mua (PSID)",
+            MetaCustomerAudience.Kind.PSID_SILENT, "Smoothgate | Khách im lặng + không nhu cầu (PSID)");
+
+    /** How far back a "silent" or "no need" tag still counts; older ones may have changed their mind. */
+    static final int SILENT_DAYS = 60;
 
     /** Meta's customer-file key for Messenger page-scoped ids; each upload names the Page that issued them. */
     static final String PSID_SCHEMA = "PAGEUID";
@@ -211,6 +215,8 @@ public class MetaCustomerAudienceService {
         for (CustomerContact c : buyerContacts) buyerPhones.add(c.phone());
         Map<String, List<String>> psidAll = psidsByPage(psids, null);
         Map<String, List<String>> psidBuyers = psidsByPage(psids, buyerPhones);
+        Map<String, List<String>> psidSilent = anyPsidAccount
+                ? psidsByPage(crmCustomerSource.silentPsids(SILENT_DAYS), null) : Map.of();
         String token = dataSourceService.decryptSecret(ds);
 
         Map<String, MetaCustomerAudience> rows = new LinkedHashMap<>();
@@ -231,6 +237,10 @@ public class MetaCustomerAudienceService {
                 syncPsidList(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.PSID_ALL_PHONES), psidAll);
                 ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_PSID_BUYERS),
                         psidBuyerList, 0.01);
+            }
+            if (isPsidIncluded(account.getExternalAccountId()) && !psidSilent.isEmpty()) {
+                // For excluding from campaigns: people the sales team tagged silent or not interested.
+                syncPsidList(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.PSID_SILENT), psidSilent);
             }
             ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_BUYERS), buyerList, 0.01);
             ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_ALL_PHONES), allList, 0.02);

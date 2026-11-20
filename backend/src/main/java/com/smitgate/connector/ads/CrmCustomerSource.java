@@ -95,6 +95,28 @@ public class CrmCustomerSource {
         return out;
     }
 
+    /**
+     * Messenger conversations the sales team tagged "Khách im lặng", "Hỏi giá xong im" or "Không nhu cầu" in the last
+     * {@code days} days and that never left a phone; someone who later leaves a phone drops out on the next upload.
+     * The phone field is empty for them, so {@link PagePsid#phone()} is null.
+     */
+    public List<PagePsid> silentPsids(int days) {
+        List<PagePsid> out = new ArrayList<>();
+        if (jdbc == null) return out;
+        jdbc.query("SELECT \"ID Trang\", \"PSID\" FROM public.data_dulieukhach "
+                        + "WHERE created_at >= now() - make_interval(days => ?) AND COALESCE(\"Sdt\", '') = '' "
+                        + "AND COALESCE(\"PSID\", '') <> '' AND COALESCE(\"ID Trang\", '') <> '' "
+                        + "AND (\"Tag_khach_tiem_nang\" ILIKE '%im lặng%' OR \"Tag_khach_tiem_nang\" ILIKE '%xong im%' "
+                        + "OR \"Tag_khach_tiem_nang\" ILIKE '%không nhu cầu%')",
+                rs -> {
+                    String page = rs.getString(1).trim();
+                    String psid = rs.getString(2).trim();
+                    if (page.matches("\\d+") && psid.matches("\\d+")) out.add(new PagePsid(null, page, psid));
+                },
+                days);
+        return out;
+    }
+
     /** A CRM lead from a Messenger conversation that already has a phone number. */
     public record PhoneLead(long rowId, String pageId, String psid, String phone, String name, String adId,
                             Instant createdAt) {

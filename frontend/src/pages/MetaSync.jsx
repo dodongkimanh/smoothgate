@@ -74,6 +74,7 @@ const KINDS = [
   { key: 'PSID_BUYERS', label: 'Khách đã mua (PSID)', hint: 'mã Messenger theo page', psid: true },
   { key: 'PSID_ALL_PHONES', label: 'Tất cả khách để lại SĐT (PSID)', hint: 'mã Messenger theo page', psid: true },
   { key: 'LAL_PSID_BUYERS', label: 'LAL 1% khách đã mua (PSID)', hint: 'Meta tự cập nhật', psid: true },
+  { key: 'PSID_SILENT', label: 'Khách im lặng + không nhu cầu (PSID)', hint: 'để loại trừ, thẻ trong 60 ngày', psid: true },
 ]
 
 const nf = new Intl.NumberFormat('vi-VN')
