@@ -286,16 +286,22 @@ public class MetaSyncStatusController {
             @SuppressWarnings("unchecked")
             Map<String, List<String>> granular = (Map<String, List<String>>) info.get("granularScopes");
             List<String> eventPages = granular.getOrDefault("page_events", List.of());
+            @SuppressWarnings("unchecked")
+            List<String> scopes = (List<String>) info.getOrDefault("scopes", List.of());
+            // Meta lists no Page ids when the permission was granted for every Page.
+            out.put("allPages", scopes.contains("page_events") && eventPages.isEmpty());
             List<Map<String, Object>> pages = new ArrayList<>();
             for (String id : eventPages) {
                 pages.add(Map.of("pageId", id, "pageName", pageNames.getOrDefault(id, id)));
             }
             out.put("pageEventsPages", pages);
+            // Only Pages whose recent events Meta actually refused; the token's page list alone is not reliable.
             List<Map<String, Object>> missing = new ArrayList<>();
             for (Map<String, Object> r : jdbc.queryForList(
-                    "SELECT DISTINCT page_id FROM meta_lead_events WHERE tenant_id = ?", tenantId)) {
+                    "SELECT DISTINCT page_id FROM meta_lead_events WHERE tenant_id = ? AND sent_at IS NULL "
+                            + "AND last_error IS NOT NULL AND updated_at >= now() - interval '7 days'", tenantId)) {
                 String id = String.valueOf(r.get("page_id"));
-                if (!eventPages.contains(id)) missing.add(Map.of("pageId", id, "pageName", pageNames.getOrDefault(id, id)));
+                missing.add(Map.of("pageId", id, "pageName", pageNames.getOrDefault(id, id)));
             }
             out.put("pagesMissingEvents", missing);
         } catch (Exception e) {

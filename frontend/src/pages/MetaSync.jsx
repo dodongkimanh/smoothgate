@@ -177,12 +177,18 @@ function MetaLoginBox({ login }) {
       {!login.error && (
         <div className="text-sm text-slate-700">
           Page được phép nhận sự kiện:{' '}
-          {allowed.length ? allowed.map((p) => p.pageName).join(', ') : <b>chưa có page nào</b>}
+          {login.allPages
+            ? <b>tất cả các page</b>
+            : allowed.length
+              ? allowed.map((p) => p.pageName).join(', ')
+              : missing.length
+                ? <b>Meta không trả danh sách page</b>
+                : <b>các page đang gửi sự kiện bình thường</b>}
         </div>
       )}
       {missing.length > 0 && (
         <div className="text-sm text-amber-800">
-          <b>Chưa được cấp quyền gửi sự kiện:</b> {missing.map((p) => `${p.pageName} (${p.pageId})`).join(', ')}. Vào{' '}
+          <b>Meta từ chối sự kiện của page:</b> {missing.map((p) => `${p.pageName} (${p.pageId})`).join(', ')}. Vào{' '}
           <b>Kết nối QC</b> → kết nối lại Meta → bấm <b>“Chỉnh sửa quyền truy cập”</b> → tích thêm page này ở bước chọn Trang.
           Nếu không thấy page trong danh sách, tài khoản Facebook đang kết nối chưa có quyền quản trị đầy đủ trên page.
         </div>
