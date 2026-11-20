@@ -116,7 +116,8 @@ public class CampaignDraftPublisher {
             try {
                 metaCampaignId = metaAdsConnector.createCampaign(
                         tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(),
-                        draft.getName(), metaObjective, campaignBudget);
+                        draft.getName(), metaObjective, campaignBudget,
+                        parseBool(campaign.get("budgetSharing"), false));
             } catch (Exception e) {
                 throw new RuntimeException("Không tạo được chiến dịch trên Meta: " + e.getMessage());
             }
@@ -172,6 +173,7 @@ public class CampaignDraftPublisher {
                         String.valueOf(group.get("performanceGoal")), "CONVERSATIONS");
                 String devicePlatformOption = String.valueOf(group.getOrDefault("devicePlatform", "Tất cả"));
                 List<String> customAudienceIds = parseCustomAudienceIds(group.get("customAudienceIds"));
+                List<String> excludedAudienceIds = parseCustomAudienceIds(group.get("excludedAudienceIds"));
                 DraftTargetingParser.LocationSpec locations =
                         DraftTargetingParser.parseLocations(String.valueOf(group.getOrDefault("locations", "")));
                 Map<String, Object> placementTargeting =
@@ -182,7 +184,8 @@ public class CampaignDraftPublisher {
                         tenantId, adAccount.getDataSourceId(), adAccount.getExternalAccountId(), metaCampaignId,
                         String.valueOf(group.getOrDefault("name", draft.getName())),
                         adSetBudget, ageMin, ageMax, gendersOption, pageId, startTimeIso, advantageAudience,
-                        optimizationGoal, devicePlatformOption, customAudienceIds, locations, placementTargeting);
+                        optimizationGoal, devicePlatformOption, customAudienceIds, excludedAudienceIds,
+                        locations, placementTargeting);
                 group.put("metaAdSetId", metaAdSetId);
                 result.put("metaAdSetId", metaAdSetId);
 

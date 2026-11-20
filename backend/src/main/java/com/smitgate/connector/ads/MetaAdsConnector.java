@@ -1468,7 +1468,7 @@ public class MetaAdsConnector implements AdsConnector {
      * the budget (Campaign Budget Optimization) — pass null when budget lives on the ad sets.
      */
     public String createCampaign(Long tenantId, Long dataSourceId, String adAccountId,
-                                  String name, String objective, Long dailyBudgetVnd) {
+                                  String name, String objective, Long dailyBudgetVnd, boolean adSetBudgetSharing) {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
         String token = dataSourceService.decryptSecret(ds);
         String normalizedAccountId = normalizeAdAccountId(adAccountId);
@@ -1485,9 +1485,9 @@ public class MetaAdsConnector implements AdsConnector {
             builder.queryParam("daily_budget", dailyBudgetVnd.toString());
             builder.queryParam("bid_strategy", "LOWEST_COST_WITHOUT_CAP");
         } else {
-            // Ad-set budgets: Meta requires this flag explicitly. "true" would let ad sets borrow up to
+            // Ad-set budgets: Meta requires this flag explicitly. "true" lets ad sets borrow up to
             // 20% of each other's budget; Meta rejects it outright when the campaign owns the budget.
-            builder.queryParam("is_adset_budget_sharing_enabled", "false");
+            builder.queryParam("is_adset_budget_sharing_enabled", String.valueOf(adSetBudgetSharing));
         }
 
         JsonNode response = webClientBuilder.build()
@@ -1513,6 +1513,7 @@ public class MetaAdsConnector implements AdsConnector {
                                String name, Long dailyBudgetVnd, int ageMin, Integer ageMax,
                                String gendersOption, String pageId, String startTimeIso, boolean advantageAudience,
                                String optimizationGoal, String devicePlatformOption, List<String> customAudienceIds,
+                               List<String> excludedAudienceIds,
                                DraftTargetingParser.LocationSpec locations, Map<String, Object> placementTargeting) {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
         String token = dataSourceService.decryptSecret(ds);
@@ -1550,6 +1551,13 @@ public class MetaAdsConnector implements AdsConnector {
                 audiences.add(Map.of("id", id));
             }
             targeting.put("custom_audiences", audiences);
+        }
+        if (excludedAudienceIds != null && !excludedAudienceIds.isEmpty()) {
+            List<Map<String, String>> excluded = new ArrayList<>();
+            for (String id : excludedAudienceIds) {
+                excluded.add(Map.of("id", id));
+            }
+            targeting.put("excluded_custom_audiences", excluded);
         }
         // Meta now requires this explicitly on every ad set: 1 = let Meta broaden targeting
         // beyond what's specified (Advantage Audience), 0 = use only the specified targeting.
@@ -1692,14 +1700,28 @@ public class MetaAdsConnector implements AdsConnector {
         DataSource ds = dataSourceService.getByIdAndTenant(tenantId, dataSourceId);
         String token = dataSourceService.decryptSecret(ds);
         String normalizedAccountId = normalizeAdAccountId(adAccountId);
-
         try {
-            URI uri = UriComponentsBuilder
+            return postCreative(token, normalizedAccountId, pageId, postId, creativeName, true);
+        } catch (IllegalArgumentException e) {
+            if (e.getMessage() == null || !e.getMessage().contains("contextual_multi_ads")) throw e;
+            // Meta refused the multi-advertiser opt-out; create the ad anyway and leave that to Ads Manager.
+            log.warn("Meta refused contextual_multi_ads opt-out for post {}: {}", postId, e.getMessage());
+            return postCreative(token, normalizedAccountId, pageId, postId, creativeName, false);
+        }
+    }
+
+    private String postCreative(String token, String normalizedAccountId, String pageId, String postId,
+                                String creativeName, boolean optOutMultiAdvertiser) {
+        try {
+            UriComponentsBuilder builder = UriComponentsBuilder
                     .fromUriString(GRAPH_BASE + "/" + apiVersion + "/" + normalizedAccountId + "/adcreatives")
                     .queryParam("name", creativeName)
-                    .queryParam("object_story_id", pageId + "_" + postId)
-                    .queryParam("access_token", token)
-                    .build().encode().toUri();
+                    .queryParam("object_story_id", pageId + "_" + postId);
+            if (optOutMultiAdvertiser) {
+                // Never show this ad inside Meta's multi-advertiser units next to other brands' ads.
+                builder.queryParam("contextual_multi_ads", "{\"enroll_status\":\"OPT_OUT\"}");
+            }
+            URI uri = builder.queryParam("access_token", token).build().encode().toUri();
 
             JsonNode response = webClientBuilder.build()
                     .post().uri(uri)
@@ -1707,7 +1729,7 @@ public class MetaAdsConnector implements AdsConnector {
                     .onStatus(status -> status.is4xxClientError(),
                             res -> res.bodyToMono(String.class)
                                     .flatMap(body -> Mono.error(new IllegalArgumentException(
-                                            "Không tìm thấy bài viết (ID " + postId + ") trên trang để tái sử dụng: " + body))))
+                                            "Không tạo được nội dung quảng cáo từ bài viết (ID " + postId + "): " + body))))
                     .bodyToMono(JsonNode.class)
                     .block(Duration.ofSeconds(30));
 
