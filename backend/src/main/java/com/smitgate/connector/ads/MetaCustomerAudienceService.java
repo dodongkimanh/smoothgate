@@ -61,15 +61,18 @@ public class MetaCustomerAudienceService {
     static final int BATCH_SIZE = 10_000;
     static final List<String> SCHEMA = List.of("PHONE", "FN", "LN", "GEN", "ST", "DOBY", "COUNTRY");
 
-    private static final Map<MetaCustomerAudience.Kind, String> NAMES = Map.of(
-            MetaCustomerAudience.Kind.BUYERS, "Smoothgate | Khách đã mua (SĐT)",
-            MetaCustomerAudience.Kind.ALL_PHONES, "Smoothgate | Tất cả khách để lại SĐT",
-            MetaCustomerAudience.Kind.LAL_BUYERS, "Smoothgate | LAL 1% khách đã mua",
-            MetaCustomerAudience.Kind.LAL_ALL_PHONES, "Smoothgate | LAL 2% tất cả SĐT",
-            MetaCustomerAudience.Kind.PSID_BUYERS, "Smoothgate | Khách đã mua (PSID)",
-            MetaCustomerAudience.Kind.PSID_ALL_PHONES, "Smoothgate | Tất cả khách để lại SĐT (PSID)",
-            MetaCustomerAudience.Kind.LAL_PSID_BUYERS, "Smoothgate | LAL 1% khách đã mua (PSID)",
-            MetaCustomerAudience.Kind.PSID_SILENT, "Smoothgate | Khách im lặng + không nhu cầu (PSID)");
+    private static final Map<MetaCustomerAudience.Kind, String> NAMES = Map.ofEntries(
+            Map.entry(MetaCustomerAudience.Kind.BUYERS, "Smoothgate | Khách đã mua (SĐT)"),
+            Map.entry(MetaCustomerAudience.Kind.ALL_PHONES, "Smoothgate | Tất cả khách để lại SĐT"),
+            Map.entry(MetaCustomerAudience.Kind.LAL_BUYERS, "Smoothgate | LAL 1% khách đã mua"),
+            Map.entry(MetaCustomerAudience.Kind.LAL_ALL_PHONES, "Smoothgate | LAL 2% tất cả SĐT"),
+            Map.entry(MetaCustomerAudience.Kind.PSID_BUYERS, "Smoothgate | Khách đã mua (PSID)"),
+            Map.entry(MetaCustomerAudience.Kind.PSID_ALL_PHONES, "Smoothgate | Tất cả khách để lại SĐT (PSID)"),
+            Map.entry(MetaCustomerAudience.Kind.LAL_PSID_BUYERS, "Smoothgate | LAL 1% khách đã mua (PSID)"),
+            Map.entry(MetaCustomerAudience.Kind.PSID_SILENT, "Smoothgate | Khách im lặng + không nhu cầu (PSID)"),
+            Map.entry(MetaCustomerAudience.Kind.LAL_PSID_ALL_PHONES, "Smoothgate | LAL 1% tất cả khách để lại SĐT (PSID)"),
+            Map.entry(MetaCustomerAudience.Kind.LAL2_PSID_ALL_PHONES, "Smoothgate | LAL 2% tất cả khách để lại SĐT (PSID)"),
+            Map.entry(MetaCustomerAudience.Kind.LAL2_PSID_BUYERS, "Smoothgate | LAL 2% khách đã mua (PSID)"));
 
     /** How far back a "silent" or "no need" tag still counts; older ones may have changed their mind. */
     static final int SILENT_DAYS = 60;
@@ -191,6 +194,7 @@ public class MetaCustomerAudienceService {
         try {
             for (DataSource ds : dataSourceRepository.findByTypeAndStatus(DataSource.Type.META_ADS, DataSource.Status.ACTIVE)) {
                 String token = dataSourceService.decryptSecret(ds);
+                ensurePsidLookalikes(ds, token);
                 for (MetaCustomerAudience row : audienceRepository.findByTenantId(ds.getTenantId())) {
                     if (row.getExternalAudienceId() == null) continue;
                     refreshStatus(token, row);
@@ -198,6 +202,38 @@ public class MetaCustomerAudienceService {
             }
         } catch (Exception e) {
             log.warn("Meta audience status check failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Creates PSID lookalikes whose source list is already on Meta, so a new lookalike kind (or one that
+     * failed because its source was still matching) appears within the hour instead of at the next 23:59 run.
+     */
+    private void ensurePsidLookalikes(DataSource ds, String token) {
+        Long tenantId = ds.getTenantId();
+        Map<String, MetaCustomerAudience> rows = new LinkedHashMap<>();
+        for (MetaCustomerAudience row : audienceRepository.findByTenantId(tenantId)) {
+            rows.put(row.getAdAccountId() + ":" + row.getKind(), row);
+        }
+        for (AdAccount account : adAccountRepository.findByTenantIdAndDataSourceId(tenantId, ds.getId())) {
+            if (account.getPlatform() != AdAccount.Platform.META || !isIncluded(account.getExternalAccountId())
+                    || !isPsidIncluded(account.getExternalAccountId())) {
+                continue;
+            }
+            ensurePsidLookalikes(token, tenantId, account, rows);
+        }
+    }
+
+    /** The PSID lookalikes beyond LAL 1% of buyers, each made only once its source list is on Meta. */
+    private void ensurePsidLookalikes(String token, Long tenantId, AdAccount account, Map<String, MetaCustomerAudience> rows) {
+        MetaCustomerAudience all = rows.get(account.getId() + ":" + MetaCustomerAudience.Kind.PSID_ALL_PHONES);
+        MetaCustomerAudience buyers = rows.get(account.getId() + ":" + MetaCustomerAudience.Kind.PSID_BUYERS);
+        if (all != null) {
+            ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_PSID_ALL_PHONES), all, 0.01);
+            ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL2_PSID_ALL_PHONES), all, 0.02);
+        }
+        if (buyers != null) {
+            ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL2_PSID_BUYERS), buyers, 0.02);
         }
     }
 
@@ -266,6 +302,7 @@ public class MetaCustomerAudienceService {
                 syncPsidList(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.PSID_ALL_PHONES), psidAll);
                 ensureLookalike(token, account, row(rows, tenantId, account, MetaCustomerAudience.Kind.LAL_PSID_BUYERS),
                         psidBuyerList, 0.01);
+                ensurePsidLookalikes(token, tenantId, account, rows);
             }
             if (isPsidIncluded(account.getExternalAccountId()) && !psidSilent.isEmpty()) {
                 // For excluding from campaigns: people the sales team tagged silent or not interested.

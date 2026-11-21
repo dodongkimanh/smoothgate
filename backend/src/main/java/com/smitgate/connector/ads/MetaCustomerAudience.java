@@ -16,10 +16,11 @@ public class MetaCustomerAudience {
      * customers; lookalikes are created from them once.
      */
     public enum Kind {
-        BUYERS, ALL_PHONES, LAL_BUYERS, LAL_ALL_PHONES, PSID_BUYERS, PSID_ALL_PHONES, LAL_PSID_BUYERS, PSID_SILENT;
+        BUYERS, ALL_PHONES, LAL_BUYERS, LAL_ALL_PHONES, PSID_BUYERS, PSID_ALL_PHONES, LAL_PSID_BUYERS, PSID_SILENT, LAL_PSID_ALL_PHONES, LAL2_PSID_ALL_PHONES, LAL2_PSID_BUYERS;
 
         public boolean isLookalike() {
-            return this == LAL_BUYERS || this == LAL_ALL_PHONES || this == LAL_PSID_BUYERS;
+            return this == LAL_BUYERS || this == LAL_ALL_PHONES || this == LAL_PSID_BUYERS || this == LAL_PSID_ALL_PHONES
+                    || this == LAL2_PSID_ALL_PHONES || this == LAL2_PSID_BUYERS;
         }
     }
 
