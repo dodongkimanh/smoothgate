@@ -122,8 +122,15 @@ public class MetaCustomerAudienceService {
 
     /** Starts an upload now in the background (the "Gửi tệp ngay" button); false if one is already running. */
     public boolean runNow() {
-        if (running.get()) return false;
-        CompletableFuture.runAsync(() -> syncAll(false));
+        // Claim the run here so a second click while it starts does not queue another full upload.
+        if (!running.compareAndSet(false, true)) return false;
+        CompletableFuture.runAsync(() -> {
+            try {
+                runSync(false);
+            } finally {
+                running.set(false);
+            }
+        });
         return true;
     }
 
@@ -132,17 +139,27 @@ public class MetaCustomerAudienceService {
         syncAll(true);
     }
 
-    public synchronized void syncAll(boolean nightly) {
+    public void syncAll(boolean nightly) {
+        if (!running.compareAndSet(false, true)) {
+            log.info("Meta customer audiences already being sent; this run skipped");
+            return;
+        }
+        try {
+            runSync(nightly);
+        } finally {
+            running.set(false);
+        }
+    }
+
+    private synchronized void runSync(boolean nightly) {
         if (!enabled) {
             return;
         }
-        running.set(true);
         nightlyRun = nightly;
         try {
             syncAllSources();
         } finally {
             nightlyRun = false;
-            running.set(false);
         }
     }
 
