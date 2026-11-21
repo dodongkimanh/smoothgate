@@ -884,6 +884,13 @@ export default function MetaSync() {
       )}
 
       <Section
+        title="Lịch sử gửi tệp lên Meta"
+        subtitle="Mỗi ngày 23h59 Smoothgate gửi lại toàn bộ tệp. Cột thêm / bớt là số SĐT mới vào hoặc rời tệp so với lần gửi trước. Mọi thông tin được mã hoá trước khi gửi."
+      >
+        <AudienceHistory rows={audienceHistory} />
+      </Section>
+
+      <Section
         title="Tệp đối tượng trên từng tài khoản quảng cáo"
         subtitle="Số người Meta khớp được với SĐT đã gửi (cập nhật mỗi ngày, không phụ thuộc ngày đang chọn). Di chuột lên ô để xem chi tiết."
         right={
@@ -904,13 +911,6 @@ export default function MetaSync() {
         }
       >
         <AudienceTable audiences={audiences} />
-      </Section>
-
-      <Section
-        title="Lịch sử gửi tệp lên Meta"
-        subtitle="Mỗi ngày 23h59 Smoothgate gửi lại toàn bộ tệp. Cột thêm / bớt là số SĐT mới vào hoặc rời tệp so với lần gửi trước. Mọi thông tin được mã hoá trước khi gửi."
-      >
-        <AudienceHistory rows={audienceHistory} />
       </Section>
     </div>
   )
