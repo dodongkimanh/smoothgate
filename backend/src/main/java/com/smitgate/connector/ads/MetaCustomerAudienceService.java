@@ -110,6 +110,12 @@ public class MetaCustomerAudienceService {
 
     private final AtomicBoolean running = new AtomicBoolean(false);
 
+    /** True while the 23:59 run is going; it then leaves alone lists already sent by hand earlier that day. */
+    private volatile boolean nightlyRun = false;
+
+    /** A list sent within this many hours (e.g. by "Gửi tệp ngay" that morning) is not sent again at 23:59. */
+    static final long RECENT_SEND_HOURS = 20;
+
     public boolean isRunning() {
         return running.get();
     }
@@ -117,19 +123,25 @@ public class MetaCustomerAudienceService {
     /** Starts an upload now in the background (the "Gửi tệp ngay" button); false if one is already running. */
     public boolean runNow() {
         if (running.get()) return false;
-        CompletableFuture.runAsync(this::syncAll);
+        CompletableFuture.runAsync(() -> syncAll(false));
         return true;
     }
 
     @Scheduled(cron = "${app.meta-audiences.cron:0 59 23 * * *}", zone = "Asia/Ho_Chi_Minh")
-    public synchronized void syncAll() {
+    public void syncNightly() {
+        syncAll(true);
+    }
+
+    public synchronized void syncAll(boolean nightly) {
         if (!enabled) {
             return;
         }
         running.set(true);
+        nightlyRun = nightly;
         try {
             syncAllSources();
         } finally {
+            nightlyRun = false;
             running.set(false);
         }
     }
@@ -377,6 +389,11 @@ public class MetaCustomerAudienceService {
                         row.getKind(), account.getExternalAccountId());
                 return true;
             }
+            if (nightlyRun && wasSentRecently(row, LocalDateTime.now(VIETNAM_ZONE))) {
+                log.info("Meta customer audience {} for {} was already sent at {}; skipped tonight",
+                        row.getKind(), account.getExternalAccountId(), row.getLastSyncedAt());
+                return true;
+            }
             // The first upload adds; later ones replace the whole list so removed or changed phones drop out.
             String edge = row.getLastSyncedAt() == null ? "users" : "usersreplace";
             uploader.upload(row.getExternalAudienceId(), edge);
@@ -405,6 +422,10 @@ public class MetaCustomerAudienceService {
         return row.getLastSyncedAt() != null
                 && row.getMetaStatus() != null && row.getMetaStatus().startsWith("operation 414")
                 && row.getLastSyncedAt().isAfter(now.minusDays(3));
+    }
+
+    static boolean wasSentRecently(MetaCustomerAudience row, LocalDateTime now) {
+        return row.getLastSyncedAt() != null && row.getLastSyncedAt().isAfter(now.minusHours(RECENT_SEND_HOURS));
     }
 
     /** Created once from a synced list; Meta refreshes a lookalike on its own as its source list changes. */
@@ -467,10 +488,11 @@ public class MetaCustomerAudienceService {
             session.put("estimated_num_total", total);
 
             Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("schema", PSID_SCHEMA);
+            // Multi-key form: schema is a list and each row a list, as Meta's PAGEUID example shows.
+            payload.put("schema", List.of(PSID_SCHEMA));
             payload.put("is_raw", true);
             payload.put("page_ids", List.of(requests.get(i).getKey()));
-            payload.put("data", requests.get(i).getValue());
+            payload.put("data", requests.get(i).getValue().stream().map(List::of).toList());
 
             MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
             form.add("session", objectMapper.writeValueAsString(session));
@@ -481,6 +503,10 @@ public class MetaCustomerAudienceService {
             }
             log.info("PSID upload {} page {}: sent {}, received {}, invalid {}", audienceId, requests.get(i).getKey(),
                     requests.get(i).getValue().size(), res.path("num_received").asInt(), res.path("num_invalid_entries").asInt());
+            if (res.path("num_invalid_entries").asInt() > 0 && res.has("invalid_entry_samples")) {
+                log.warn("PSID upload {} page {}: invalid samples {}", audienceId, requests.get(i).getKey(),
+                        truncate(res.get("invalid_entry_samples").toString()));
+            }
         }
     }
 
