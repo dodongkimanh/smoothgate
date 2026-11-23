@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class WorkerAdBoardService {
 
-    static final String[] PERIODS = {"today", "yesterday", "last3", "last7", "last30", "total", "thisMonth", "lastMonth"};
+    static final String[] PERIODS = {"today", "yesterday", "last3", "last7", "last30", "total", "thisMonth", "lastMonth", "dayBefore", "thisWeek"};
     /** The periods the board can show (as on the Ads Manager page); an ad is listed when it spent in one of them. */
     static final String[] BOARD_PERIODS = {"today", "yesterday", "last3", "last7", "thisMonth", "lastMonth"};
     private static final String[] NUMBERS = {"spend", "impressions", "reach", "clicks", "comments", "messageContacts",
@@ -52,9 +52,9 @@ public class WorkerAdBoardService {
     private Map<String, Object> build(AdWorkerService.Worker w) {
         LocalDate today = LocalDate.now(AdWorkerService.VIETNAM_ZONE);
         LocalDate monthStart = today.withDayOfMonth(1);
-        LocalDate[] from = {today, today.minusDays(1), today.minusDays(2), today.minusDays(6), today.minusDays(29), today.minusDays(89),
-                monthStart, monthStart.minusMonths(1)};
-        LocalDate[] to = {today, today.minusDays(1), today, today, today, today, today, monthStart.minusDays(1)};
+        LocalDate[] from = {today, today.minusDays(1), today.minusDays(2), today.minusDays(6), today.minusDays(29), LocalDate.of(2020, 1, 1),
+                monthStart, monthStart.minusMonths(1), today.minusDays(2), today.with(java.time.DayOfWeek.MONDAY)};
+        LocalDate[] to = {today, today.minusDays(1), today, today, today, today, today, monthStart.minusDays(1), today.minusDays(2), today};
         // One after another (not in parallel) and through the shared cache: Meta limits calls per ad account.
         Map<String, Map<String, Map<String, Object>>> byPeriod = new LinkedHashMap<>();
         for (int i = 0; i < PERIODS.length; i++) {
@@ -82,7 +82,7 @@ public class WorkerAdBoardService {
         Map<String, List<CrmCustomerSource.AdLead>> leadsByAd = new LinkedHashMap<>();
         String crmError = null;
         try {
-            for (CrmCustomerSource.AdLead l : crm.adLeads(ids, 90)) {
+            for (CrmCustomerSource.AdLead l : crm.adLeads(ids, 3700)) {
                 leadsByAd.computeIfAbsent(l.adId(), x -> new ArrayList<>()).add(l);
             }
         } catch (Exception e) {
@@ -418,6 +418,8 @@ public class WorkerAdBoardService {
             case "last30" -> !d.isBefore(today.minusDays(29));
             case "thisMonth" -> !d.isBefore(today.withDayOfMonth(1));
             case "lastMonth" -> !d.isBefore(today.withDayOfMonth(1).minusMonths(1)) && d.isBefore(today.withDayOfMonth(1));
+            case "dayBefore" -> d.equals(today.minusDays(2));
+            case "thisWeek" -> !d.isBefore(today.with(java.time.DayOfWeek.MONDAY));
             default -> true;
         };
     }

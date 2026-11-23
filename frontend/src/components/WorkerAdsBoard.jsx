@@ -17,10 +17,14 @@ const PERIODS = [
   ['last3', '3 ngày', 3],
   ['last7', '7 ngày', 7],
   ['last30', '30 ngày', 30],
-  ['total', 'Từ khi chạy', 90],
-  ['thisMonth', 'Tháng này', Number(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).slice(8, 10))],
+  ['total', 'Từ trước tới nay', 90],
+  ['thisMonth', 'Tổng tháng này', Number(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).slice(8, 10))],
   ['lastMonth', 'Tháng trước', (() => { const d = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).slice(0, 8) + '01'); d.setDate(0); return d.getDate() })()],
+  ['dayBefore', 'Hôm kia', 1],
+  ['thisWeek', 'Tổng tuần này', ((new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' })).getDay() + 6) % 7) + 1],
 ]
+// Rows of the cell-analysis popup.
+const MODAL_PERIODS = ['today', 'yesterday', 'dayBefore', 'thisWeek', 'thisMonth', 'total']
 // The board's period tabs, as on the Ads Manager page.
 const BOARD_PERIODS = ['today', 'yesterday', 'last3', 'last7', 'thisMonth', 'lastMonth']
 const PERIOD_LABEL = Object.fromEntries(PERIODS.map(([k, l]) => [k, l]))
@@ -89,7 +93,7 @@ function comparable(ad, key, period, days) {
   if (v == null) return null
   if (METRICS[key].kind === 'count') {
     if (period === 'total') {
-      const started = ad.createdDate ? Math.max(1, Math.min(90, Math.round((Date.now() - new Date(ad.createdDate).getTime()) / 86400000) + 1)) : 90
+      const started = ad.createdDate ? Math.max(1, Math.round((Date.now() - new Date(ad.createdDate).getTime()) / 86400000) + 1) : 90
       return v / started
     }
     return v / days
@@ -297,7 +301,7 @@ function CellModal({ ad, metric, allAds, rules, onClose }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {PERIODS.map(([k, label, days]) => {
+              {MODAL_PERIODS.map((mk) => PERIODS.find((p) => p[0] === mk)).map(([k, label, days]) => {
                 const v = valueOf(ad, metric, k)
                 const avg = comparable(ad, metric, k, days)
                 const ch = k === 'today' ? null : changeText(change(todayV, avg), m.better)
