@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ArrowUpDown, Megaphone, RefreshCw, X } from 'lucide-react'
-import { getWorkerAdsBoard, getWorkerSales } from '../services/api'
+import { getWorkerAdsBoard, getWorkerSales, getWorkerBreakdown } from '../services/api'
 import { MetaToggle, DeliveryStatus } from './MetaAdControls'
 
 // ---------- formatting ----------
@@ -404,6 +404,126 @@ export function WorkerSalesBoard({ worker }) {
   )
 }
 
+// ---------- age / gender / region split ----------
+const GENDER = { male: 'Nam', female: 'Nữ', unknown: 'Không rõ' }
+
+function SplitTable({ rows, label, nameOf }) {
+  const [sort, setSort] = useState({ key: 'spend', dir: 'desc' })
+  const total = rows.reduce((t, r) => t + Number(r.spend || 0), 0)
+  const totalMsg = rows.reduce((t, r) => t + Number(r.messages || 0), 0)
+  const avgCpmsg = div(total, totalMsg)
+  const cols = [
+    ['spend', 'Chi', vnd, (r) => Number(r.spend || 0)],
+    ['share', '% chi', (v) => `${Math.round(v)}%`, (r) => (total ? (100 * Number(r.spend || 0)) / total : 0)],
+    ['impressions', 'Hiển thị', int, (r) => Number(r.impressions || 0)],
+    ['cpm', 'CPM', dash(vnd), (r) => div(r.spend * 1000, r.impressions)],
+    ['ctr', 'CTR', dash(pctf), (r) => div(r.clicks * 100, r.impressions)],
+    ['messages', 'Tin nhắn', int, (r) => Number(r.messages || 0)],
+    ['cpmsg', 'Chi phí/tin', dash(vnd), (r) => div(r.spend, r.messages)],
+  ]
+  const get = (r, k) => cols.find((c) => c[0] === k)[3](r)
+  const sorted = [...rows].sort((a, b) => {
+    const x = get(a, sort.key), y = get(b, sort.key)
+    if (x == null) return 1
+    if (y == null) return -1
+    return sort.dir === 'asc' ? x - y : y - x
+  })
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead className="bg-slate-50 text-slate-500 text-xs">
+          <tr>
+            <th className="text-left px-3 py-2 font-medium">{label}</th>
+            {cols.map(([k, l]) => (
+              <th key={k} onClick={() => setSort((x) => ({ key: k, dir: x.key === k && x.dir === 'desc' ? 'asc' : 'desc' }))}
+                className={`text-right px-2 py-2 font-medium whitespace-nowrap cursor-pointer select-none ${sort.key === k ? 'text-sky-700' : ''}`}>{l}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {sorted.map((r) => {
+            const cpmsg = div(r.spend, r.messages)
+            const tone = cpmsg == null
+              ? (Number(r.spend) >= 100000 ? 'text-red-600' : '')
+              : avgCpmsg && cpmsg <= avgCpmsg * 0.8 ? 'text-emerald-700 font-semibold'
+                : avgCpmsg && cpmsg >= avgCpmsg * 1.3 ? 'text-red-600' : ''
+            return (
+              <tr key={r.dim_key}>
+                <td className="px-3 py-1.5 whitespace-nowrap">{nameOf(r)}</td>
+                {cols.map(([k, , fmt]) => (
+                  <td key={k} className={`px-2 py-1.5 text-right whitespace-nowrap ${k === 'cpmsg' ? tone : ''}`}>{fmt(get(r, k))}</td>
+                ))}
+              </tr>
+            )
+          })}
+          {rows.length === 0 && <tr><td colSpan={8} className="px-3 py-3 text-slate-400">Chưa có số liệu cho kỳ này.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function SplitModal({ worker, ad, onClose }) {
+  const [period, setPeriod] = useState('today')
+  const [view, setView] = useState('age')
+  const q = useQuery({
+    queryKey: ['worker-breakdown', worker.id, ad?.adId || 'all', period],
+    queryFn: () => getWorkerBreakdown(worker.id, period, ad?.adId).then((r) => r.data?.data || {}),
+  })
+  const d = q.data || {}
+  const ageRows = d.age_gender || []
+  // Age alone and gender alone, added up from the age + gender rows.
+  const groupBy = (keyOf) => Object.values(ageRows.reduce((m, r) => {
+    const k = keyOf(r)
+    const g = m[k] || (m[k] = { dim_key: k, spend: 0, impressions: 0, clicks: 0, messages: 0 })
+    g.spend += Number(r.spend || 0)
+    g.impressions += Number(r.impressions || 0)
+    g.clicks += Number(r.clicks || 0)
+    g.messages += Number(r.messages || 0)
+    return m
+  }, {}))
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-start sm:items-center justify-center bg-black/40 p-2 sm:p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
+          <div className="min-w-0">
+            <div className="text-xs text-slate-500">Độ tuổi · giới tính · tỉnh thành (số Meta)</div>
+            <h3 className="font-semibold text-slate-800 truncate">{ad ? ad.adName : `Cả tài khoản ${worker.accountName}`}</h3>
+            {ad && <div className="text-xs text-slate-400 font-mono">ID QC {ad.adId}</div>}
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="px-5 py-4">
+          <div className="flex flex-wrap justify-between gap-2 mb-3">
+            <div className="flex flex-wrap gap-1">
+              {[['age', 'Độ tuổi'], ['gender', 'Giới tính'], ['ageGender', 'Tuổi + giới tính'], ['region', 'Tỉnh/thành']].map(([k, l]) => (
+                <button key={k} onClick={() => setView(k)} className={`px-3 py-1 rounded-lg text-sm border ${view === k ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-gray-200 text-slate-600'}`}>{l}</button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {PERIODS.slice(0, 5).map(([k, l]) => (
+                <button key={k} onClick={() => setPeriod(k)} className={`px-2 py-1 rounded-md text-xs border ${period === k ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-gray-200 text-slate-600'}`}>{l}</button>
+              ))}
+            </div>
+          </div>
+          {q.isLoading ? <p className="text-slate-500">Đang tải…</p> : (
+            <>
+              {view === 'age' && <SplitTable rows={groupBy((r) => r.age || '?')} label="Độ tuổi" nameOf={(r) => r.dim_key} />}
+              {view === 'gender' && <SplitTable rows={groupBy((r) => r.gender || 'unknown')} label="Giới tính" nameOf={(r) => GENDER[r.dim_key] || r.dim_key} />}
+              {view === 'ageGender' && <SplitTable rows={ageRows} label="Tuổi · giới tính" nameOf={(r) => `${r.age} · ${GENDER[r.gender] || r.gender}`} />}
+              {view === 'region' && <SplitTable rows={d.region || []} label="Tỉnh/thành" nameOf={(r) => r.region || '—'} />}
+            </>
+          )}
+          <p className="text-xs text-slate-400 mt-3">
+            Số do Smoothgate đồng bộ từ Meta mỗi giờ{d.at ? ` (lần cuối ${d.at.slice(11, 16)} ${d.at.slice(8, 10)}/${d.at.slice(5, 7)})` : ''}.
+            Chi phí/tin xanh = rẻ hơn trung bình từ 20%, đỏ = đắt hơn từ 30% hoặc chi từ 100k mà 0 tin. Meta làm tròn số chia nhỏ nên tổng có thể lệch nhẹ.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ---------- the board ----------
 const HEAD = [
   ['toggle', 'Tắt/Bật'], ['adName', 'Quảng cáo'], ['adAccountName', 'Tài khoản quảng cáo'], ['createdDate', 'Ngày tạo'],
@@ -416,6 +536,7 @@ export default function WorkerAdsBoard({ worker }) {
   const [sort, setSort] = useState({ key: 'spend', dir: 'desc' })
   const [cell, setCell] = useState(null)
   const [fresh, setFresh] = useState(0)
+  const [split, setSplit] = useState(null)
   const q = useQuery({
     queryKey: ['worker-ads-board', worker?.id, fresh],
     queryFn: () => getWorkerAdsBoard(worker.id, fresh > 0).then((r) => r.data?.data || {}),
@@ -455,17 +576,20 @@ export default function WorkerAdsBoard({ worker }) {
           <h2 className="font-semibold text-slate-800 text-base flex items-center gap-2"><Megaphone className="w-5 h-5 text-slate-500" />Quảng cáo tiêu tiền hôm nay · {worker.accountName}</h2>
           <p className="text-sm text-slate-500 mt-0.5">
             Bấm vào ô số bất kỳ để xem phân tích (hôm nay so với hôm qua, 3 ngày, 7 ngày, 30 ngày và kết luận). Dòng đỏ = vượt luật đề ra.
-            {d.at ? ` Số lúc ${d.at.slice(11, 16)}.` : ''}
+            {d.at ? ` Số Smoothgate đồng bộ lúc ${d.at.slice(11, 16)}.` : ''}
             {badCount > 0 && <b className="text-red-600"> {badCount} quảng cáo đang vượt ngưỡng.</b>}
           </p>
           {d.crmError && <p className="text-sm text-amber-700">{d.crmError}</p>}
         </div>
-        <button onClick={() => setFresh((n) => n + 1)} className="p-2 rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50" title="Lấy số mới từ Meta">
-          <RefreshCw className={`w-4 h-4 ${q.isFetching ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex gap-1">
+          <button onClick={() => setSplit({ ad: null })} className="px-3 py-1 rounded-lg text-sm border border-gray-200 text-slate-600 hover:bg-slate-50">Độ tuổi · Tỉnh thành</button>
+          <button onClick={() => setFresh((n) => n + 1)} className="p-2 rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50" title="Tải lại">
+            <RefreshCw className={`w-4 h-4 ${q.isFetching ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
       {q.isLoading ? (
-        <p className="px-4 py-6 text-slate-500">Đang lấy số từ Meta…</p>
+        <p className="px-4 py-6 text-slate-500">Đang tải…</p>
       ) : q.isError ? (
         <p className="px-4 py-6 text-red-600">Không tải được: {q.error?.response?.data?.message || q.error?.message}</p>
       ) : ads.length === 0 ? (
@@ -511,6 +635,7 @@ export default function WorkerAdsBoard({ worker }) {
                           <div className={`font-medium truncate ${bad ? 'text-red-700' : 'text-slate-800'}`} title={ad.adName}>{ad.adName}</div>
                           <div className="text-[11px] text-slate-400 font-mono select-all">{ad.adId}</div>
                           <div className="text-[11px] text-slate-400 truncate" title={`${ad.adSetName} (ID ${ad.adSetId})`}>{ad.adSetName}</div>
+                          <button onClick={() => setSplit({ ad })} className="text-[11px] text-sky-600 hover:underline">Độ tuổi · Tỉnh thành</button>
                           {(ad.alerts || []).filter((a) => a.level !== 'good').map((a, i) => (
                             <div key={i} className={`text-[11px] mt-0.5 leading-snug ${a.level === 'bad' ? 'text-red-600 font-semibold' : 'text-amber-700'}`}>{a.level === 'bad' ? '❌ ' : '⚠️ '}{a.text}</div>
                           ))}
@@ -557,6 +682,7 @@ export default function WorkerAdsBoard({ worker }) {
           </table>
         </div>
       )}
+      {split && <SplitModal worker={worker} ad={split.ad} onClose={() => setSplit(null)} />}
       {current && <CellModal ad={current} metric={cell.metric} allAds={ads} rules={d.rules} onClose={() => setCell(null)} />}
     </section>
   )

@@ -79,6 +79,17 @@ public class WorkerAdminController {
         return ResponseEntity.ok(ApiResponse.ok(adBoard.board(w, fresh)));
     }
 
+    /** Age/gender and region split (Meta, stored by the sync) for the account or one ad. */
+    @GetMapping("/{id}/breakdown")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> breakdown(HttpServletRequest request,
+                                                                      @org.springframework.web.bind.annotation.PathVariable long id,
+                                                                      @RequestParam(defaultValue = "today") String period,
+                                                                      @RequestParam(required = false) String adId) {
+        AdWorkerService.Worker w = workers.find(tenant(request), id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy worker"));
+        return ResponseEntity.ok(ApiResponse.ok(adBoard.breakdown(w, period, adId)));
+    }
+
     /** CRM leads per assigned sale for this worker's account, per period (today … all time). */
     @GetMapping("/{id}/sales")
     public ResponseEntity<ApiResponse<Map<String, Object>>> sales(HttpServletRequest request,

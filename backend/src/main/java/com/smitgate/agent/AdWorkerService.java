@@ -112,14 +112,126 @@ public class AdWorkerService {
         return out;
     }
 
-    /** Every field the Ads Manager page shows, per ad, for one date range of this worker's account. */
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    /**
+     * Every field the Ads Manager page shows, per ad, for one date range of this worker's account — read from
+     * Smoothgate only, never from Meta: the per-ad daily numbers and the ad status/budget/creative the ad-metrics sync
+     * stores every 15 minutes (ads_ad_metrics_daily, ads_ad_info), and phones/orders/revenue from Smoothgate's orders.
+     * Ads still running are listed even when they did not spend in the range.
+     */
     public List<Map<String, Object>> fullAds(Worker w, LocalDate from, LocalDate to) {
-        return metaAdsConnector.listAdPerformance(w.tenantId(), w.dataSourceId(), w.externalAccountId(), from, to, null, null);
+        Map<String, Map<String, Object>> byAd = new LinkedHashMap<>();
+        jdbc.query("""
+                select ad_id, ad_name, adset_id, adset_name, campaign_id, campaign_name, spend, impressions, reach, clicks,
+                       message_contacts, actions_json
+                from ads_ad_metrics_daily where ad_account_id = ? and date between ? and ? order by date
+                """, rs -> {
+            String id = rs.getString("ad_id");
+            Map<String, Object> r = byAd.computeIfAbsent(id, k -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("adId", k);
+                for (String f : List.of("spend", "impressions", "reach", "clicks", "messageContacts", "comments")) {
+                    m.put(f, 0d);
+                }
+                return m;
+            });
+            // The latest day's names win (ads get renamed).
+            r.put("adName", rs.getString("ad_name"));
+            r.put("adSetId", rs.getString("adset_id"));
+            r.put("adSetName", rs.getString("adset_name"));
+            r.put("campaignId", rs.getString("campaign_id"));
+            r.put("campaignName", rs.getString("campaign_name"));
+            add(r, "spend", rs.getDouble("spend"));
+            add(r, "impressions", rs.getDouble("impressions"));
+            // Summed daily reach overcounts people reached on several days; frequency over a range is a floor.
+            add(r, "reach", rs.getDouble("reach"));
+            add(r, "clicks", rs.getDouble("clicks"));
+            add(r, "messageContacts", rs.getDouble("message_contacts"));
+            add(r, "comments", comments(rs.getString("actions_json")));
+        }, w.adAccountId(), java.sql.Date.valueOf(from), java.sql.Date.valueOf(to));
+
+        Map<String, Map<String, Object>> info = new LinkedHashMap<>();
+        jdbc.queryForList("""
+                select ad_id, ad_name, adset_id, adset_name, adset_status, campaign_id, campaign_name, status,
+                       effective_status, created_time, thumbnail_url, post_id, budget, budget_source
+                from ads_ad_info where ad_account_id = ?
+                """, w.adAccountId()).forEach(m -> info.put(String.valueOf(m.get("ad_id")), m));
+        for (Map<String, Object> i : info.values()) {
+            if ("ACTIVE".equalsIgnoreCase(String.valueOf(i.get("effective_status")))) {
+                byAd.computeIfAbsent(String.valueOf(i.get("ad_id")), k -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("adId", k);
+                    for (String f : List.of("spend", "impressions", "reach", "clicks", "messageContacts", "comments")) {
+                        m.put(f, 0d);
+                    }
+                    return m;
+                });
+            }
+        }
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Map<String, Object> r : byAd.values()) {
+            Map<String, Object> i = info.get(String.valueOf(r.get("adId")));
+            if (i != null) {
+                r.put("adName", i.get("ad_name") != null ? i.get("ad_name") : r.get("adName"));
+                r.putIfAbsent("adSetId", i.get("adset_id"));
+                r.put("adSetName", i.get("adset_name") != null ? i.get("adset_name") : r.get("adSetName"));
+                r.putIfAbsent("campaignId", i.get("campaign_id"));
+                r.put("campaignName", i.get("campaign_name") != null ? i.get("campaign_name") : r.get("campaignName"));
+                r.put("adSetStatus", i.get("adset_status"));
+                r.put("delivery", i.get("effective_status"));
+                r.put("status", i.get("status"));
+                r.put("configuredStatus", i.get("status"));
+                r.put("createdDate", i.get("created_time"));
+                r.put("thumbnailUrl", i.get("thumbnail_url"));
+                r.put("postId", i.get("post_id"));
+                r.put("budget", i.get("budget") == null ? 0d : ((Number) i.get("budget")).doubleValue());
+                r.put("budgetSource", i.get("budget_source"));
+            } else {
+                r.put("delivery", "UNKNOWN");
+            }
+            r.put("adAccountId", w.externalAccountId());
+            r.put("adAccountName", w.accountName());
+            r.put("dataSourceId", w.dataSourceId());
+            double impressions = number(r.get("impressions"));
+            r.put("cpm", impressions > 0 ? number(r.get("spend")) * 1000 / impressions : 0d);
+            r.put("phoneCount", 0L);
+            r.put("orderCount", 0L);
+            r.put("sales", 0d);
+            rows.add(r);
+        }
+        metaAdsConnector.enrichWithPosOrderMetrics(w.tenantId(), from, to, rows);
+        return rows;
+    }
+
+    /** When the ad-metrics sync last stored this account's numbers. */
+    public java.time.LocalDateTime dataUpdatedAt(Worker w) {
+        java.sql.Timestamp t = jdbc.queryForObject(
+                "select max(updated_at) from ads_ad_metrics_daily where ad_account_id = ?", java.sql.Timestamp.class, w.adAccountId());
+        return t == null ? null : t.toLocalDateTime();
+    }
+
+    private static void add(Map<String, Object> r, String f, double v) {
+        r.put(f, number(r.get(f)) + v);
+    }
+
+    private static double comments(String actionsJson) {
+        if (actionsJson == null || actionsJson.isBlank()) return 0;
+        try {
+            double n = 0;
+            for (com.fasterxml.jackson.databind.JsonNode a : JSON.readTree(actionsJson)) {
+                String t = a.path("action_type").asText("");
+                if ("comment".equalsIgnoreCase(t) || "post_comment".equalsIgnoreCase(t)) n += a.path("value").asDouble(0);
+            }
+            return n;
+        } catch (Exception e) {
+            return 0; // stored JSON can be cut at 4000 characters
+        }
     }
 
     private List<Map<String, Object>> ads(Worker w, LocalDate from, LocalDate to) {
-        List<Map<String, Object>> rows = metaAdsConnector.listAdPerformance(
-                w.tenantId(), w.dataSourceId(), w.externalAccountId(), from, to, null, null);
+        List<Map<String, Object>> rows = fullAds(w, from, to);
         List<Map<String, Object>> out = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             double spend = number(row.get("spend"));

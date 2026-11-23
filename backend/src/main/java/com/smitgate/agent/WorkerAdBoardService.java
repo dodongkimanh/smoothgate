@@ -12,10 +12,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * The worker's ad board: the ads of its account that spent today, with the same columns as the Ads Manager page,
@@ -32,11 +29,11 @@ public class WorkerAdBoardService {
     private static final String[] INFO = {"adId", "adName", "adSetId", "adSetName", "campaignId", "campaignName",
             "adAccountId", "adAccountName", "dataSourceId", "thumbnailUrl", "createdDate", "delivery", "status",
             "configuredStatus", "budget", "budgetSource", "postId"};
-    private static final long CACHE_MS = 60_000;
+    private static final long CACHE_MS = 30_000;
 
     private final AdWorkerService workers;
     private final CrmCustomerSource crm;
-    private final ExecutorService pool = Executors.newFixedThreadPool(4);
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
     private final Map<Long, Map<String, Object>> cache = new ConcurrentHashMap<>();
 
     public Map<String, Object> board(AdWorkerService.Worker w, boolean fresh) {
@@ -54,15 +51,12 @@ public class WorkerAdBoardService {
         LocalDate today = LocalDate.now(AdWorkerService.VIETNAM_ZONE);
         LocalDate[] from = {today, today.minusDays(1), today.minusDays(2), today.minusDays(6), today.minusDays(29), today.minusDays(89)};
         LocalDate[] to = {today, today.minusDays(1), today, today, today, today};
-        List<CompletableFuture<List<Map<String, Object>>>> calls = new ArrayList<>();
-        for (int i = 0; i < PERIODS.length; i++) {
-            int k = i;
-            calls.add(CompletableFuture.supplyAsync(() -> workers.fullAds(w, from[k], to[k]), pool));
-        }
+        // One after another (not in parallel) and through the shared cache: Meta limits calls per ad account.
         Map<String, Map<String, Map<String, Object>>> byPeriod = new LinkedHashMap<>();
         for (int i = 0; i < PERIODS.length; i++) {
-            byPeriod.put(PERIODS[i], perAd(calls.get(i).join()));
+            byPeriod.put(PERIODS[i], perAd(workers.fullAds(w, from[i], to[i])));
         }
+        LocalDateTime fetched = workers.dataUpdatedAt(w);
 
         // The ads that spent today, biggest spend first.
         List<Map<String, Object>> todayAds = new ArrayList<>(byPeriod.get("today").values());
@@ -106,7 +100,9 @@ public class WorkerAdBoardService {
 
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("account", w.accountName());
-        out.put("at", LocalDateTime.now(AdWorkerService.VIETNAM_ZONE).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+        // updated_at is stored in the server's time (UTC); show it in Vietnam time.
+        out.put("at", fetched == null ? null : fetched.atZone(java.time.ZoneOffset.UTC)
+                .withZoneSameInstant(AdWorkerService.VIETNAM_ZONE).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
         out.put("rules", Map.of("noPhoneSpend", WorkerAnalysisService.NO_PHONE_SPEND,
                 "maxCostPerPhone", WorkerAnalysisService.MAX_COST_PER_PHONE, "costPerPhoneFrom", 1_500_000,
                 "noOrderSpend", 5_000_000, "goodCostPerOrder", WorkerAnalysisService.GOOD_COST_PER_ORDER));
@@ -117,8 +113,41 @@ public class WorkerAdBoardService {
         return out;
     }
 
+    /**
+     * Meta's split by age + gender and by region for this account (or one ad), for a period, from what the sync stored.
+     */
+    public Map<String, Object> breakdown(AdWorkerService.Worker w, String period, String adId) {
+        LocalDate today = LocalDate.now(AdWorkerService.VIETNAM_ZONE);
+        LocalDate from = switch (period == null ? "today" : period) {
+            case "yesterday" -> today.minusDays(1);
+            case "last3" -> today.minusDays(2);
+            case "last7" -> today.minusDays(6);
+            case "last30" -> today.minusDays(29);
+            default -> today;
+        };
+        LocalDate to = "yesterday".equals(period) ? today.minusDays(1) : today;
+        boolean oneAd = adId != null && !adId.isBlank();
+        String sql = """
+                select dim_key, max(age) as age, max(gender) as gender, max(region) as region,
+                       sum(spend) as spend, sum(impressions) as impressions, sum(clicks) as clicks,
+                       sum(message_contacts) as messages
+                from ads_ad_breakdown_daily
+                where ad_account_id = ? and dimension = ? and date between ? and ?
+                """ + (oneAd ? " and ad_id = ?" : "") + " group by dim_key order by sum(spend) desc";
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (String dim : List.of("age_gender", "region")) {
+            List<Object> args = new ArrayList<>(List.of(w.adAccountId(), dim, java.sql.Date.valueOf(from), java.sql.Date.valueOf(to)));
+            if (oneAd) args.add(adId);
+            out.put(dim, jdbc.queryForList(sql, args.toArray()));
+        }
+        java.sql.Timestamp t = jdbc.queryForObject("select max(updated_at) from ads_ad_breakdown_daily where ad_account_id = ?",
+                java.sql.Timestamp.class, w.adAccountId());
+        out.put("at", t == null ? null : t.toLocalDateTime().atZone(java.time.ZoneOffset.UTC)
+                .withZoneSameInstant(AdWorkerService.VIETNAM_ZONE).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+        return out;
+    }
+
     static final String[] SALE_PERIODS = {"today", "yesterday", "last3", "last7", "thisMonth", "lastMonth", "max"};
-    private final Map<Long, Map<String, Object>> accountAds = new ConcurrentHashMap<>();
 
     /**
      * Leads per sale (the CRM "Sale" column = who the lead was assigned to) for every ad this account ever ran,
@@ -170,22 +199,15 @@ public class WorkerAdBoardService {
         return out;
     }
 
-    /** Every ad the account ran in Meta's longest window (37 months), refreshed every 30 minutes. */
-    @SuppressWarnings("unchecked")
+    /**
+     * The ads of this account, from what Smoothgate stores (daily per-ad numbers and the ad list of the sync).
+     */
     private List<String> accountAdIds(AdWorkerService.Worker w, LocalDate today) {
-        Map<String, Object> hit = accountAds.get(w.id());
-        if (hit != null && System.currentTimeMillis() - (long) hit.get("at") < 30 * 60_000L) {
-            return (List<String>) hit.get("ids");
-        }
-        List<Map<String, Object>> rows;
-        try {
-            rows = workers.fullAds(w, today.minusMonths(37).plusDays(1), today);
-        } catch (Exception e) {
-            rows = workers.fullAds(w, today.minusDays(89), today);
-        }
-        List<String> ids = new ArrayList<>(perAd(rows).keySet());
-        accountAds.put(w.id(), Map.of("at", System.currentTimeMillis(), "ids", ids));
-        return ids;
+        java.util.Set<String> ids = new java.util.LinkedHashSet<>(jdbc.queryForList(
+                "select distinct ad_id from ads_ad_metrics_daily where ad_account_id = ? and ad_id is not null",
+                String.class, w.adAccountId()));
+        ids.addAll(jdbc.queryForList("select ad_id from ads_ad_info where ad_account_id = ?", String.class, w.adAccountId()));
+        return new ArrayList<>(ids);
     }
 
     /** One entry per ad (the connector can return an ad more than once, e.g. per day). */

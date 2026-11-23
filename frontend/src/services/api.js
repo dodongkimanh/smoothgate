@@ -103,6 +103,7 @@ export const getWorkerRecommendations = (params) => api.get('/workers/recommenda
 export const getWorkerLeadQuality = (id) => api.get(`/workers/${id}/lead-quality`)
 export const getWorkerAdsBoard = (id, fresh) => api.get(`/workers/${id}/ads-board`, { params: fresh ? { fresh: true } : {} })
 export const getWorkerSales = (id) => api.get(`/workers/${id}/sales`)
+export const getWorkerBreakdown = (id, period, adId) => api.get(`/workers/${id}/breakdown`, { params: { period, adId: adId || undefined } })
 export const runWorkerAnalysis = (id) => api.post(`/workers/${id}/analyze`)
 export const getWorkerAnalysisState = (id) => api.get(`/workers/${id}/analyze`)
 export const getDataSources = () => api.get('/datasources')

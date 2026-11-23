@@ -1027,7 +1027,8 @@ public class MetaAdsConnector implements AdsConnector {
         return rows;
     }
 
-    private void enrichWithPosOrderMetrics(
+    /** Phones, orders and revenue per ad from Smoothgate's own orders (no Meta call). */
+    public void enrichWithPosOrderMetrics(
             Long tenantId,
             LocalDate from,
             LocalDate to,
