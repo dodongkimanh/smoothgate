@@ -238,7 +238,9 @@ function AdTable({ data }) {
                       <span className={`shrink-0 text-[11px] font-semibold px-1.5 py-0.5 rounded ${ad.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{ad.active ? 'Đang chạy' : 'Đã dừng'}</span>
                       <span className="font-medium text-slate-800">{ad.name}</span>
                     </div>
+                    <div className="text-[11px] text-slate-500 font-mono select-all">ID QC {ad.id}</div>
                     <div className="text-xs text-slate-400 truncate max-w-[320px]" title={`${ad.setName} · ${ad.campaignName}`}>{ad.setName}{ad.budget ? ` · NS ${money(ad.budget)}` : ''}</div>
+                    {ad.setId && <div className="text-[11px] text-slate-400 font-mono select-all">ID nhóm {ad.setId}</div>}
                     {delta && delta.length > 0 && <div className="text-xs mt-0.5">so với hôm qua: {delta}</div>}
                   </td>
                   {cols.map(([key, , fmt, cls]) => (
@@ -399,6 +401,7 @@ function QualityTable({ rows, period, spendKey }) {
                 <td className="px-3 py-2">
                   <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle ${r.active ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                   {r.name}
+                  {/^\d+$/.test(String(r.id)) && <div className="text-[11px] text-slate-400 font-mono select-all ml-3">ID {r.id}</div>}
                 </td>
                 <td className="text-right px-2 py-2 whitespace-nowrap">{spendKey === 'none' ? '' : money(spend)}</td>
                 <td className="text-right px-2 py-2 font-medium">{c.total || 0}</td>

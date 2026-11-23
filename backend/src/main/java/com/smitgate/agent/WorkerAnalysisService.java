@@ -277,7 +277,7 @@ public class WorkerAnalysisService {
     private static String lines(Iterable<Agg> groups, List<Map<String, Object>> ads) {
         StringBuilder sb = new StringBuilder();
         for (Agg g : groups) {
-            sb.append("- ").append(g.name).append(" [").append(g.campaignName).append("] id ").append(g.id).append(g.active ? " ĐANG BẬT" : " tắt")
+            sb.append("- ").append(g.name).append(" [").append(g.campaignName).append("] ID ").append(g.id).append(g.active ? " ĐANG BẬT" : " tắt")
                     .append(g.budget > 0 ? ", ngân sách " + money(g.budget) : "").append(": chi ").append(money(g.spend))
                     .append(", ").append(g.impressions).append(" hiển thị, CPM ").append(g.impressions > 0 ? money(g.spend * 1000 / g.impressions) : "—")
                     .append(", ").append(g.messages).append(" tin nhắn, ").append(g.phones).append(" SĐT (")
@@ -286,7 +286,7 @@ public class WorkerAnalysisService {
             if (ads != null) {
                 for (Map<String, Object> a : ads) {
                     if (g.id.equals(str(a.get("adSetId")))) {
-                        sb.append("    · QC \"").append(a.get("adName")).append("\": chi ").append(money(num(a.get("spend")))).append(", ")
+                        sb.append("    · QC \"").append(a.get("adName")).append("\" (ID ").append(a.get("adId")).append("): chi ").append(money(num(a.get("spend")))).append(", ")
                                 .append((long) num(a.get("messageContacts"))).append(" tin nhắn, ").append((long) num(a.get("phoneCount"))).append(" SĐT, ")
                                 .append((long) num(a.get("orderCount"))).append(" đơn\n");
                     }
@@ -641,6 +641,8 @@ public class WorkerAnalysisService {
         long orders;
         long clicks;
         String setName;
+        String setId;
+        String campaignId;
     }
 
     static Map<String, Agg> aggregate(List<Map<String, Object>> ads, Function<Map<String, Object>, String> key) {
@@ -672,6 +674,8 @@ public class WorkerAnalysisService {
             g.impressions += (long) num(a.get("impressions"));
             g.clicks += (long) num(a.get("clicks"));
             g.setName = str(a.get("adSetName"));
+            g.setId = str(a.get("adSetId"));
+            g.campaignId = str(a.get("campaignId"));
             g.messages += (long) num(a.get("messageContacts"));
             g.phones += (long) num(a.get("phoneCount"));
             g.orders += (long) num(a.get("orderCount"));

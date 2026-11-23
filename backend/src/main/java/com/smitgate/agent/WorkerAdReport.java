@@ -51,9 +51,10 @@ final class WorkerAdReport {
             WorkerAnalysisService.Agg t = byPeriod.get("today").get(id);
             WorkerAnalysisService.Agg y = byPeriod.get("yesterday").get(id);
             WorkerAnalysisService.Agg total = byPeriod.get("total").get(id);
-            sb.append("\n**").append(t.name).append("** — ").append(t.active ? "🟢 ĐANG CHẠY" : "⚪ ĐÃ DỪNG")
+            sb.append("\n**").append(t.name).append("** (ID ").append(id).append(") — ").append(t.active ? "🟢 ĐANG CHẠY" : "⚪ ĐÃ DỪNG")
                     .append(t.budget > 0 ? ", ngân sách " + money(t.budget) : "")
-                    .append("\n  Nhóm: ").append(t.setName).append(" · ").append(t.campaignName).append('\n');
+                    .append("\n  Nhóm: ").append(t.setName).append(" (ID ").append(t.setId).append(") · Chiến dịch: ")
+                    .append(t.campaignName).append(" (ID ").append(t.campaignId).append(")\n");
             for (int i = 0; i < PERIODS.length; i++) {
                 WorkerAnalysisService.Agg a = byPeriod.get(PERIODS[i]).get(id);
                 sb.append("  ").append(LABELS[i]).append(": ").append(metrics(a));
@@ -183,7 +184,7 @@ final class WorkerAdReport {
         for (int i = 0; i < sorted.size(); i++) {
             WorkerAnalysisService.Agg a = sorted.get(i);
             double v = value.applyAsDouble(a);
-            parts.add((i + 1) + ". " + a.name + " " + (isMoney ? money(v) : String.format(java.util.Locale.ROOT, "%.2f%%", v)));
+            parts.add((i + 1) + ". " + a.name + " (ID " + a.id + ") " + (isMoney ? money(v) : String.format(java.util.Locale.ROOT, "%.2f%%", v)));
         }
         sb.append("- ").append(title).append(": ").append(String.join(" · ", parts)).append('\n');
     }
@@ -199,6 +200,8 @@ final class WorkerAdReport {
             row.put("id", id);
             row.put("name", t.name);
             row.put("setName", t.setName);
+            row.put("setId", t.setId);
+            row.put("campaignId", t.campaignId);
             row.put("campaignName", t.campaignName);
             row.put("active", t.active);
             row.put("budget", Math.round(t.budget));

@@ -68,7 +68,9 @@ final class WorkerPrompts {
             KHÔNG liệt kê lại số của từng quảng cáo; hãy dùng bảng để SO SÁNH, NHẬN XÉT và KẾT LUẬN. Viết ngắn, dễ đọc.
 
             Cách viết (tiếng Việt, dưới 3500 ký tự). Dùng bảng Markdown (| cột | cột |) ở các mục có ghi "bảng"; mỗi ô ngắn
-            gọn (dưới ~15 từ). Không dùng tiêu đề #, dùng **chữ đậm** cho tên mục:
+            gọn (dưới ~15 từ). Không dùng tiêu đề #, dùng **chữ đậm** cho tên mục.
+            BẮT BUỘC: mỗi lần nhắc tên quảng cáo, nhóm quảng cáo hay chiến dịch phải ghi kèm ID đúng như trong dữ liệu,
+            dạng: Tên (ID <đủ các chữ số, không rút gọn>) — để chủ tra cứu trên Trình quản lý quảng cáo cho khớp:
             1. **Tóm tắt**: 2–3 câu — hôm nay tốt/xấu so với mục tiêu và hôm qua (chi, SĐT, chi phí/SĐT, đơn); điều quan trọng nhất.
             2. **Vượt ngưỡng — cần xử lý ngay** (bảng: Quảng cáo/nhóm | Đã chi | Kết quả | Luật vượt). Chỉ cái đang chạy.
                Không có thì ghi một dòng "Không có quảng cáo nào vượt ngưỡng".
