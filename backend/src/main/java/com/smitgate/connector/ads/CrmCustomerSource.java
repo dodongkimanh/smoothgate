@@ -139,6 +139,33 @@ public class CrmCustomerSource {
                 days);
     }
 
+    /** A Messenger lead with the tags the sales team put on it ("Khách im Lặng, Bình", "Tiềm Năng, Yến"...). */
+    public record TaggedLead(String adId, String pageId, String tags, boolean hasPhone, Instant createdAt) {
+    }
+
+    /**
+     * Leads of the last {@code days} days that came from one of {@code adIds}, plus leads on the same Pages whose
+     * ad is unknown (ad_id empty or "EMPTY"), so the caller can report those separately.
+     */
+    public List<TaggedLead> taggedLeads(java.util.Collection<String> adIds, int days) {
+        if (jdbc == null || adIds.isEmpty()) return List.of();
+        String[] ids = adIds.toArray(new String[0]);
+        return jdbc.query(con -> {
+            var ps = con.prepareStatement("SELECT ad_id, \"ID Trang\", \"Tag_khach_tiem_nang\", COALESCE(\"Sdt\", '') <> '', created_at "
+                    + "FROM public.data_dulieukhach WHERE created_at >= now() - make_interval(days => ?) "
+                    + "AND (ad_id = ANY(?) OR (COALESCE(ad_id, '') IN ('', 'EMPTY') AND \"ID Trang\" IN "
+                    + "(SELECT DISTINCT \"ID Trang\" FROM public.data_dulieukhach WHERE ad_id = ANY(?) "
+                    + "AND created_at >= now() - make_interval(days => ?))))");
+            var arr = con.createArrayOf("text", ids);
+            ps.setInt(1, days);
+            ps.setArray(2, arr);
+            ps.setArray(3, arr);
+            ps.setInt(4, days);
+            return ps;
+        }, (rs, i) -> new TaggedLead(rs.getString(1), rs.getString(2), rs.getString(3), rs.getBoolean(4),
+                rs.getTimestamp(5) == null ? null : rs.getTimestamp(5).toInstant()));
+    }
+
     /** Page id → Page name as the CRM shows it ("Kim Ánh Đỉnh Đồng Nam Định"), from recent leads. */
     public Map<String, String> pageNames() {
         Map<String, String> out = new HashMap<>();

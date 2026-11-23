@@ -46,6 +46,7 @@ public class WorkerAnalysisService {
     private final ClaudeAnalysisService claude;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
+    private final com.smitgate.connector.ads.CrmCustomerSource crm;
 
     // ---------------------------------------------------------------- analysis
 
@@ -172,7 +173,7 @@ public class WorkerAnalysisService {
                                 Map<String, Agg> totalCamps, Map<String, List<Map<String, Object>>> live,
                                 List<Map<String, Object>> history, List<String> dueLines) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Tài khoản: ").append(w.accountName()).append(" (").append(w.externalAccountId()).append("). Thời điểm: ")
+        sb.append("Bạn là ").append(w.name()).append(", được giao tài khoản này. Tài khoản: ").append(w.accountName()).append(" (").append(w.externalAccountId()).append("). Thời điểm: ")
                 .append(now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))).append(" giờ Việt Nam, ")
                 .append(now.getDayOfWeek()).append(". Lần phân tích: ").append(slot).append(".\n");
         if (weekly) {
@@ -183,6 +184,8 @@ public class WorkerAnalysisService {
         sb.append("\n## 7 ngày gần nhất theo nhóm\n").append(lines(weekSets.values(), null));
         sb.append("\n## Cộng dồn từ khi chạy (90 ngày) theo chiến dịch\n").append(lines(totalCamps.values(), null));
         sb.append("\n## Cộng dồn từ khi chạy (90 ngày) theo nhóm\n").append(lines(totalSets.values(), null));
+
+        sb.append("\n## Chất lượng tin nhắn theo thẻ sale gắn trong CRM\n").append(leadQualityContext(live, weekSets, now.toLocalDate()));
 
         sb.append("\n## Lịch sử 30 ngày theo ngày và nhóm (chi từ Meta; SĐT/đơn/doanh số theo mã quảng cáo)\n");
         if (history.isEmpty()) {
@@ -371,7 +374,16 @@ public class WorkerAnalysisService {
                 : "Tổng hôm nay: chi " + money(spend) + ", " + messages + " tin nhắn, " + phones + " SĐT ("
                 + (phones > 0 ? money(spend / phones) : "—") + "/SĐT), " + orders + " đơn"
                 + (orders > 0 ? " (" + money(spend / orders) + "/đơn)" : "") + ", doanh số " + money(sales) + ".";
-        String text = head + "\n" + body + "\nCảnh báo trong ngày: " + alerts + " · Đề xuất mới trong ngày: " + recs
+        String quality = "";
+        LeadStats ls = leadStats(live, today);
+        if (ls != null && ls.allToday.total > 0) {
+            StringBuilder q = new StringBuilder("\nChất lượng tin nhắn hôm nay (thẻ CRM, sale có thể gắn muộn): ").append(ls.allToday.describe()).append('\n');
+            for (Map.Entry<String, LeadQuality.Count> e : ls.setToday.entrySet()) {
+                q.append("· ").append(ls.setNames.get(e.getKey())).append(": ").append(e.getValue().describe()).append('\n');
+            }
+            quality = q.toString();
+        }
+        String text = head + "\n" + body + quality + "\nCảnh báo trong ngày: " + alerts + " · Đề xuất mới trong ngày: " + recs
                 + "\nMục tiêu: dưới 350k/SĐT, dưới 2tr/đơn. (Đơn có thể về muộn 3–6 ngày.)";
         int added = jdbc.update("""
                 insert into ad_worker_reports (worker_id, kind, severity, ref_key, title, body)
@@ -379,6 +391,136 @@ public class WorkerAnalysisService {
                 on conflict (worker_id, ref_key) where ref_key is not null do nothing
                 """, w.id(), "daily:" + today, "Chốt ngày " + today.format(DateTimeFormatter.ofPattern("dd/MM")) + " · " + w.accountName(), text);
         return Map.of("ok", true, "added", added > 0);
+    }
+
+    // ---------------------------------------------------------------- lead quality (CRM tags)
+
+    /** CRM leads of this account's ads, counted by tag, per ad set / ad / sale. */
+    static final class LeadStats {
+        final Map<String, String> setNames = new LinkedHashMap<>();
+        final Map<String, String> adNames = new LinkedHashMap<>();
+        final Map<String, LeadQuality.Count> setToday = new LinkedHashMap<>();
+        final Map<String, LeadQuality.Count> set7 = new LinkedHashMap<>();
+        final Map<String, LeadQuality.Count> set30 = new LinkedHashMap<>();
+        final Map<String, LeadQuality.Count> ad7 = new LinkedHashMap<>();
+        final Map<String, LeadQuality.Count> sale7 = new LinkedHashMap<>();
+        final LeadQuality.Count allToday = new LeadQuality.Count();
+        final LeadQuality.Count all7 = new LeadQuality.Count();
+        final LeadQuality.Count unknown7 = new LeadQuality.Count();
+    }
+
+    private LeadStats leadStats(Map<String, List<Map<String, Object>>> live, LocalDate today) {
+        if (!crm.isConfigured()) {
+            return null;
+        }
+        LeadStats st = new LeadStats();
+        Map<String, String> adToSet = new LinkedHashMap<>();
+        for (String period : List.of("total", "last7", "today")) {
+            for (Map<String, Object> a : live.getOrDefault(period, List.of())) {
+                String ad = str(a.get("adId"));
+                if (ad == null || ad.isBlank()) continue;
+                adToSet.put(ad, str(a.get("adSetId")));
+                st.adNames.put(ad, str(a.get("adName")) + " [" + str(a.get("adSetName")) + "]");
+                st.setNames.put(str(a.get("adSetId")), str(a.get("adSetName")) + " [" + str(a.get("campaignName")) + "]");
+            }
+        }
+        List<com.smitgate.connector.ads.CrmCustomerSource.TaggedLead> leads;
+        try {
+            leads = crm.taggedLeads(adToSet.keySet(), 30);
+        } catch (Exception e) {
+            log.warn("CRM lead tags could not be read: {}", e.getMessage());
+            return null;
+        }
+        LocalDate weekStart = today.minusDays(6);
+        for (var l : leads) {
+            if (l.createdAt() == null) continue;
+            LocalDate day = l.createdAt().atZone(AdWorkerService.VIETNAM_ZONE).toLocalDate();
+            LeadQuality.Kind kind = LeadQuality.classify(l.tags());
+            String adId = l.adId() == null ? null : l.adId().trim();
+            String set = adId == null ? null : adToSet.get(adId);
+            if (set == null) {
+                if (!day.isBefore(weekStart)) st.unknown7.add(kind, l.hasPhone());
+                continue;
+            }
+            st.set30.computeIfAbsent(set, k -> new LeadQuality.Count()).add(kind, l.hasPhone());
+            if (!day.isBefore(weekStart)) {
+                st.set7.computeIfAbsent(set, k -> new LeadQuality.Count()).add(kind, l.hasPhone());
+                st.ad7.computeIfAbsent(adId, k -> new LeadQuality.Count()).add(kind, l.hasPhone());
+                st.all7.add(kind, l.hasPhone());
+                for (String sale : LeadQuality.sales(l.tags())) {
+                    st.sale7.computeIfAbsent(sale, k -> new LeadQuality.Count()).add(kind, l.hasPhone());
+                }
+            }
+            if (day.equals(today)) {
+                st.setToday.computeIfAbsent(set, k -> new LeadQuality.Count()).add(kind, l.hasPhone());
+                st.allToday.add(kind, l.hasPhone());
+            }
+        }
+        return st;
+    }
+
+    String leadQualityContext(Map<String, List<Map<String, Object>>> live, Map<String, Agg> weekSets, LocalDate today) {
+        LeadStats st = leadStats(live, today);
+        if (st == null) {
+            return "(chưa đọc được CRM)\n";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("Khách chất lượng = có SĐT, hoặc thẻ Tiềm Năng / Có Tương Tác / Hỏi Giá Xong Im / Chốt Đơn. ")
+                .append("Số tin nhắn CRM không bằng số tin nhắn của Meta (Meta đếm khác). Tin nhắn mới có thể chưa được gắn thẻ.\n");
+        double spend7 = weekSets.values().stream().mapToDouble(a -> a.spend).sum();
+        sb.append("Tổng 7 ngày: ").append(st.all7.describe())
+                .append(st.all7.qualityCount > 0 ? " · chi phí/khách chất lượng " + money(spend7 / st.all7.qualityCount) : "").append('\n');
+        sb.append("Hôm nay: ").append(st.allToday.describe()).append('\n');
+
+        sb.append("### Hôm nay theo nhóm\n").append(countLines(st.setToday, st.setNames, null));
+        sb.append("### 7 ngày theo nhóm\n").append(countLines(st.set7, st.setNames, id -> {
+            Agg a = weekSets.get(id);
+            return a == null ? 0.0 : a.spend;
+        }));
+        sb.append("### 30 ngày theo nhóm\n").append(countLines(st.set30, st.setNames, null));
+
+        Map<String, Agg> weekAds = aggregate(live.get("last7"), a -> str(a.get("adId")));
+        Map<String, LeadQuality.Count> busyAds = new LinkedHashMap<>();
+        st.ad7.entrySet().stream().filter(e -> e.getValue().total >= 3)
+                .sorted((x, y) -> y.getValue().total - x.getValue().total).forEach(e -> busyAds.put(e.getKey(), e.getValue()));
+        sb.append("### 7 ngày theo quảng cáo (từ 3 tin nhắn)\n").append(countLines(busyAds, st.adNames, id -> {
+            Agg a = weekAds.get(id);
+            return a == null ? 0.0 : a.spend;
+        }));
+        if (st.unknown7.total > 0) {
+            sb.append("### Tin nhắn 7 ngày trên cùng page nhưng không rõ quảng cáo (không tính vào nhóm nào)\n- ")
+                    .append(st.unknown7.describe()).append('\n');
+        }
+        sb.append("### Theo sale 7 ngày (tin nhắn của tài khoản này)\n");
+        if (st.sale7.isEmpty()) {
+            sb.append("(không có)\n");
+        }
+        st.sale7.entrySet().stream().sorted((x, y) -> y.getValue().total - x.getValue().total).forEach(e -> {
+            LeadQuality.Count c = e.getValue();
+            sb.append("- ").append(e.getKey()).append(": ").append(c.total).append(" tin nhắn, có SĐT ").append(c.phones)
+                    .append(", tiềm năng ").append(c.of(LeadQuality.Kind.TIEM_NANG)).append(", có tương tác ").append(c.of(LeadQuality.Kind.CO_TUONG_TAC))
+                    .append(", hỏi giá xong im ").append(c.of(LeadQuality.Kind.HOI_GIA)).append(", im lặng ").append(c.of(LeadQuality.Kind.IM_LANG)).append('\n');
+        });
+        return sb.toString();
+    }
+
+    private static String countLines(Map<String, LeadQuality.Count> counts, Map<String, String> names, Function<String, Double> spendOf) {
+        if (counts.isEmpty()) {
+            return "(không có)\n";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, LeadQuality.Count> e : counts.entrySet()) {
+            LeadQuality.Count c = e.getValue();
+            sb.append("- ").append(names.getOrDefault(e.getKey(), e.getKey())).append(" (id ").append(e.getKey()).append("): ").append(c.describe());
+            if (spendOf != null) {
+                double spend = spendOf.apply(e.getKey());
+                if (spend > 0) {
+                    sb.append(" · chi ").append(money(spend)).append(c.qualityCount > 0 ? ", " + money(spend / c.qualityCount) + "/khách chất lượng" : ", chưa có khách chất lượng");
+                }
+            }
+            sb.append('\n');
+        }
+        return sb.toString();
     }
 
     // ---------------------------------------------------------------- helpers
