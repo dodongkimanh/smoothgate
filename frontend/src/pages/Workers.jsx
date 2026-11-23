@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Smartphone, AlertTriangle, Sparkles, Info, RefreshCw } from 'lucide-react'
-import { getWorkers, getWorkerReports } from '../services/api'
+import { Smartphone, AlertTriangle, Sparkles, Info, RefreshCw, CalendarCheck, ClipboardCheck } from 'lucide-react'
+import { getWorkers, getWorkerReports, getWorkerRecommendations } from '../services/api'
 
 const ONLINE_MINUTES = 45
 
@@ -47,19 +47,20 @@ const SEVERITY = {
 function ReportItem({ r }) {
   const [open, setOpen] = useState(r.kind === 'ANALYSIS')
   const isAnalysis = r.kind === 'ANALYSIS'
+  const isDaily = r.kind === 'DAILY'
   const sev = SEVERITY[r.severity] || SEVERITY.info
-  const Icon = isAnalysis ? Sparkles : sev.Icon
+  const Icon = isAnalysis ? Sparkles : isDaily ? CalendarCheck : sev.Icon
   return (
     <li className="px-4 py-3">
       <button onClick={() => setOpen(!open)} className="w-full text-left flex items-start gap-3">
-        <span className={`mt-0.5 inline-flex items-center justify-center w-7 h-7 rounded-lg border ${isAnalysis ? 'bg-violet-50 text-violet-700 border-violet-200' : sev.cls}`}>
+        <span className={`mt-0.5 inline-flex items-center justify-center w-7 h-7 rounded-lg border ${isAnalysis ? 'bg-violet-50 text-violet-700 border-violet-200' : isDaily ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : sev.cls}`}>
           <Icon className="w-4 h-4" />
         </span>
         <span className="flex-1 min-w-0">
           <span className="block font-medium text-slate-800">{r.title}</span>
           <span className="block text-sm text-slate-500">
             {r.workerName} · {r.accountName} · {fmtTime(r.createdAt)}
-            {!isAnalysis && <> · {sev.label}</>}
+            {!isAnalysis && !isDaily && <> · {sev.label}</>}
           </span>
         </span>
       </button>
@@ -69,6 +70,63 @@ function ReportItem({ r }) {
         </div>
       )}
     </li>
+  )
+}
+
+
+const ACTION_LABEL = {
+  TAT: 'Tắt', TANG_NGAN_SACH: 'Tăng ngân sách', GIAM_NGAN_SACH: 'Giảm ngân sách', GIU: 'Giữ nguyên', THEO_DOI: 'Theo dõi', KHAC: 'Khác',
+}
+const VERDICT = {
+  DUNG: { label: 'Đúng', cls: 'bg-emerald-50 text-emerald-700' },
+  SAI: { label: 'Sai', cls: 'bg-red-50 text-red-700' },
+  CHUA_RO: { label: 'Chưa rõ', cls: 'bg-slate-100 text-slate-600' },
+}
+const FOLLOWED = { CO: 'Đã làm theo', KHONG: 'Không làm theo', KHONG_RO: 'Không xác định' }
+
+function Recommendations({ rows }) {
+  const done = rows.filter((r) => r.verdict === 'DUNG' || r.verdict === 'SAI')
+  const right = done.filter((r) => r.verdict === 'DUNG').length
+  return (
+    <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 border-b border-gray-100">
+        <div>
+          <h2 className="font-semibold text-slate-800 text-base flex items-center gap-2"><ClipboardCheck className="w-5 h-5 text-slate-500" />Sổ đề xuất</h2>
+          <p className="text-sm text-slate-500 mt-0.5">Mỗi đề xuất của AI được kiểm tra lại sau 3 ngày: có làm theo không, kết quả ra sao, đúng hay sai. Đề xuất sai trở thành bài học cho lần phân tích sau.</p>
+        </div>
+        {done.length > 0 && <span className="text-sm text-slate-600">Đã chấm {done.length}: <b className="text-emerald-700">{right} đúng</b> · <b className="text-red-700">{done.length - right} sai</b></span>}
+      </div>
+      {rows.length === 0 ? (
+        <p className="px-4 py-6 text-slate-500">Chưa có đề xuất nào.</p>
+      ) : (
+        <ul className="divide-y divide-gray-100">
+          {rows.map((r) => {
+            const v = VERDICT[r.verdict]
+            return (
+              <li key={r.id} className="px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-sky-50 text-sky-700">{ACTION_LABEL[r.action] || r.action}</span>
+                  <span className="font-medium text-slate-800">{r.entityName}</span>
+                  <span className="ml-auto text-sm text-slate-500">{r.workerName} · {fmtTime(r.createdAt)}</span>
+                </div>
+                {r.detail && <p className="mt-1 text-[15px] text-slate-700">{r.detail}</p>}
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                  {r.status === 'PENDING' ? (
+                    <span className="text-slate-500">Chờ chấm vào {r.dueDate?.split('-').reverse().slice(0, 2).join('/')}</span>
+                  ) : (
+                    <>
+                      {v && <span className={`px-2 py-0.5 rounded font-medium ${v.cls}`}>{v.label}</span>}
+                      {r.followed && <span className="text-slate-500">{FOLLOWED[r.followed] || r.followed}</span>}
+                    </>
+                  )}
+                </div>
+                {r.lesson && <p className="mt-1 text-sm text-slate-600">Bài học: {r.lesson}</p>}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
   )
 }
 
@@ -87,6 +145,12 @@ export default function Workers() {
     refetchInterval: 60000,
   })
 
+  const recsQ = useQuery({
+    queryKey: ['worker-recs', workerId],
+    queryFn: () => getWorkerRecommendations({ workerId: workerId || undefined, limit: 100 }).then((r) => r.data?.data || []),
+    refetchInterval: 120000,
+  })
+
   const workers = workersQ.data || []
   const reports = reportsQ.data || []
 
@@ -97,7 +161,7 @@ export default function Workers() {
           <div>
             <h2 className="font-semibold text-slate-800 text-base">Máy theo dõi tài khoản</h2>
             <p className="text-sm text-slate-500 mt-0.5">
-              Mỗi máy theo dõi một tài khoản quảng cáo: 30 phút kiểm tra một lần theo luật, 12h và 21h viết bản phân tích. Máy chỉ cảnh báo và đề xuất, không tự bật/tắt quảng cáo.
+              Mỗi máy theo dõi một tài khoản quảng cáo: 15 phút kiểm tra theo luật, 12h và 21h AI phân tích (Chủ nhật 21h là tổng kết tuần), 23h30 chốt ngày. Bộ nhớ lưu trên server nên thay máy không mất. Máy chỉ cảnh báo và đề xuất, không tự bật/tắt quảng cáo.
             </p>
           </div>
           <button onClick={() => { workersQ.refetch(); reportsQ.refetch() }} className="p-2 rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50" title="Tải lại">
@@ -140,7 +204,7 @@ export default function Workers() {
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
           <h2 className="font-semibold text-slate-800 text-base">Cảnh báo và phân tích</h2>
           <div className="flex gap-1">
-            {[['', 'Tất cả'], ['ALERT', 'Cảnh báo'], ['ANALYSIS', 'Phân tích']].map(([k, label]) => (
+            {[['', 'Tất cả'], ['ALERT', 'Cảnh báo'], ['ANALYSIS', 'Phân tích'], ['DAILY', 'Chốt ngày']].map(([k, label]) => (
               <button key={k} onClick={() => setKind(k)} className={`px-3 py-1 rounded-lg text-sm border ${kind === k ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-gray-200 text-slate-600 hover:bg-slate-50'}`}>
                 {label}
               </button>
@@ -155,6 +219,7 @@ export default function Workers() {
           </ul>
         )}
       </section>
+      <Recommendations rows={recsQ.data || []} />
     </div>
   )
 }

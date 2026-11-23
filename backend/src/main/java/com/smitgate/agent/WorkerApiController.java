@@ -27,6 +27,7 @@ import java.util.function.Function;
 public class WorkerApiController {
 
     private final AdWorkerService workers;
+    private final WorkerAnalysisService analysis;
 
     @GetMapping("/snapshot")
     public ResponseEntity<?> snapshot(@RequestHeader(value = "X-Worker-Key", required = false) String key) {
@@ -64,11 +65,31 @@ public class WorkerApiController {
         });
     }
 
+    /** 12h / 21h: the server builds the context from the worker's memory, asks Claude, and files the result. */
     @PostMapping("/analyze")
     public ResponseEntity<?> analyze(@RequestHeader(value = "X-Worker-Key", required = false) String key,
-                                     @RequestBody Map<String, Object> body) {
-        return withWorker(key, w -> ResponseEntity.ok(
-                workers.analyze(w, str(body.get("context")), str(body.get("slot")))));
+                                     @RequestBody(required = false) Map<String, Object> body) {
+        return withWorker(key, w -> {
+            try {
+                return ResponseEntity.ok(analysis.analyze(w, str(body == null ? null : body.get("slot"))));
+            } catch (Exception e) {
+                log.warn("Worker {} analysis failed: {}", w.name(), e.getMessage());
+                return ResponseEntity.ok(Map.of("ok", false, "error", "Lỗi khi phân tích: " + e.getMessage()));
+            }
+        });
+    }
+
+    /** 23:30: end-of-day summary against the targets, no AI. */
+    @PostMapping("/daily-close")
+    public ResponseEntity<?> dailyClose(@RequestHeader(value = "X-Worker-Key", required = false) String key) {
+        return withWorker(key, w -> {
+            try {
+                return ResponseEntity.ok(analysis.dailyClose(w));
+            } catch (Exception e) {
+                log.warn("Worker {} daily close failed: {}", w.name(), e.getMessage());
+                return ResponseEntity.ok(Map.of("ok", false, "error", "Lỗi khi chốt ngày: " + e.getMessage()));
+            }
+        });
     }
 
     private ResponseEntity<?> withWorker(String key, Function<AdWorkerService.Worker, ResponseEntity<?>> action) {

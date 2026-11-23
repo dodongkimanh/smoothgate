@@ -31,8 +31,6 @@ import java.util.Optional;
 public class AdWorkerService {
 
     static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-    static final int MAX_ANALYSES_PER_DAY = 6;
-    static final int MAX_CONTEXT_CHARS = 120_000;
     private static final List<String> AD_FIELDS = List.of(
             "adId", "adName", "adSetId", "adSetName", "adSetStatus", "campaignId", "campaignName",
             "delivery", "status", "budget", "budgetSource", "spend", "impressions", "reach", "clicks",
@@ -40,7 +38,6 @@ public class AdWorkerService {
 
     private final JdbcTemplate jdbc;
     private final MetaAdsConnector metaAdsConnector;
-    private final ClaudeAnalysisService claude;
 
     public record Worker(long id, long tenantId, String name, long adAccountId, String accountName,
                          String externalAccountId, long dataSourceId) {
@@ -71,24 +68,25 @@ public class AdWorkerService {
      * of per-ad-set daily history.
      */
     public Map<String, Object> snapshot(Worker w) {
-        LocalDate today = LocalDate.now(VIETNAM_ZONE);
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("worker", Map.of("id", w.id(), "name", w.name()));
         out.put("account", Map.of("id", w.adAccountId(), "name", w.accountName(), "externalId", w.externalAccountId()));
         out.put("now", LocalDateTime.now(VIETNAM_ZONE).withNano(0).toString());
+        out.putAll(liveNumbers(w));
+        touch(w, null, null);
+        return out;
+    }
+
+    /**
+     * Per-ad numbers straight from Meta + orders, as on the ads screen: today, the last 7 days, and "total" — the
+     * last 90 days, which stands in for "since it started" in the kill rules (no live campaign is older).
+     */
+    public Map<String, List<Map<String, Object>>> liveNumbers(Worker w) {
+        LocalDate today = LocalDate.now(VIETNAM_ZONE);
+        Map<String, List<Map<String, Object>>> out = new LinkedHashMap<>();
         out.put("today", ads(w, today, today));
         out.put("last7", ads(w, today.minusDays(6), today));
-        // "Since it started" for the kill rules (spend with no phone / no order); 90 days covers any live campaign.
         out.put("total", ads(w, today.minusDays(89), today));
-        out.put("daily", jdbc.queryForList("""
-                select date::text as date, adset_id as "adSetId", max(adset_name) as "adSetName",
-                       max(campaign_name) as "campaignName", round(sum(spend)) as spend,
-                       sum(impressions) as impressions, sum(message_contacts) as messages
-                from ads_ad_metrics_daily
-                where ad_account_id = ? and date >= ? and spend > 0
-                group by date, adset_id order by date, adset_id
-                """, w.adAccountId(), today.minusDays(13)));
-        touch(w, null, null);
         return out;
     }
 
@@ -118,7 +116,7 @@ public class AdWorkerService {
         int added = 0;
         for (Map<String, Object> r : reports) {
             String kind = String.valueOf(r.getOrDefault("kind", "ALERT")).toUpperCase();
-            if (!kind.equals("ALERT") && !kind.equals("INFO")) {
+            if (!kind.equals("ALERT") && !kind.equals("INFO")) { // ANALYSIS and DAILY are written by the server
                 continue;
             }
             String title = truncate(str(r.get("title")), 300);
@@ -133,33 +131,6 @@ public class AdWorkerService {
                     title, str(r.get("body")));
         }
         return added;
-    }
-
-    /** Asks Claude for the account write-up the worker prepared the context for, and stores it as an ANALYSIS. */
-    public Map<String, Object> analyze(Worker w, String context, String slot) {
-        if (!claude.isConfigured()) {
-            return Map.of("ok", false, "error", "Claude chưa được cấu hình trên server");
-        }
-        Integer today = jdbc.queryForObject(
-                "select count(*) from ad_worker_reports where worker_id = ? and kind = 'ANALYSIS' and created_at >= ?",
-                Integer.class, w.id(), LocalDate.now(VIETNAM_ZONE).atStartOfDay());
-        if (today != null && today >= MAX_ANALYSES_PER_DAY) {
-            return Map.of("ok", false, "error", "Đã đủ " + MAX_ANALYSES_PER_DAY + " lần phân tích hôm nay");
-        }
-        String text = context == null ? "" : context;
-        if (text.length() > MAX_CONTEXT_CHARS) {
-            text = text.substring(text.length() - MAX_CONTEXT_CHARS);
-        }
-        String reply = claude.complete(WorkerPrompts.ANALYSIS_SYSTEM, text);
-        if (reply == null || reply.isBlank()) {
-            String why = claude.getLastError();
-            return Map.of("ok", false, "error", why != null ? why : "Không nhận được phân tích từ Claude");
-        }
-        String title = "Phân tích " + w.accountName() + (slot == null || slot.isBlank() ? "" : " lúc " + slot);
-        jdbc.update("insert into ad_worker_reports (worker_id, kind, severity, ref_key, title, body) values (?, 'ANALYSIS', 'info', ?, ?, ?)",
-                w.id(), "analysis:" + LocalDate.now(VIETNAM_ZONE) + ":" + (slot == null ? LocalDateTime.now().toString() : slot),
-                truncate(title, 300), reply);
-        return Map.of("ok", true, "text", reply);
     }
 
     // ---- admin side ----

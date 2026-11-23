@@ -21,6 +21,7 @@ import java.util.Map;
 public class WorkerAdminController {
 
     private final AdWorkerService workers;
+    private final WorkerMemoryService memory;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> list(HttpServletRequest request) {
@@ -34,6 +35,14 @@ public class WorkerAdminController {
             @RequestParam(required = false) String kind,
             @RequestParam(defaultValue = "100") int limit) {
         return ResponseEntity.ok(ApiResponse.ok(workers.listReports(tenant(request), workerId, kind, limit)));
+    }
+
+    @GetMapping("/recommendations")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> recommendations(
+            HttpServletRequest request,
+            @RequestParam(required = false) Long workerId,
+            @RequestParam(defaultValue = "100") int limit) {
+        return ResponseEntity.ok(ApiResponse.ok(memory.listRecommendations(tenant(request), workerId, limit)));
     }
 
     @PostMapping

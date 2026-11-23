@@ -1,9 +1,11 @@
 // Smoothgate account worker: watches ONE Meta ad account from a phone (Termux + Node 22+).
-//  - every `checkMinutes`: pull a snapshot from Smoothgate, store it in local memory (SQLite), check the
-//    owner's rules and post new alerts back to Smoothgate;
-//  - at each `analysisSlots` time: send today's numbers + its own memory (history, past alerts, past analyses)
-//    to Smoothgate, which asks Claude for a write-up and shows it on the "Máy theo dõi" page.
-// It never turns ads on or off. Config: config.json next to this file ({ backend, key, ... }).
+//  - every `checkMinutes` (15): pull live numbers from Smoothgate, check the owner's rules, post new alerts;
+//  - at each `analysisSlots` time (12:00, 21:00): ask Smoothgate for the AI analysis. The server builds it from
+//    the worker's memory, which lives on the server (30-day history, alerts, suggestion ledger, lessons), so a
+//    replaced phone carries on where the old one stopped. Sunday 21:00 is the weekly review;
+//  - at `dailyCloseAt` (23:30): ask Smoothgate for the end-of-day summary (no AI).
+// The local SQLite file is only a cache (last checks, alerts already sent). It never turns ads on or off.
+// Config: config.json next to this file ({ backend, key, device, ... }).
 import { DatabaseSync } from 'node:sqlite'
 import { readFileSync } from 'node:fs'
 import { hostname } from 'node:os'
@@ -12,8 +14,9 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const cfg = {
-  checkMinutes: 30,
+  checkMinutes: 15,
   analysisSlots: ['12:00', '21:00'],
+  dailyCloseAt: '23:30',
   device: hostname(),
   ...JSON.parse(readFileSync(join(HERE, 'config.json'), 'utf8')),
 }
@@ -58,7 +61,10 @@ function vnNow() {
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? 0 : Number(v))
 function money(v) {
   v = num(v)
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 2).replace(/\.?0+$/, '').replace('.', ',')}tr`
+  if (v >= 1_000_000) {
+    const s = (v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 2)
+    return `${s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '').replace('.', ',') : s}tr`
+  }
   if (v >= 1000) return `${Math.round(v / 1000)}k`
   return `${Math.round(v)}đ`
 }
@@ -110,7 +116,7 @@ function storeSnapshot(snap, now) {
           num(a.messageContacts), num(a.phoneCount), num(a.orderCount), num(a.sales))
       }
     }
-    db.prepare(`delete from snapshots where day < date(?, '-60 days')`).run(now.day)
+    db.prepare(`delete from snapshots where day < date(?, '-3 days')`).run(now.day) // cache only; memory is on the server
     db.exec('commit')
   } catch (e) {
     db.exec('rollback')
@@ -194,12 +200,10 @@ function evaluate(snap, now) {
 }
 
 // ---------- the two jobs ----------
-let lastSnap = null
 
 async function check() {
   const now = vnNow()
   const snap = await call('/snapshot')
-  lastSnap = snap
   storeSnapshot(snap, now)
   const found = evaluate(snap, now).filter((a) => !db.prepare('select 1 from alerts where ref_key = ?').get(a.refKey))
   if (found.length) {
@@ -214,58 +218,24 @@ async function check() {
   log(status)
 }
 
-function table(groups, withAds) {
-  const lines = []
-  for (const g of groups) {
-    const cpp = g.phones ? money(g.spend / g.phones) : '—'
-    const cpo = g.orders ? money(g.spend / g.orders) : '—'
-    lines.push(`- Nhóm "${g.adSetName}" [${g.campaignName}] ${g.active ? 'ĐANG BẬT' : 'tắt'}${g.budget ? `, ngân sách ${money(g.budget)}` : ''}: chi ${money(g.spend)}, ${g.impressions} hiển thị, CPM ${money(g.cpm)}, ${g.messages} tin nhắn, ${g.phones} SĐT (${cpp}/SĐT), ${g.orders} đơn (${cpo}/đơn), doanh số ${money(g.sales)}`)
-    if (withAds && g.ads.length > 1) {
-      for (const a of g.ads) lines.push(`    · QC "${a.adName}": chi ${money(a.spend)}, ${num(a.messageContacts)} tin nhắn, ${num(a.phoneCount)} SĐT, ${num(a.orderCount)} đơn`)
-    }
-  }
-  return lines.join('\n') || '(không có)'
-}
-
-function buildContext(snap, now, slot) {
-  const today = byAdSet(snap.today || [])
-  const week = byAdSet(snap.last7 || [])
-  // End-of-day phones/orders per ad set from memory (the last 'today' snapshot of each past day).
-  const days = db.prepare(`
-    select s.day, s.adset_name, sum(s.spend) spend, sum(s.messages) messages, sum(s.phones) phones, sum(s.orders) orders
-    from snapshots s join (select day, max(ts) ts from snapshots where scope = 'today' and day < ? and day >= date(?, '-14 days') group by day) l
-      on l.day = s.day and l.ts = s.ts
-    where s.scope = 'today' group by s.day, s.adset_id order by s.day`).all(now.day, now.day)
-  const serverDaily = (snap.daily || []).map((d) => `- ${d.date} "${d.adSetName}": chi ${money(d.spend)}, ${d.impressions} hiển thị, ${d.messages} tin nhắn`).join('\n')
-  const alerts = db.prepare(`select ts, title from alerts where ts >= datetime(?, '-3 days') order by ts`).all(now.ts)
-  const past = db.prepare(`select ts, slot, text from analyses order by ts desc limit 3`).all().reverse()
-
-  return [
-    `Tài khoản: ${snap.account?.name} (${snap.account?.externalId}). Thời điểm: ${now.ts} (giờ Việt Nam). Lần phân tích: ${slot}.`,
-    `\n## Hôm nay theo nhóm (tính đến ${now.hm})\n${table(today, true)}`,
-    `\n## 7 ngày gần nhất theo nhóm (cộng dồn, gồm hôm nay)\n${table(week, false)}`,
-    `\n## Lịch sử theo ngày từ Meta (14 ngày, theo nhóm)\n${serverDaily || '(không có)'}`,
-    `\n## Bộ nhớ của worker: SĐT/đơn cuối ngày theo nhóm\n${days.map((d) => `- ${d.day} "${d.adset_name}": chi ${money(d.spend)}, ${d.messages} tin nhắn, ${d.phones} SĐT, ${d.orders} đơn`).join('\n') || '(chưa có — worker mới chạy)'}`,
-    `\n## Cảnh báo đã phát 3 ngày qua\n${alerts.map((a) => `- ${a.ts}: ${a.title}`).join('\n') || '(không có)'}`,
-    `\n## Các lần phân tích trước của bạn\n${past.map((p) => `### ${p.ts} (${p.slot})\n${p.text.slice(0, 3000)}`).join('\n\n') || '(chưa có — đây là lần đầu)'}`,
-  ].join('\n')
-}
-
 async function analysis(slot) {
   const now = vnNow()
-  const snap = lastSnap || (await call('/snapshot'))
-  const spend7 = sum(snap.last7 || [], 'spend')
-  if (spend7 <= 0) {
-    setMeta(`analysis:${now.day}:${slot}`, 'skipped')
-    log(`Bỏ qua phân tích ${slot}: tài khoản không chi tiêu trong 7 ngày`)
-    await call('/heartbeat', { method: 'POST', body: { device: cfg.device, status: `Phân tích ${slot}: bỏ qua vì tài khoản không chạy` } })
-    return
-  }
-  const res = await call('/analyze', { method: 'POST', body: { slot, context: buildContext(snap, now, slot) } })
+  const res = await call('/analyze', { method: 'POST', body: { slot } })
   if (!res.ok) throw new Error(res.error || 'phân tích thất bại')
-  db.prepare('insert into analyses values (?,?,?)').run(now.ts, slot, res.text)
-  setMeta(`analysis:${now.day}:${slot}`, 'done')
-  log(`Đã phân tích lúc ${slot}`)
+  setMeta(`analysis:${now.day}:${slot}`, res.skipped ? 'skipped' : 'done')
+  if (res.text) db.prepare('insert into analyses values (?,?,?)').run(now.ts, slot, res.text)
+  db.prepare(`delete from analyses where ts < datetime(?, '-7 days')`).run(now.ts)
+  const what = res.skipped ? 'bỏ qua (tài khoản không chạy)' : `xong, ${res.recommendations ?? 0} đề xuất mới, chấm ${res.evaluated ?? 0} đề xuất cũ`
+  log(`Phân tích ${slot}: ${what}`)
+  await call('/heartbeat', { method: 'POST', body: { device: cfg.device, status: `Phân tích ${slot}: ${what}` } })
+}
+
+async function dailyClose() {
+  const now = vnNow()
+  const res = await call('/daily-close', { method: 'POST', body: {} })
+  if (!res.ok) throw new Error(res.error || 'chốt ngày thất bại')
+  setMeta(`close:${now.day}`, 'done')
+  log('Đã chốt ngày')
 }
 
 // ---------- scheduler ----------
@@ -288,9 +258,17 @@ async function tick() {
           && tries < 3 && Date.now() - lastTry >= 30 * 60_000) {
         setMeta(`tries:${now.day}:${slot}`, tries + 1)
         setMeta(`lastTry:${now.day}:${slot}`, Date.now())
-        if (!due) await check() // analyse fresh numbers
         await analysis(slot)
       }
+    }
+    const [ch, cm] = cfg.dailyCloseAt.split(':').map(Number)
+    const nowMin = now.hour * 60 + Number(now.hm.slice(3))
+    const closeTries = Number(getMeta(`closeTries:${now.day}`) || 0)
+    const closeLast = Number(getMeta(`closeLast:${now.day}`) || 0)
+    if (nowMin >= ch * 60 + cm && !getMeta(`close:${now.day}`) && closeTries < 3 && Date.now() - closeLast >= 5 * 60_000) {
+      setMeta(`closeTries:${now.day}`, closeTries + 1)
+      setMeta(`closeLast:${now.day}`, Date.now())
+      await dailyClose()
     }
   } catch (e) {
     log('Lỗi:', e.message)
@@ -300,10 +278,11 @@ async function tick() {
   }
 }
 
-log(`Worker khởi động: kiểm tra mỗi ${cfg.checkMinutes} phút, phân tích lúc ${cfg.analysisSlots.join(', ')}`)
+log(`Worker khởi động: kiểm tra mỗi ${cfg.checkMinutes} phút, phân tích lúc ${cfg.analysisSlots.join(', ')}, chốt ngày lúc ${cfg.dailyCloseAt}`)
 if (process.argv.includes('--once')) {
   await check()
   if (process.argv.includes('--analyze')) await analysis('thử')
+  if (process.argv.includes('--close')) await dailyClose()
 } else {
   tick()
   setInterval(tick, 60_000)

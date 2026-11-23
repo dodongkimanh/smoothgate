@@ -98,6 +98,7 @@ export const getMetaSyncStatus = (from, to) => api.get('/meta-sync/status', { pa
 export const runMetaAudiencesNow = () => api.post('/meta-sync/audiences/run')
 export const getWorkers = () => api.get('/workers')
 export const getWorkerReports = (params) => api.get('/workers/reports', { params })
+export const getWorkerRecommendations = (params) => api.get('/workers/recommendations', { params })
 export const getDataSources = () => api.get('/datasources')
 export const createDataSource = (data) => api.post('/datasources', data)
 export const activateDataSource = (id) => api.post(`/datasources/${id}/activate`)
