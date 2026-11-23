@@ -459,6 +459,76 @@ public class WorkerAnalysisService {
         return st;
     }
 
+    /**
+     * Lead quality right now, from the tags the sales team keeps updating: today and 7 days per ad set, 7 days per
+     * ad and per sale. Used by every 15-minute check and by the live table on the Workers page.
+     */
+    public Map<String, Object> liveQuality(AdWorkerService.Worker w, Map<String, List<Map<String, Object>>> live) {
+        LocalDate today = LocalDate.now(AdWorkerService.VIETNAM_ZONE);
+        if (live == null) {
+            live = workers.liveNumbers(w);
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("at", LocalDateTime.now(AdWorkerService.VIETNAM_ZONE).withNano(0).toString());
+        LeadStats st = leadStats(live, today);
+        if (st == null) {
+            out.put("error", "Chưa đọc được CRM");
+            return out;
+        }
+        Map<String, Agg> todaySets = aggregate(live.get("today"), a -> str(a.get("adSetId")));
+        Map<String, Agg> weekSets = aggregate(live.get("last7"), a -> str(a.get("adSetId")));
+        Map<String, Agg> todayAds = aggregate(live.get("today"), a -> str(a.get("adId")));
+        Map<String, Agg> weekAds = aggregate(live.get("last7"), a -> str(a.get("adId")));
+        out.put("today", st.allToday.toMap());
+        out.put("week", st.all7.toMap());
+        out.put("weekSpend", Math.round(weekSets.values().stream().mapToDouble(a -> a.spend).sum()));
+        out.put("todaySpend", Math.round(todaySets.values().stream().mapToDouble(a -> a.spend).sum()));
+        out.put("unknownWeek", st.unknown7.toMap());
+
+        Set<String> setIds = new java.util.LinkedHashSet<>(st.set7.keySet());
+        todaySets.values().stream().filter(a -> a.active).forEach(a -> setIds.add(a.id));
+        List<Map<String, Object>> sets = new ArrayList<>();
+        for (String id : setIds) {
+            Agg t = todaySets.get(id);
+            Agg wk = weekSets.get(id);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", id);
+            m.put("name", st.setNames.getOrDefault(id, wk != null ? wk.name : id));
+            m.put("active", t != null && t.active);
+            m.put("spendToday", t == null ? 0 : Math.round(t.spend));
+            m.put("spendWeek", wk == null ? 0 : Math.round(wk.spend));
+            m.put("today", st.setToday.getOrDefault(id, new LeadQuality.Count()).toMap());
+            m.put("week", st.set7.getOrDefault(id, new LeadQuality.Count()).toMap());
+            sets.add(m);
+        }
+        out.put("adSets", sets);
+
+        List<Map<String, Object>> ads = new ArrayList<>();
+        for (Map.Entry<String, LeadQuality.Count> e : st.ad7.entrySet()) {
+            Agg t = todayAds.get(e.getKey());
+            Agg wk = weekAds.get(e.getKey());
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", e.getKey());
+            m.put("name", st.adNames.getOrDefault(e.getKey(), e.getKey()));
+            m.put("active", t != null && t.active);
+            m.put("spendWeek", wk == null ? 0 : Math.round(wk.spend));
+            m.put("week", e.getValue().toMap());
+            m.put("weekTotal", e.getValue().total);
+            ads.add(m);
+        }
+        ads.sort((x, y) -> ((Integer) y.get("weekTotal")) - ((Integer) x.get("weekTotal")));
+        out.put("ads", ads);
+
+        List<Map<String, Object>> sales = new ArrayList<>();
+        st.sale7.entrySet().stream().sorted((x, y) -> y.getValue().total - x.getValue().total).forEach(e -> {
+            Map<String, Object> m = new LinkedHashMap<>(e.getValue().toMap());
+            m.put("name", e.getKey());
+            sales.add(m);
+        });
+        out.put("sales", sales);
+        return out;
+    }
+
     String leadQualityContext(Map<String, List<Map<String, Object>>> live, Map<String, Agg> weekSets, LocalDate today) {
         LeadStats st = leadStats(live, today);
         if (st == null) {

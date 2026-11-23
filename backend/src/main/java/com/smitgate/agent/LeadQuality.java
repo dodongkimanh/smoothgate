@@ -2,7 +2,9 @@ package com.smitgate.agent;
 
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 /**
@@ -78,6 +80,18 @@ final class LeadQuality {
 
         /** Leads worth a sale's time: left a phone, or tagged potential / interacting / typed a price question / bought. */
         int qualityCount;
+
+        Map<String, Object> toMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("total", total);
+            m.put("phones", phones);
+            m.put("quality", qualityCount);
+            m.put("tagged", tagged());
+            for (Kind k : Kind.values()) {
+                m.put(k.name(), of(k));
+            }
+            return m;
+        }
 
         int tagged() {
             return total - of(Kind.CHUA_GAN);

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Smartphone, AlertTriangle, Sparkles, Info, RefreshCw, CalendarCheck, ClipboardCheck } from 'lucide-react'
-import { getWorkers, getWorkerReports, getWorkerRecommendations } from '../services/api'
+import { Smartphone, AlertTriangle, Sparkles, Info, RefreshCw, CalendarCheck, ClipboardCheck, MessageSquare } from 'lucide-react'
+import { getWorkers, getWorkerReports, getWorkerRecommendations, getWorkerLeadQuality } from '../services/api'
 
 const ONLINE_MINUTES = 45
 
@@ -130,6 +130,135 @@ function Recommendations({ rows }) {
   )
 }
 
+function money(v) {
+  if (!v) return '0đ'
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 2).replace(/\.?0+$/, '').replace('.', ',')}tr`
+  if (v >= 1000) return `${Math.round(v / 1000)}k`
+  return `${Math.round(v)}đ`
+}
+
+function pct(n, d) {
+  return d ? `${Math.round((100 * n) / d)}%` : '—'
+}
+
+// Columns of the quality table, best → worst, as the sales team tags them in the CRM.
+const QCOLS = [
+  ['CHOT', 'Chốt đơn', 'text-emerald-700'],
+  ['TIEM_NANG', 'Tiềm năng', 'text-emerald-700'],
+  ['CO_TUONG_TAC', 'Có tương tác', 'text-sky-700'],
+  ['HOI_GIA', 'Hỏi giá xong im', 'text-amber-700'],
+  ['IM_LANG', 'Im lặng', 'text-red-600'],
+  ['KHONG_NHU_CAU', 'Không nhu cầu', 'text-slate-500'],
+  ['CHUA_GAN', 'Chưa gắn thẻ', 'text-slate-400'],
+]
+
+function QualityTable({ rows, period, spendKey }) {
+  if (!rows.length) return <p className="px-4 py-3 text-slate-500">Chưa có tin nhắn.</p>
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-sm">
+        <thead className="bg-slate-50 text-slate-600">
+          <tr>
+            <th className="text-left font-medium px-3 py-2 min-w-[220px]">Tên</th>
+            <th className="text-right font-medium px-2 py-2">Chi</th>
+            <th className="text-right font-medium px-2 py-2">Tin nhắn</th>
+            {QCOLS.map(([k, label]) => <th key={k} className="text-right font-medium px-2 py-2 whitespace-nowrap">{label}</th>)}
+            <th className="text-right font-medium px-2 py-2">SĐT</th>
+            <th className="text-right font-medium px-2 py-2 whitespace-nowrap">Khách chất lượng</th>
+            <th className="text-right font-medium px-3 py-2 whitespace-nowrap">Chi phí/khách CL</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map((r) => {
+            const c = r[period] || {}
+            const spend = r[spendKey] || 0
+            const silent = c.tagged ? c.IM_LANG / c.tagged : 0
+            return (
+              <tr key={r.id} className={r.active ? '' : 'text-slate-400'}>
+                <td className="px-3 py-2">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle ${r.active ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                  {r.name}
+                </td>
+                <td className="text-right px-2 py-2 whitespace-nowrap">{spendKey === 'none' ? '' : money(spend)}</td>
+                <td className="text-right px-2 py-2 font-medium">{c.total || 0}</td>
+                {QCOLS.map(([k, , cls]) => (
+                  <td key={k} className={`text-right px-2 py-2 ${c[k] ? cls : 'text-slate-300'}`}>
+                    {c[k] || 0}
+                    {k === 'IM_LANG' && c.tagged > 0 && <span className={`ml-1 text-xs ${silent >= 0.7 ? 'font-semibold' : ''}`}>({pct(c.IM_LANG, c.tagged)})</span>}
+                  </td>
+                ))}
+                <td className="text-right px-2 py-2">{c.phones || 0}</td>
+                <td className="text-right px-2 py-2 font-medium">{c.quality || 0}</td>
+                <td className="text-right px-3 py-2 whitespace-nowrap">{c.quality ? money(spend / c.quality) : spend > 0 ? '—' : ''}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function LeadQuality({ worker }) {
+  const [period, setPeriod] = useState('today')
+  const q = useQuery({
+    queryKey: ['worker-quality', worker?.id],
+    queryFn: () => getWorkerLeadQuality(worker.id).then((r) => r.data?.data || {}),
+    enabled: !!worker,
+    refetchInterval: 120000,
+  })
+  if (!worker) return null
+  const d = q.data || {}
+  const total = d[period] || {}
+  const spend = period === 'today' ? d.todaySpend : d.weekSpend
+  return (
+    <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 border-b border-gray-100">
+        <div>
+          <h2 className="font-semibold text-slate-800 text-base flex items-center gap-2"><MessageSquare className="w-5 h-5 text-slate-500" />Chất lượng tin nhắn · {worker.accountName}</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Theo thẻ sale gắn trong CRM, cập nhật liên tục (tự tải lại 2 phút/lần{d.at ? `, lần cuối ${d.at.slice(11, 16)}` : ''}). Khách chất lượng = có SĐT hoặc tiềm năng / có tương tác / hỏi giá xong im / chốt đơn.
+          </p>
+        </div>
+        <div className="flex gap-1">
+          {[['today', 'Hôm nay'], ['week', '7 ngày']].map(([k, label]) => (
+            <button key={k} onClick={() => setPeriod(k)} className={`px-3 py-1 rounded-lg text-sm border ${period === k ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-gray-200 text-slate-600 hover:bg-slate-50'}`}>{label}</button>
+          ))}
+          <button onClick={() => q.refetch()} className="p-2 rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50" title="Tải lại">
+            <RefreshCw className={`w-4 h-4 ${q.isFetching ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+      {q.isLoading ? (
+        <p className="px-4 py-6 text-slate-500">Đang tải…</p>
+      ) : d.error ? (
+        <p className="px-4 py-6 text-red-600">{d.error}</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 px-4 py-3 text-[15px] text-slate-700">
+            <span>Tin nhắn CRM: <b>{total.total || 0}</b></span>
+            <span>Khách chất lượng: <b className="text-emerald-700">{total.quality || 0}</b> ({pct(total.quality, total.total)})</span>
+            <span>Im lặng: <b className="text-red-600">{total.IM_LANG || 0}</b> ({pct(total.IM_LANG, total.tagged)} số đã gắn thẻ)</span>
+            <span>Hỏi giá xong im: <b className="text-amber-700">{total.HOI_GIA || 0}</b></span>
+            <span>SĐT: <b>{total.phones || 0}</b></span>
+            <span>Chi phí/khách chất lượng: <b>{total.quality ? money(spend / total.quality) : '—'}</b></span>
+            {total.CHUA_GAN > 0 && <span className="text-slate-500">{total.CHUA_GAN} tin nhắn chưa gắn thẻ</span>}
+          </div>
+          <h3 className="px-4 pt-2 pb-1 text-sm font-semibold text-slate-600">Theo nhóm quảng cáo</h3>
+          <QualityTable rows={d.adSets || []} period={period} spendKey={period === 'today' ? 'spendToday' : 'spendWeek'} />
+          <h3 className="px-4 pt-4 pb-1 text-sm font-semibold text-slate-600">Theo quảng cáo (7 ngày)</h3>
+          <QualityTable rows={d.ads || []} period="week" spendKey="spendWeek" />
+          <h3 className="px-4 pt-4 pb-1 text-sm font-semibold text-slate-600">Theo sale (7 ngày)</h3>
+          <QualityTable rows={(d.sales || []).map((s) => ({ id: s.name, name: s.name, active: true, week: s }))} period="week" spendKey="none" />
+          {d.unknownWeek?.total > 0 && (
+            <p className="px-4 py-3 text-sm text-slate-500">Ngoài ra {d.unknownWeek.total} tin nhắn 7 ngày trên cùng page không rõ quảng cáo (không tính vào bảng trên).</p>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
 export default function Workers() {
   const [workerId, setWorkerId] = useState('')
   const [kind, setKind] = useState('')
@@ -199,6 +328,8 @@ export default function Workers() {
           </div>
         )}
       </section>
+
+      <LeadQuality worker={workers.find((w) => String(w.id) === workerId) || workers[0]} />
 
       <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">

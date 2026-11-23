@@ -43,6 +43,18 @@ public class AdWorkerService {
                          String externalAccountId, long dataSourceId) {
     }
 
+    /** A worker of this tenant, for the admin page. */
+    public Optional<Worker> find(long tenantId, long id) {
+        return jdbc.query("""
+                select w.id, w.tenant_id, w.name, w.ad_account_id, a.name as account_name,
+                       a.external_account_id, a.data_source_id
+                from ad_workers w join ad_accounts a on a.id = w.ad_account_id and a.tenant_id = w.tenant_id
+                where w.tenant_id = ? and w.id = ?
+                """, (rs, i) -> new Worker(rs.getLong("id"), rs.getLong("tenant_id"), rs.getString("name"),
+                rs.getLong("ad_account_id"), rs.getString("account_name"), rs.getString("external_account_id"),
+                rs.getLong("data_source_id")), tenantId, id).stream().findFirst();
+    }
+
     public Optional<Worker> authenticate(String key) {
         if (key == null || key.isBlank()) {
             return Optional.empty();

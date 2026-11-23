@@ -22,6 +22,7 @@ public class WorkerAdminController {
 
     private final AdWorkerService workers;
     private final WorkerMemoryService memory;
+    private final WorkerAnalysisService analysis;
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> list(HttpServletRequest request) {
@@ -43,6 +44,15 @@ public class WorkerAdminController {
             @RequestParam(required = false) Long workerId,
             @RequestParam(defaultValue = "100") int limit) {
         return ResponseEntity.ok(ApiResponse.ok(memory.listRecommendations(tenant(request), workerId, limit)));
+    }
+
+    /** Lead quality right now (CRM tags) for one worker's account. */
+    @GetMapping("/{id}/lead-quality")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> leadQuality(HttpServletRequest request,
+                                                                        @org.springframework.web.bind.annotation.PathVariable long id) {
+        AdWorkerService.Worker w = workers.find(tenant(request), id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy worker"));
+        return ResponseEntity.ok(ApiResponse.ok(analysis.liveQuality(w, null)));
     }
 
     @PostMapping

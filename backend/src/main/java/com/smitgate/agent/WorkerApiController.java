@@ -30,10 +30,21 @@ public class WorkerApiController {
     private final WorkerAnalysisService analysis;
 
     @GetMapping("/snapshot")
+    @SuppressWarnings("unchecked")
     public ResponseEntity<?> snapshot(@RequestHeader(value = "X-Worker-Key", required = false) String key) {
         return withWorker(key, w -> {
             try {
-                return ResponseEntity.ok(workers.snapshot(w));
+                Map<String, Object> snap = workers.snapshot(w);
+                try {
+                    Map<String, List<Map<String, Object>>> live = new java.util.LinkedHashMap<>();
+                    for (String k : List.of("today", "last7", "total")) {
+                        live.put(k, (List<Map<String, Object>>) snap.get(k));
+                    }
+                    snap.put("quality", analysis.liveQuality(w, live));
+                } catch (Exception e) {
+                    log.warn("Worker {} lead quality failed: {}", w.name(), e.getMessage());
+                }
+                return ResponseEntity.ok(snap);
             } catch (Exception e) {
                 log.warn("Worker {} snapshot failed: {}", w.name(), e.getMessage());
                 return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of("error", "Không lấy được số liệu: " + e.getMessage()));

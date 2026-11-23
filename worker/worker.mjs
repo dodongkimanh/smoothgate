@@ -29,6 +29,10 @@ const RULES = {
   goodCostPerOrder: 2_000_000, // under this per order -> may scale +20% every 3 days
   cpmSpikeRatio: 1.8,
   cpmSpikeMinSpend: 150_000,
+  // Message quality from the CRM tags the sales team keeps updating (checked every 15 minutes):
+  silentMinTagged: 10, // judge an ad / ad set once this many of its 7-day messages carry a tag
+  silentRate: 0.7, // share of tagged messages that are "Khách im Lặng" -> warn
+  ...(cfg.rules || {}),
 }
 
 const db = new DatabaseSync(join(HERE, 'memory.db'))
@@ -134,6 +138,13 @@ function previousToday(now) {
 }
 
 // ---------- rules ----------
+const KIND_LABEL = { CHOT: 'chốt đơn', TIEM_NANG: 'tiềm năng', CO_TUONG_TAC: 'có tương tác', HOI_GIA: 'hỏi giá xong im', IM_LANG: 'im lặng', KHONG_NHU_CAU: 'không nhu cầu', CHUA_GAN: 'chưa gắn thẻ' }
+function qualityLine(c) {
+  if (!c || !c.total) return '0 tin nhắn trong CRM'
+  const parts = Object.keys(KIND_LABEL).filter((k) => c[k] > 0).map((k) => `${KIND_LABEL[k]} ${c[k]}`)
+  return `${c.total} tin nhắn: ${parts.join(', ')} · có SĐT ${c.phones} · khách chất lượng ${c.quality}`
+}
+
 function evaluate(snap, now) {
   const out = []
   const today = byAdSet(snap.today || [])
@@ -186,6 +197,38 @@ function evaluate(snap, now) {
     }
   }
 
+  // Message quality (CRM tags, updated by sales all day).
+  const q = snap.quality
+  if (q && !q.error) {
+    const silentCheck = (label, key, item, active) => {
+      const w = item.week || {}
+      if (!active || (w.tagged || 0) < RULES.silentMinTagged) return
+      const rate = (w.IM_LANG || 0) / w.tagged
+      if (rate < RULES.silentRate) return
+      out.push({
+        severity: 'medium',
+        refKey: `silent:${key}:${now.day}`,
+        title: `${label} "${item.name}": ${Math.round(rate * 100)}% khách im lặng (${w.IM_LANG}/${w.tagged} tin nhắn đã gắn thẻ, 7 ngày)`,
+        body: `${qualityLine(w)}\nChi 7 ngày: ${money(item.spendWeek || 0)}${w.quality > 0 ? `, ${money((item.spendWeek || 0) / w.quality)}/khách chất lượng` : ', chưa có khách chất lượng'}.\nNhiều khách chỉ bấm câu hỏi mẫu rồi im: nhắm đối tượng hoặc nội dung đang kéo người tò mò.`,
+      })
+    }
+    for (const g of q.adSets || []) silentCheck('Nhóm', g.id, g, g.active)
+    for (const a of q.ads || []) silentCheck('Quảng cáo', a.id, a, a.active)
+    // Good news: the sales team tagged a new potential customer (or a sale) today.
+    for (const g of q.adSets || []) {
+      const t = g.today || {}
+      const good = (t.TIEM_NANG || 0) + (t.CHOT || 0)
+      if (good > 0) {
+        out.push({
+          severity: 'info',
+          refKey: `potential:${g.id}:${now.day}:${good}`,
+          title: `⭐ "${g.name}": hôm nay ${good} khách tiềm năng${t.CHOT ? ` (${t.CHOT} chốt đơn)` : ''}`,
+          body: `Hôm nay: ${qualityLine(t)}\nChi hôm nay: ${money(g.spendToday || 0)}.`,
+        })
+      }
+    }
+  }
+
   // Good news between two checks: a new order on an ad.
   const prev = previousToday(now)
   if (prev) {
@@ -212,7 +255,9 @@ async function check() {
     for (const a of found) ins.run(a.refKey, now.ts, a.severity, a.title, a.body)
   }
   const t = snap.today || []
-  const status = `Kiểm tra ${now.hm} · hôm nay chi ${money(sum(t, 'spend'))}, ${sum(t, 'messageContacts')} tin nhắn, ${sum(t, 'phoneCount')} SĐT, ${sum(t, 'orderCount')} đơn · ${found.length} cảnh báo mới`
+  const qt = snap.quality?.today
+  const qText = qt && qt.total ? ` · CRM: ${qt.quality}/${qt.total} khách chất lượng, ${qt.IM_LANG} im lặng` : ''
+  const status = `Kiểm tra ${now.hm} · hôm nay chi ${money(sum(t, 'spend'))}, ${sum(t, 'messageContacts')} tin nhắn, ${sum(t, 'phoneCount')} SĐT, ${sum(t, 'orderCount')} đơn${qText} · ${found.length} cảnh báo mới`
   await call('/heartbeat', { method: 'POST', body: { device: cfg.device, status } })
   setMeta('lastCheck', now.ts)
   log(status)
