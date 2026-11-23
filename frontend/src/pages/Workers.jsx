@@ -434,12 +434,28 @@ export default function Workers() {
                   <div className="flex items-center gap-2">
                     <Server className="w-5 h-5 text-slate-500" />
                     <span className="font-semibold text-slate-800">{w.name}</span>
-                    <span className={`ml-auto inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${online ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                      {online ? 'Đang chạy' : 'Mất kết nối'}
-                    </span>
+                    {!online ? (
+                      <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />Ngừng kiểm tra
+                      </span>
+                    ) : Number(w.budgetToday) > 0 ? (
+                      <span className="ml-auto inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700" title="Tổng ngân sách hằng ngày của các nhóm/chiến dịch đang chạy">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />NS hôm nay {money(Number(w.budgetToday))}
+                      </span>
+                    ) : (
+                      <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />Không chạy QC
+                      </span>
+                    )}
                   </div>
                   <div className="mt-1 text-sm text-slate-600">Tài khoản: <b>{w.accountName}</b></div>
+                  {(Number(w.budgetToday) > 0 || Number(w.spendToday) > 0) && (
+                    <div className="text-sm text-slate-600">
+                      Hôm nay đã chi <b>{money(Number(w.spendToday))}</b>
+                      {Number(w.budgetToday) > 0 && <> / {money(Number(w.budgetToday))} ({Math.round((100 * Number(w.spendToday)) / Number(w.budgetToday))}%)</>}
+                      {' '}· {w.activeAds} QC đang chạy
+                    </div>
+                  )}
                   <div className="text-sm text-slate-500">Lần kiểm tra: {ago(w.lastSeenAt)}</div>
                   <div className="text-sm text-slate-500">Cảnh báo 24h: <b className={w.alerts24h > 0 ? 'text-red-600' : ''}>{w.alerts24h}</b> · Phân tích gần nhất: {fmtTime(w.lastAnalysisAt)}</div>
                   {w.lastStatus && <div className="mt-1 text-xs text-slate-400 truncate" title={w.lastStatus}>{w.lastStatus}</div>}

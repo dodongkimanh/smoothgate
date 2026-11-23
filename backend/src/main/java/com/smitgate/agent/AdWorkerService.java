@@ -295,9 +295,18 @@ public class AdWorkerService {
                        (select count(*) from ad_worker_reports r where r.worker_id = w.id and r.kind = 'ALERT' and not r.hidden
                           and r.created_at >= now() - interval '24 hours') as "alerts24h",
                        (select to_char(max(r.created_at), 'YYYY-MM-DD"T"HH24:MI:SS') from ad_worker_reports r
-                          where r.worker_id = w.id and r.kind = 'ANALYSIS' and not r.hidden) as "lastAnalysisAt"
+                          where r.worker_id = w.id and r.kind = 'ANALYSIS' and not r.hidden) as "lastAnalysisAt",
+                       (select coalesce(sum(b), 0) from (
+                           select distinct on (case when i.budget_source like 'CAMPAIGN%' then i.campaign_id else i.adset_id end)
+                                  i.budget as b
+                           from ads_ad_info i
+                           where i.ad_account_id = a.id and i.effective_status = 'ACTIVE'
+                             and i.budget_source in ('ADSET_DAILY', 'CAMPAIGN_DAILY')) x) as "budgetToday",
+                       (select count(*) from ads_ad_info i where i.ad_account_id = a.id and i.effective_status = 'ACTIVE') as "activeAds",
+                       (select coalesce(sum(m.spend), 0) from ads_ad_metrics_daily m
+                          where m.ad_account_id = a.id and m.date = (now() at time zone 'Asia/Ho_Chi_Minh')::date) as "spendToday"
                 from ad_workers w join ad_accounts a on a.id = w.ad_account_id
-                where w.tenant_id = ? order by w.name
+                where w.tenant_id = ? and w.enabled order by w.name
                 """, tenantId);
     }
 

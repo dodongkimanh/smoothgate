@@ -23,7 +23,9 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class WorkerAdBoardService {
 
-    static final String[] PERIODS = {"today", "yesterday", "last3", "last7", "last30", "total"};
+    static final String[] PERIODS = {"today", "yesterday", "last3", "last7", "last30", "total", "thisMonth", "lastMonth"};
+    /** The periods the board can show (as on the Ads Manager page); an ad is listed when it spent in one of them. */
+    static final String[] BOARD_PERIODS = {"today", "yesterday", "last3", "last7", "thisMonth", "lastMonth"};
     private static final String[] NUMBERS = {"spend", "impressions", "reach", "clicks", "comments", "messageContacts",
             "phoneCount", "orderCount", "sales", "profitOrderCount", "orderProfit"};
     private static final String[] INFO = {"adId", "adName", "adSetId", "adSetName", "campaignId", "campaignName",
@@ -49,8 +51,10 @@ public class WorkerAdBoardService {
 
     private Map<String, Object> build(AdWorkerService.Worker w) {
         LocalDate today = LocalDate.now(AdWorkerService.VIETNAM_ZONE);
-        LocalDate[] from = {today, today.minusDays(1), today.minusDays(2), today.minusDays(6), today.minusDays(29), today.minusDays(89)};
-        LocalDate[] to = {today, today.minusDays(1), today, today, today, today};
+        LocalDate monthStart = today.withDayOfMonth(1);
+        LocalDate[] from = {today, today.minusDays(1), today.minusDays(2), today.minusDays(6), today.minusDays(29), today.minusDays(89),
+                monthStart, monthStart.minusMonths(1)};
+        LocalDate[] to = {today, today.minusDays(1), today, today, today, today, today, monthStart.minusDays(1)};
         // One after another (not in parallel) and through the shared cache: Meta limits calls per ad account.
         Map<String, Map<String, Map<String, Object>>> byPeriod = new LinkedHashMap<>();
         for (int i = 0; i < PERIODS.length; i++) {
@@ -58,10 +62,21 @@ public class WorkerAdBoardService {
         }
         LocalDateTime fetched = workers.dataUpdatedAt(w);
 
-        // The ads that spent today, biggest spend first.
-        List<Map<String, Object>> todayAds = new ArrayList<>(byPeriod.get("today").values());
-        todayAds.removeIf(a -> num(a.get("spend")) <= 0);
-        todayAds.sort(Comparator.comparingDouble((Map<String, Object> a) -> -num(a.get("spend"))));
+        // The ads that spent in any of the board's periods (today … last month), today's biggest spend first.
+        Map<String, Map<String, Object>> scope = new LinkedHashMap<>();
+        for (String p : BOARD_PERIODS) {
+            for (Map<String, Object> a : byPeriod.get(p).values()) {
+                if (num(a.get("spend")) > 0) scope.putIfAbsent(str(a.get("adId")), a);
+            }
+        }
+        List<Map<String, Object>> todayAds = new ArrayList<>();
+        for (Map.Entry<String, Map<String, Object>> e : scope.entrySet()) {
+            // Status, budget and creative are current whatever the period: prefer today's row when there is one.
+            Map<String, Object> t = byPeriod.get("today").get(e.getKey());
+            todayAds.add(t != null ? t : e.getValue());
+        }
+        todayAds.sort(Comparator.comparingDouble((Map<String, Object> a) -> -num(byPeriod.get("today").getOrDefault(str(a.get("adId")), Map.of()).get("spend")))
+                .thenComparingDouble(a -> -num(byPeriod.get("thisMonth").getOrDefault(str(a.get("adId")), Map.of()).get("spend"))));
         List<String> ids = todayAds.stream().map(a -> str(a.get("adId"))).toList();
 
         Map<String, List<CrmCustomerSource.AdLead>> leadsByAd = new LinkedHashMap<>();
@@ -401,6 +416,8 @@ public class WorkerAdBoardService {
             case "last3" -> !d.isBefore(today.minusDays(2));
             case "last7" -> !d.isBefore(today.minusDays(6));
             case "last30" -> !d.isBefore(today.minusDays(29));
+            case "thisMonth" -> !d.isBefore(today.withDayOfMonth(1));
+            case "lastMonth" -> !d.isBefore(today.withDayOfMonth(1).minusMonths(1)) && d.isBefore(today.withDayOfMonth(1));
             default -> true;
         };
     }

@@ -18,7 +18,12 @@ const PERIODS = [
   ['last7', '7 ngày', 7],
   ['last30', '30 ngày', 30],
   ['total', 'Từ khi chạy', 90],
+  ['thisMonth', 'Tháng này', Number(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).slice(8, 10))],
+  ['lastMonth', 'Tháng trước', (() => { const d = new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).slice(0, 8) + '01'); d.setDate(0); return d.getDate() })()],
 ]
+// The board's period tabs, as on the Ads Manager page.
+const BOARD_PERIODS = ['today', 'yesterday', 'last3', 'last7', 'thisMonth', 'lastMonth']
+const PERIOD_LABEL = Object.fromEntries(PERIODS.map(([k, l]) => [k, l]))
 
 const div = (a, b) => (b > 0 ? a / b : null)
 
@@ -566,6 +571,7 @@ export default function WorkerAdsBoard({ worker }) {
   const [cell, setCell] = useState(null)
   const [fresh, setFresh] = useState(0)
   const [split, setSplit] = useState(null)
+  const [period, setPeriod] = useState('today')
   const q = useQuery({
     queryKey: ['worker-ads-board', worker?.id, fresh],
     queryFn: () => getWorkerAdsBoard(worker.id, fresh > 0).then((r) => r.data?.data || {}),
@@ -573,10 +579,10 @@ export default function WorkerAdsBoard({ worker }) {
     refetchInterval: 300000,
   })
   const d = q.data || {}
-  const ads = d.ads || []
+  const ads = (d.ads || []).filter((a) => Number(a.periods?.[period]?.spend || 0) > 0)
   const sorted = useMemo(() => {
     const val = (a) => {
-      if (METRICS[sort.key]) return valueOf(a, sort.key)
+      if (METRICS[sort.key]) return valueOf(a, sort.key, period)
       if (sort.key === 'budget') return Number(a.budget || 0)
       return String(a[sort.key] || '')
     }
@@ -587,11 +593,11 @@ export default function WorkerAdsBoard({ worker }) {
       const c = typeof x === 'string' ? x.localeCompare(y) : x - y
       return sort.dir === 'asc' ? c : -c
     })
-  }, [ads, sort])
+  }, [ads, sort, period])
 
   if (!worker) return null
   const totals = ads.reduce((t, a) => {
-    const p = a.periods?.today || {}
+    const p = a.periods?.[period] || {}
     for (const k of Object.keys(p)) t[k] = (t[k] || 0) + Number(p[k] || 0)
     return t
   }, {})
@@ -602,15 +608,18 @@ export default function WorkerAdsBoard({ worker }) {
     <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 border-b border-gray-100">
         <div>
-          <h2 className="font-semibold text-slate-800 text-base flex items-center gap-2"><Megaphone className="w-5 h-5 text-slate-500" />Quảng cáo tiêu tiền hôm nay · {worker.accountName}</h2>
+          <h2 className="font-semibold text-slate-800 text-base flex items-center gap-2"><Megaphone className="w-5 h-5 text-slate-500" />Quảng cáo có tiêu tiền · {PERIOD_LABEL[period]} · {worker.accountName}</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Bấm vào ô số bất kỳ để xem phân tích (hôm nay so với hôm qua, 3 ngày, 7 ngày, 30 ngày và kết luận). Dòng đỏ = vượt luật đề ra.
+            Bấm vào ô số bất kỳ để xem phân tích (hôm nay so với hôm qua, 3 ngày, 7 ngày, 30 ngày, tháng này, tháng trước và kết luận). Dòng đỏ = vượt luật đề ra (tính từ khi chạy).
             {d.at ? ` Số Smoothgate đồng bộ lúc ${d.at.slice(11, 16)}.` : ''}
             {badCount > 0 && <b className="text-red-600"> {badCount} quảng cáo đang vượt ngưỡng.</b>}
           </p>
           {d.crmError && <p className="text-sm text-amber-700">{d.crmError}</p>}
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
+          {BOARD_PERIODS.map((k) => (
+            <button key={k} onClick={() => setPeriod(k)} className={`px-3 py-1 rounded-lg text-sm border ${period === k ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-gray-200 text-slate-600 hover:bg-slate-50'}`}>{PERIOD_LABEL[k]}</button>
+          ))}
           <button onClick={() => setSplit({ ad: null })} className="px-3 py-1 rounded-lg text-sm border border-gray-200 text-slate-600 hover:bg-slate-50">Độ tuổi · Tỉnh thành</button>
           <button onClick={() => setFresh((n) => n + 1)} className="p-2 rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50" title="Tải lại">
             <RefreshCw className={`w-4 h-4 ${q.isFetching ? 'animate-spin' : ''}`} />
@@ -622,7 +631,7 @@ export default function WorkerAdsBoard({ worker }) {
       ) : q.isError ? (
         <p className="px-4 py-6 text-red-600">Không tải được: {q.error?.response?.data?.message || q.error?.message}</p>
       ) : ads.length === 0 ? (
-        <p className="px-4 py-6 text-slate-500">Hôm nay chưa có quảng cáo nào tiêu tiền.</p>
+        <p className="px-4 py-6 text-slate-500">{PERIOD_LABEL[period]}: chưa có quảng cáo nào tiêu tiền.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-[13px]">
@@ -679,7 +688,7 @@ export default function WorkerAdsBoard({ worker }) {
                     <td className="px-3 py-2 whitespace-nowrap"><DeliveryStatus status={ad.delivery} /></td>
                     <td className="px-3 py-2 text-right whitespace-nowrap text-slate-600">{ad.budget ? vnd(ad.budget) : '-'}</td>
                     {COLS.map((k) => {
-                      const v = valueOf(ad, k)
+                      const v = valueOf(ad, k, period)
                       const al = alertFor(ad, k)
                       return (
                         <td key={k} className="px-1 py-1 text-right whitespace-nowrap">
