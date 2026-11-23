@@ -57,7 +57,7 @@ public class WorkerAnalysisService {
         LocalDate today = LocalDate.now(AdWorkerService.VIETNAM_ZONE);
         LocalDateTime now = LocalDateTime.now(AdWorkerService.VIETNAM_ZONE);
         Integer done = jdbc.queryForObject(
-                "select count(*) from ad_worker_reports where worker_id = ? and kind = 'ANALYSIS' and created_at >= ?",
+                "select count(*) from ad_worker_reports where worker_id = ? and kind = 'ANALYSIS' and not hidden and created_at >= ?",
                 Integer.class, w.id(), today.atStartOfDay());
         if (done != null && done >= MAX_ANALYSES_PER_DAY) {
             return Map.of("ok", false, "error", "Đã đủ " + MAX_ANALYSES_PER_DAY + " lần phân tích hôm nay");

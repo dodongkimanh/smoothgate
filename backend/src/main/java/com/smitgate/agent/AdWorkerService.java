@@ -167,13 +167,28 @@ public class AdWorkerService {
                 select w.id, w.name, w.enabled, w.device, w.last_status as "lastStatus",
                        to_char(w.last_seen_at, 'YYYY-MM-DD"T"HH24:MI:SS') as "lastSeenAt",
                        a.id as "adAccountId", a.name as "accountName",
-                       (select count(*) from ad_worker_reports r where r.worker_id = w.id and r.kind = 'ALERT'
+                       (select count(*) from ad_worker_reports r where r.worker_id = w.id and r.kind = 'ALERT' and not r.hidden
                           and r.created_at >= now() - interval '24 hours') as "alerts24h",
                        (select to_char(max(r.created_at), 'YYYY-MM-DD"T"HH24:MI:SS') from ad_worker_reports r
-                          where r.worker_id = w.id and r.kind = 'ANALYSIS') as "lastAnalysisAt"
+                          where r.worker_id = w.id and r.kind = 'ANALYSIS' and not r.hidden) as "lastAnalysisAt"
                 from ad_workers w join ad_accounts a on a.id = w.ad_account_id
                 where w.tenant_id = ? order by w.name
                 """, tenantId);
+    }
+
+    /**
+     * Removes a report from the page. The row is only hidden, so the worker's de-duplication still knows it was sent;
+     * an analysis also takes its suggestions that were not graded yet out of the ledger.
+     */
+    public boolean hideReport(long tenantId, long reportId) {
+        int n = jdbc.update("""
+                update ad_worker_reports r set hidden = true from ad_workers w
+                where w.id = r.worker_id and w.tenant_id = ? and r.id = ?
+                """, tenantId, reportId);
+        if (n > 0) {
+            jdbc.update("delete from ad_worker_recommendations where report_id = ? and evaluated_at is null", reportId);
+        }
+        return n > 0;
     }
 
     public List<Map<String, Object>> listReports(long tenantId, Long workerId, String kind, int limit) {
@@ -183,7 +198,7 @@ public class AdWorkerService {
                        to_char(r.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') as "createdAt"
                 from ad_worker_reports r join ad_workers w on w.id = r.worker_id
                 join ad_accounts a on a.id = w.ad_account_id
-                where w.tenant_id = ?
+                where w.tenant_id = ? and not r.hidden
                 """);
         List<Object> args = new ArrayList<>(List.of(tenantId));
         if (workerId != null) {

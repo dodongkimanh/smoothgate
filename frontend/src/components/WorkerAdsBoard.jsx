@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, ArrowUpDown, Megaphone, RefreshCw, X } from 'lucide-react'
-import { getWorkerAdsBoard } from '../services/api'
+import { getWorkerAdsBoard, getWorkerSales } from '../services/api'
 import { MetaToggle, DeliveryStatus } from './MetaAdControls'
 
 // ---------- formatting ----------
@@ -319,6 +319,88 @@ function CellModal({ ad, metric, allAds, rules, onClose }) {
         </div>
       </div>
     </div>
+  )
+}
+
+// ---------- leads per sale ----------
+const SALE_PERIODS = [['today', 'Hôm nay'], ['yesterday', 'Hôm qua'], ['last3', '3 ngày'], ['last7', '7 ngày'], ['thisMonth', 'Tháng này'], ['lastMonth', 'Tháng trước'], ['max', 'Tối đa']]
+const pctOf = (n, d) => (d ? `${Math.round((100 * n) / d)}%` : '—')
+
+export function WorkerSalesBoard({ worker }) {
+  const [period, setPeriod] = useState('today')
+  const q = useQuery({
+    queryKey: ['worker-sales', worker?.id],
+    queryFn: () => getWorkerSales(worker.id).then((r) => r.data?.data || {}),
+    enabled: !!worker,
+    refetchInterval: 300000,
+  })
+  if (!worker) return null
+  const d = q.data || {}
+  const cur = d[period] || {}
+  const rows = cur.sales || []
+  const t = cur.total || {}
+  const line = (s, name, strong) => (
+    <tr key={name} className={strong ? 'bg-slate-50 font-semibold' : ''}>
+      <td className="px-3 py-2 whitespace-nowrap">{name}</td>
+      <td className="px-2 py-2 text-right font-medium">{s.total || 0}</td>
+      <td className="px-2 py-2 text-right">{s.phones || 0}</td>
+      <td className="px-2 py-2 text-right text-slate-500">{pctOf(s.phones, s.total)}</td>
+      {KINDS.map(([k]) => (
+        <td key={k} className={`px-2 py-2 text-right ${s[k] ? (k === 'IM_LANG' ? 'text-red-600' : k === 'HOI_GIA' ? 'text-amber-700' : k === 'CHOT' || k === 'TIEM_NANG' ? 'text-emerald-700' : '') : 'text-slate-300'}`}>
+          {s[k] || 0}
+          {k === 'IM_LANG' && s.tagged > 0 && s[k] > 0 && <span className="ml-1 text-xs">({pctOf(s[k], s.tagged)})</span>}
+        </td>
+      ))}
+      <td className="px-3 py-2 text-right">{s.quality || 0} <span className="text-xs text-slate-500">({pctOf(s.quality, s.total)})</span></td>
+    </tr>
+  )
+  return (
+    <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 border-b border-gray-100">
+        <div>
+          <h2 className="font-semibold text-slate-800 text-base">Tin nhắn theo sale · {worker.accountName}</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Tin nhắn CRM từ quảng cáo của tài khoản này, chia theo sale được giao (cột Sale trong CRM) và thẻ sale đã gắn.
+            {period === 'max' && d.firstDate ? ` Dữ liệu CRM từ ${d.firstDate.split('-').reverse().join('/')}.` : ''}
+            {d.at ? ` Cập nhật ${d.at.slice(11, 16)}.` : ''}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {SALE_PERIODS.map(([k, label]) => (
+            <button key={k} onClick={() => setPeriod(k)} className={`px-3 py-1 rounded-lg text-sm border ${period === k ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-gray-200 text-slate-600 hover:bg-slate-50'}`}>{label}</button>
+          ))}
+          <button onClick={() => q.refetch()} className="p-2 rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50" title="Tải lại">
+            <RefreshCw className={`w-4 h-4 ${q.isFetching ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+      {q.isLoading ? (
+        <p className="px-4 py-6 text-slate-500">Đang tải…</p>
+      ) : q.isError ? (
+        <p className="px-4 py-6 text-red-600">Không tải được: {q.error?.response?.data?.message || q.error?.message}</p>
+      ) : rows.length === 0 ? (
+        <p className="px-4 py-6 text-slate-500">Không có tin nhắn nào trong kỳ này.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500 text-xs">
+              <tr>
+                <th className="text-left px-3 py-2 font-medium">Sale</th>
+                <th className="text-right px-2 py-2 font-medium">Tin nhắn</th>
+                <th className="text-right px-2 py-2 font-medium">SĐT</th>
+                <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Tỷ lệ SĐT</th>
+                {KINDS.map(([k, label]) => <th key={k} className="text-right px-2 py-2 font-medium whitespace-nowrap">{label}</th>)}
+                <th className="text-right px-3 py-2 font-medium whitespace-nowrap">Khách chất lượng</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((s) => line(s, s.sale))}
+              {line(t, 'Tổng', true)}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   )
 }
 

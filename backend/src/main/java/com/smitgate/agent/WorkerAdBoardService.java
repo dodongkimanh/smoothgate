@@ -117,6 +117,77 @@ public class WorkerAdBoardService {
         return out;
     }
 
+    static final String[] SALE_PERIODS = {"today", "yesterday", "last3", "last7", "thisMonth", "lastMonth", "max"};
+    private final Map<Long, Map<String, Object>> accountAds = new ConcurrentHashMap<>();
+
+    /**
+     * Leads per sale (the CRM "Sale" column = who the lead was assigned to) for every ad this account ever ran,
+     * for each of {@link #SALE_PERIODS}.
+     */
+    public Map<String, Object> sales(AdWorkerService.Worker w) {
+        LocalDate today = LocalDate.now(AdWorkerService.VIETNAM_ZONE);
+        List<String> ids = accountAdIds(w, today);
+        List<CrmCustomerSource.AdLead> leads = crm.adLeads(ids, 3700);
+        LocalDate monthStart = today.withDayOfMonth(1);
+        LocalDate lastMonthStart = monthStart.minusMonths(1);
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (String p : SALE_PERIODS) {
+            LeadQuality.Count all = new LeadQuality.Count();
+            Map<String, LeadQuality.Count> bySale = new LinkedHashMap<>();
+            for (CrmCustomerSource.AdLead l : leads) {
+                if (l.createdAt() == null) continue;
+                LocalDate d = l.createdAt().atZone(AdWorkerService.VIETNAM_ZONE).toLocalDate();
+                boolean in = switch (p) {
+                    case "today" -> d.equals(today);
+                    case "yesterday" -> d.equals(today.minusDays(1));
+                    case "last3" -> !d.isBefore(today.minusDays(2));
+                    case "last7" -> !d.isBefore(today.minusDays(6));
+                    case "thisMonth" -> !d.isBefore(monthStart);
+                    case "lastMonth" -> !d.isBefore(lastMonthStart) && d.isBefore(monthStart);
+                    default -> true;
+                };
+                if (!in) continue;
+                LeadQuality.Kind k = LeadQuality.classify(l.tags());
+                all.add(k, l.hasPhone());
+                bySale.computeIfAbsent(saleOf(l), x -> new LeadQuality.Count()).add(k, l.hasPhone());
+            }
+            List<Map<String, Object>> rows = new ArrayList<>();
+            bySale.entrySet().stream().sorted((a, b) -> b.getValue().total - a.getValue().total).forEach(e -> {
+                Map<String, Object> s = e.getValue().toMap();
+                s.put("sale", e.getKey());
+                rows.add(s);
+            });
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("total", all.toMap());
+            m.put("sales", rows);
+            out.put(p, m);
+        }
+        LocalDate first = leads.stream().filter(l -> l.createdAt() != null)
+                .map(l -> l.createdAt().atZone(AdWorkerService.VIETNAM_ZONE).toLocalDate()).min(LocalDate::compareTo).orElse(null);
+        out.put("firstDate", first == null ? null : first.toString());
+        out.put("ads", ids.size());
+        out.put("at", LocalDateTime.now(AdWorkerService.VIETNAM_ZONE).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+        return out;
+    }
+
+    /** Every ad the account ran in Meta's longest window (37 months), refreshed every 30 minutes. */
+    @SuppressWarnings("unchecked")
+    private List<String> accountAdIds(AdWorkerService.Worker w, LocalDate today) {
+        Map<String, Object> hit = accountAds.get(w.id());
+        if (hit != null && System.currentTimeMillis() - (long) hit.get("at") < 30 * 60_000L) {
+            return (List<String>) hit.get("ids");
+        }
+        List<Map<String, Object>> rows;
+        try {
+            rows = workers.fullAds(w, today.minusMonths(37).plusDays(1), today);
+        } catch (Exception e) {
+            rows = workers.fullAds(w, today.minusDays(89), today);
+        }
+        List<String> ids = new ArrayList<>(perAd(rows).keySet());
+        accountAds.put(w.id(), Map.of("at", System.currentTimeMillis(), "ids", ids));
+        return ids;
+    }
+
     /** One entry per ad (the connector can return an ad more than once, e.g. per day). */
     private static Map<String, Map<String, Object>> perAd(List<Map<String, Object>> rows) {
         Map<String, Map<String, Object>> out = new LinkedHashMap<>();

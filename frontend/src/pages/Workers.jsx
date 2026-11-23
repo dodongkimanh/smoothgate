@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Smartphone, AlertTriangle, Sparkles, Info, RefreshCw, CalendarCheck, ClipboardCheck, MessageSquare } from 'lucide-react'
-import { getWorkers, getWorkerReports, getWorkerRecommendations, getWorkerLeadQuality, runWorkerAnalysis, getWorkerAnalysisState } from '../services/api'
+import { Smartphone, AlertTriangle, Sparkles, Info, RefreshCw, CalendarCheck, ClipboardCheck, Trash2 } from 'lucide-react'
+import { getWorkers, getWorkerReports, getWorkerRecommendations, deleteWorkerReport, runWorkerAnalysis, getWorkerAnalysisState } from '../services/api'
 import { useEffect } from 'react'
-import WorkerAdsBoard from '../components/WorkerAdsBoard'
+import WorkerAdsBoard, { WorkerSalesBoard } from '../components/WorkerAdsBoard'
 
 // "Phân tích ngay": the server runs the analysis in the background; poll until it finishes, then reload the feed.
 function AnalyzeNow({ worker, onDone }) {
@@ -267,15 +267,29 @@ const SEVERITY = {
   info: { label: 'Thông tin', cls: 'bg-sky-50 text-sky-700 border-sky-200', Icon: Info },
 }
 
-function ReportItem({ r }) {
+function ReportItem({ r, onDeleted }) {
   const [open, setOpen] = useState(r.kind === 'ANALYSIS')
+  const [deleting, setDeleting] = useState(false)
   const isAnalysis = r.kind === 'ANALYSIS'
   const isDaily = r.kind === 'DAILY'
   const sev = SEVERITY[r.severity] || SEVERITY.info
   const Icon = isAnalysis ? Sparkles : isDaily ? CalendarCheck : sev.Icon
+  const remove = async () => {
+    const what = isAnalysis ? 'bản phân tích này (kèm các đề xuất chưa chấm của nó)' : 'mục này'
+    if (!window.confirm(`Xóa ${what}?\n\n${r.title}`)) return
+    setDeleting(true)
+    try {
+      await deleteWorkerReport(r.id)
+      onDeleted?.()
+    } catch (e) {
+      window.alert(e?.response?.data?.message || 'Không xóa được')
+      setDeleting(false)
+    }
+  }
   return (
-    <li className="px-4 py-3">
-      <button onClick={() => setOpen(!open)} className="w-full text-left flex items-start gap-3">
+    <li className={`px-4 py-3 ${deleting ? 'opacity-50' : ''}`}>
+      <div className="flex items-start gap-2">
+      <button onClick={() => setOpen(!open)} className="flex-1 min-w-0 text-left flex items-start gap-3">
         <span className={`mt-0.5 inline-flex items-center justify-center w-7 h-7 rounded-lg border ${isAnalysis ? 'bg-violet-50 text-violet-700 border-violet-200' : isDaily ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : sev.cls}`}>
           <Icon className="w-4 h-4" />
         </span>
@@ -287,6 +301,10 @@ function ReportItem({ r }) {
           </span>
         </span>
       </button>
+        <button onClick={remove} disabled={deleting} title="Xóa" className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
       {open && (r.body || r.data) && (
         <div className="mt-2 ml-0 sm:ml-10 p-3 rounded-lg bg-slate-50 border border-slate-100">
           {r.body && <RichText text={r.body} />}
@@ -359,129 +377,6 @@ function money(v) {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 2).replace(/\.?0+$/, '').replace('.', ',')}tr`
   if (v >= 1000) return `${Math.round(v / 1000)}k`
   return `${Math.round(v)}đ`
-}
-
-function pct(n, d) {
-  return d ? `${Math.round((100 * n) / d)}%` : '—'
-}
-
-// Columns of the quality table, best → worst, as the sales team tags them in the CRM.
-const QCOLS = [
-  ['CHOT', 'Chốt đơn', 'text-emerald-700'],
-  ['TIEM_NANG', 'Tiềm năng', 'text-emerald-700'],
-  ['CO_TUONG_TAC', 'Có tương tác', 'text-sky-700'],
-  ['HOI_GIA', 'Hỏi giá xong im', 'text-amber-700'],
-  ['IM_LANG', 'Im lặng', 'text-red-600'],
-  ['KHONG_NHU_CAU', 'Không nhu cầu', 'text-slate-500'],
-  ['CHUA_GAN', 'Chưa gắn thẻ', 'text-slate-400'],
-]
-
-function QualityTable({ rows, period, spendKey }) {
-  if (!rows.length) return <p className="px-4 py-3 text-slate-500">Chưa có tin nhắn.</p>
-  return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm">
-        <thead className="bg-slate-50 text-slate-600">
-          <tr>
-            <th className="text-left font-medium px-3 py-2 min-w-[220px]">Tên</th>
-            <th className="text-right font-medium px-2 py-2">Chi</th>
-            <th className="text-right font-medium px-2 py-2">Tin nhắn</th>
-            {QCOLS.map(([k, label]) => <th key={k} className="text-right font-medium px-2 py-2 whitespace-nowrap">{label}</th>)}
-            <th className="text-right font-medium px-2 py-2">SĐT</th>
-            <th className="text-right font-medium px-2 py-2 whitespace-nowrap">Khách chất lượng</th>
-            <th className="text-right font-medium px-3 py-2 whitespace-nowrap">Chi phí/khách CL</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {rows.map((r) => {
-            const c = r[period] || {}
-            const spend = r[spendKey] || 0
-            const silent = c.tagged ? c.IM_LANG / c.tagged : 0
-            return (
-              <tr key={r.id} className={r.active ? '' : 'text-slate-400'}>
-                <td className="px-3 py-2">
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle ${r.active ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                  {r.name}
-                  {/^\d+$/.test(String(r.id)) && <div className="text-[11px] text-slate-400 font-mono select-all ml-3">ID {r.id}</div>}
-                </td>
-                <td className="text-right px-2 py-2 whitespace-nowrap">{spendKey === 'none' ? '' : money(spend)}</td>
-                <td className="text-right px-2 py-2 font-medium">{c.total || 0}</td>
-                {QCOLS.map(([k, , cls]) => (
-                  <td key={k} className={`text-right px-2 py-2 ${c[k] ? cls : 'text-slate-300'}`}>
-                    {c[k] || 0}
-                    {k === 'IM_LANG' && c.tagged > 0 && <span className={`ml-1 text-xs ${silent >= 0.7 ? 'font-semibold' : ''}`}>({pct(c.IM_LANG, c.tagged)})</span>}
-                  </td>
-                ))}
-                <td className="text-right px-2 py-2">{c.phones || 0}</td>
-                <td className="text-right px-2 py-2 font-medium">{c.quality || 0}</td>
-                <td className="text-right px-3 py-2 whitespace-nowrap">{c.quality ? money(spend / c.quality) : spend > 0 ? '—' : ''}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function LeadQuality({ worker }) {
-  const [period, setPeriod] = useState('today')
-  const q = useQuery({
-    queryKey: ['worker-quality', worker?.id],
-    queryFn: () => getWorkerLeadQuality(worker.id).then((r) => r.data?.data || {}),
-    enabled: !!worker,
-    refetchInterval: 120000,
-  })
-  if (!worker) return null
-  const d = q.data || {}
-  const total = d[period] || {}
-  const spend = period === 'today' ? d.todaySpend : d.weekSpend
-  return (
-    <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 border-b border-gray-100">
-        <div>
-          <h2 className="font-semibold text-slate-800 text-base flex items-center gap-2"><MessageSquare className="w-5 h-5 text-slate-500" />Chất lượng tin nhắn · {worker.accountName}</h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Theo thẻ sale gắn trong CRM, cập nhật liên tục (tự tải lại 2 phút/lần{d.at ? `, lần cuối ${d.at.slice(11, 16)}` : ''}). Khách chất lượng = có SĐT hoặc tiềm năng / có tương tác / hỏi giá xong im / chốt đơn.
-          </p>
-        </div>
-        <div className="flex gap-1">
-          {[['today', 'Hôm nay'], ['week', '7 ngày']].map(([k, label]) => (
-            <button key={k} onClick={() => setPeriod(k)} className={`px-3 py-1 rounded-lg text-sm border ${period === k ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-gray-200 text-slate-600 hover:bg-slate-50'}`}>{label}</button>
-          ))}
-          <button onClick={() => q.refetch()} className="p-2 rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50" title="Tải lại">
-            <RefreshCw className={`w-4 h-4 ${q.isFetching ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
-      {q.isLoading ? (
-        <p className="px-4 py-6 text-slate-500">Đang tải…</p>
-      ) : d.error ? (
-        <p className="px-4 py-6 text-red-600">{d.error}</p>
-      ) : (
-        <>
-          <div className="flex flex-wrap gap-x-6 gap-y-1 px-4 py-3 text-[15px] text-slate-700">
-            <span>Tin nhắn CRM: <b>{total.total || 0}</b></span>
-            <span>Khách chất lượng: <b className="text-emerald-700">{total.quality || 0}</b> ({pct(total.quality, total.total)})</span>
-            <span>Im lặng: <b className="text-red-600">{total.IM_LANG || 0}</b> ({pct(total.IM_LANG, total.tagged)} số đã gắn thẻ)</span>
-            <span>Hỏi giá xong im: <b className="text-amber-700">{total.HOI_GIA || 0}</b></span>
-            <span>SĐT: <b>{total.phones || 0}</b></span>
-            <span>Chi phí/khách chất lượng: <b>{total.quality ? money(spend / total.quality) : '—'}</b></span>
-            {total.CHUA_GAN > 0 && <span className="text-slate-500">{total.CHUA_GAN} tin nhắn chưa gắn thẻ</span>}
-          </div>
-          <h3 className="px-4 pt-2 pb-1 text-sm font-semibold text-slate-600">Theo nhóm quảng cáo</h3>
-          <QualityTable rows={d.adSets || []} period={period} spendKey={period === 'today' ? 'spendToday' : 'spendWeek'} />
-          <h3 className="px-4 pt-4 pb-1 text-sm font-semibold text-slate-600">Theo quảng cáo (7 ngày)</h3>
-          <QualityTable rows={d.ads || []} period="week" spendKey="spendWeek" />
-          <h3 className="px-4 pt-4 pb-1 text-sm font-semibold text-slate-600">Theo sale (7 ngày)</h3>
-          <QualityTable rows={(d.sales || []).map((s) => ({ id: s.name, name: s.name, active: true, week: s }))} period="week" spendKey="none" />
-          {d.unknownWeek?.total > 0 && (
-            <p className="px-4 py-3 text-sm text-slate-500">Ngoài ra {d.unknownWeek.total} tin nhắn 7 ngày trên cùng page không rõ quảng cáo (không tính vào bảng trên).</p>
-          )}
-        </>
-      )}
-    </section>
-  )
 }
 
 export default function Workers() {
@@ -557,8 +452,7 @@ export default function Workers() {
       </section>
 
       <WorkerAdsBoard worker={workers.find((w) => String(w.id) === workerId) || workers[0]} />
-
-      <LeadQuality worker={workers.find((w) => String(w.id) === workerId) || workers[0]} />
+      <WorkerSalesBoard worker={workers.find((w) => String(w.id) === workerId) || workers[0]} />
 
       <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-gray-100">
@@ -575,7 +469,7 @@ export default function Workers() {
           <p className="px-4 py-6 text-slate-500">{reportsQ.isLoading ? 'Đang tải…' : 'Chưa có cảnh báo hay phân tích nào.'}</p>
         ) : (
           <ul className="divide-y divide-gray-100">
-            {reports.map((r) => <ReportItem key={r.id} r={r} />)}
+            {reports.map((r) => <ReportItem key={r.id} r={r} onDeleted={() => { reportsQ.refetch(); recsQ.refetch(); workersQ.refetch() }} />)}
           </ul>
         )}
       </section>

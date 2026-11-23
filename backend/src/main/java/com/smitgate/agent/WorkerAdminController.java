@@ -43,6 +43,15 @@ public class WorkerAdminController {
         return ResponseEntity.ok(ApiResponse.ok(workers.listReports(tenant(request), workerId, kind, limit)));
     }
 
+    @org.springframework.web.bind.annotation.DeleteMapping("/reports/{reportId}")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> deleteReport(HttpServletRequest request,
+                                                                         @org.springframework.web.bind.annotation.PathVariable long reportId) {
+        if (!workers.hideReport(tenant(request), reportId)) {
+            throw new IllegalArgumentException("Không tìm thấy báo cáo");
+        }
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("id", reportId)));
+    }
+
     @GetMapping("/recommendations")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> recommendations(
             HttpServletRequest request,
@@ -68,6 +77,15 @@ public class WorkerAdminController {
         AdWorkerService.Worker w = workers.find(tenant(request), id)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy worker"));
         return ResponseEntity.ok(ApiResponse.ok(adBoard.board(w, fresh)));
+    }
+
+    /** CRM leads per assigned sale for this worker's account, per period (today … all time). */
+    @GetMapping("/{id}/sales")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> sales(HttpServletRequest request,
+                                                                  @org.springframework.web.bind.annotation.PathVariable long id) {
+        AdWorkerService.Worker w = workers.find(tenant(request), id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy worker"));
+        return ResponseEntity.ok(ApiResponse.ok(adBoard.sales(w)));
     }
 
     @PostMapping("/{id}/analyze")

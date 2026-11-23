@@ -72,7 +72,7 @@ public class WorkerMemoryService {
     public List<Map<String, Object>> recentReports(AdWorkerService.Worker w, String kind, int days, int limit) {
         return jdbc.queryForList("""
                 select id, kind, severity, title, body, to_char(created_at, 'YYYY-MM-DD HH24:MI') as at
-                from ad_worker_reports where worker_id = ? and kind = ? and created_at >= now() - make_interval(days => ?)
+                from ad_worker_reports where worker_id = ? and kind = ? and not hidden and created_at >= now() - make_interval(days => ?)
                 order by created_at desc limit ?
                 """, w.id(), kind, days, limit);
     }
