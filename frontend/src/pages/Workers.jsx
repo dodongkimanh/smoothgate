@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Smartphone, AlertTriangle, Sparkles, Info, RefreshCw, CalendarCheck, ClipboardCheck, Trash2 } from 'lucide-react'
+import { Server, AlertTriangle, Sparkles, Info, RefreshCw, CalendarCheck, ClipboardCheck, Trash2 } from 'lucide-react'
 import { getWorkers, getWorkerReports, getWorkerRecommendations, deleteWorkerReport, runWorkerAnalysis, getWorkerAnalysisState } from '../services/api'
 import { useEffect } from 'react'
 import WorkerAdsBoard, { WorkerSalesBoard } from '../components/WorkerAdsBoard'
@@ -408,9 +408,9 @@ export default function Workers() {
       <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-gray-100">
           <div>
-            <h2 className="font-semibold text-slate-800 text-base">Máy theo dõi tài khoản</h2>
+            <h2 className="font-semibold text-slate-800 text-base">Worker theo dõi tài khoản</h2>
             <p className="text-sm text-slate-500 mt-0.5">
-              Mỗi máy theo dõi một tài khoản quảng cáo: 15 phút kiểm tra theo luật, 12h và 21h AI phân tích (Chủ nhật 21h là tổng kết tuần), 23h30 chốt ngày. Bộ nhớ lưu trên server nên thay máy không mất. Máy chỉ cảnh báo và đề xuất, không tự bật/tắt quảng cáo.
+              Mỗi tài khoản quảng cáo có một worker chạy trên server Smoothgate (không cần điện thoại): 15 phút kiểm tra theo luật, 12h và 21h AI phân tích (Chủ nhật 21h là tổng kết tuần), 23h30 chốt ngày. Worker chỉ đọc số của Smoothgate và CRM, chỉ cảnh báo và đề xuất, không tự bật/tắt quảng cáo.
             </p>
           </div>
           <button onClick={() => { workersQ.refetch(); reportsQ.refetch() }} className="p-2 rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50" title="Tải lại">
@@ -418,9 +418,9 @@ export default function Workers() {
           </button>
         </div>
         {workers.length === 0 ? (
-          <p className="px-4 py-6 text-slate-500">{workersQ.isLoading ? 'Đang tải…' : 'Chưa có máy nào.'}</p>
+          <p className="px-4 py-6 text-slate-500">{workersQ.isLoading ? 'Đang tải…' : 'Chưa có worker nào.'}</p>
         ) : (
-          <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {workers.map((w) => {
               const m = minutesAgo(w.lastSeenAt)
               const online = m != null && m <= ONLINE_MINUTES
@@ -432,7 +432,7 @@ export default function Workers() {
                   className={`cursor-pointer text-left p-3 rounded-xl border transition ${workerId === String(w.id) ? 'border-sky-400 ring-2 ring-sky-100' : 'border-gray-200 hover:border-gray-300'}`}
                 >
                   <div className="flex items-center gap-2">
-                    <Smartphone className="w-5 h-5 text-slate-500" />
+                    <Server className="w-5 h-5 text-slate-500" />
                     <span className="font-semibold text-slate-800">{w.name}</span>
                     <span className={`ml-auto inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${online ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-emerald-500' : 'bg-red-500'}`} />
@@ -440,7 +440,7 @@ export default function Workers() {
                     </span>
                   </div>
                   <div className="mt-1 text-sm text-slate-600">Tài khoản: <b>{w.accountName}</b></div>
-                  <div className="text-sm text-slate-500">Lần cuối: {ago(w.lastSeenAt)}</div>
+                  <div className="text-sm text-slate-500">Lần kiểm tra: {ago(w.lastSeenAt)}</div>
                   <div className="text-sm text-slate-500">Cảnh báo 24h: <b className={w.alerts24h > 0 ? 'text-red-600' : ''}>{w.alerts24h}</b> · Phân tích gần nhất: {fmtTime(w.lastAnalysisAt)}</div>
                   {w.lastStatus && <div className="mt-1 text-xs text-slate-400 truncate" title={w.lastStatus}>{w.lastStatus}</div>}
                   <AnalyzeNow worker={w} onDone={() => { reportsQ.refetch(); workersQ.refetch(); recsQ.refetch(); setKind('') }} />
