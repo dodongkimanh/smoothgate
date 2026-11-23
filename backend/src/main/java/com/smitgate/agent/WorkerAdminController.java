@@ -24,6 +24,10 @@ public class WorkerAdminController {
     private final WorkerMemoryService memory;
     private final WorkerAnalysisService analysis;
 
+    /** "Phân tích ngay" runs in the background (Claude can take minutes); the page polls its state. */
+    private final java.util.concurrent.ExecutorService runner = java.util.concurrent.Executors.newFixedThreadPool(2);
+    private final Map<Long, Map<String, Object>> runs = new java.util.concurrent.ConcurrentHashMap<>();
+
     @GetMapping
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> list(HttpServletRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(workers.listWorkers(tenant(request))));
@@ -53,6 +57,43 @@ public class WorkerAdminController {
         AdWorkerService.Worker w = workers.find(tenant(request), id)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy worker"));
         return ResponseEntity.ok(ApiResponse.ok(analysis.liveQuality(w, null)));
+    }
+
+    @PostMapping("/{id}/analyze")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> analyzeNow(HttpServletRequest request,
+                                                                       @org.springframework.web.bind.annotation.PathVariable long id) {
+        AdWorkerService.Worker w = workers.find(tenant(request), id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy worker"));
+        Map<String, Object> current = runs.get(id);
+        if (current != null && Boolean.TRUE.equals(current.get("running"))) {
+            return ResponseEntity.ok(ApiResponse.ok(current));
+        }
+        String slot = "bấm tay " + java.time.LocalTime.now(AdWorkerService.VIETNAM_ZONE).withSecond(0).withNano(0);
+        Map<String, Object> state = new java.util.concurrent.ConcurrentHashMap<>();
+        state.put("running", true);
+        state.put("startedAt", java.time.LocalDateTime.now(AdWorkerService.VIETNAM_ZONE).withNano(0).toString());
+        runs.put(id, state);
+        runner.submit(() -> {
+            try {
+                Map<String, Object> result = analysis.analyze(w, slot);
+                if (!Boolean.TRUE.equals(result.get("ok"))) {
+                    state.put("error", String.valueOf(result.getOrDefault("error", "Không phân tích được")));
+                } else if (Boolean.TRUE.equals(result.get("skipped"))) {
+                    state.put("error", String.valueOf(result.get("text")));
+                }
+            } catch (Exception e) {
+                state.put("error", "Lỗi khi phân tích: " + e.getMessage());
+            } finally {
+                state.put("finishedAt", java.time.LocalDateTime.now(AdWorkerService.VIETNAM_ZONE).withNano(0).toString());
+                state.put("running", false);
+            }
+        });
+        return ResponseEntity.ok(ApiResponse.ok(state));
+    }
+
+    @GetMapping("/{id}/analyze")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> analyzeState(@org.springframework.web.bind.annotation.PathVariable long id) {
+        return ResponseEntity.ok(ApiResponse.ok(runs.getOrDefault(id, Map.of("running", false))));
     }
 
     @PostMapping

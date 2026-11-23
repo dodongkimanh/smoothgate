@@ -1,7 +1,55 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Smartphone, AlertTriangle, Sparkles, Info, RefreshCw, CalendarCheck, ClipboardCheck, MessageSquare } from 'lucide-react'
-import { getWorkers, getWorkerReports, getWorkerRecommendations, getWorkerLeadQuality } from '../services/api'
+import { getWorkers, getWorkerReports, getWorkerRecommendations, getWorkerLeadQuality, runWorkerAnalysis, getWorkerAnalysisState } from '../services/api'
+import { useEffect } from 'react'
+
+// "Phân tích ngay": the server runs the analysis in the background; poll until it finishes, then reload the feed.
+function AnalyzeNow({ worker, onDone }) {
+  const [state, setState] = useState(null)
+  const running = !!state?.running
+
+  useEffect(() => {
+    getWorkerAnalysisState(worker.id).then((r) => setState(r.data?.data || null)).catch(() => {})
+  }, [worker.id])
+
+  useEffect(() => {
+    if (!running) return undefined
+    const t = setInterval(async () => {
+      try {
+        const s = (await getWorkerAnalysisState(worker.id)).data?.data
+        setState(s)
+        if (!s?.running) onDone?.()
+      } catch { /* keep polling */ }
+    }, 5000)
+    return () => clearInterval(t)
+  }, [running, worker.id, onDone])
+
+  const start = async (e) => {
+    e.stopPropagation()
+    try {
+      setState({ running: true })
+      setState((await runWorkerAnalysis(worker.id)).data?.data)
+    } catch (err) {
+      setState({ running: false, error: err.response?.data?.message || 'Không gửi được yêu cầu phân tích' })
+    }
+  }
+
+  return (
+    <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={start}
+        disabled={running}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border ${running ? 'bg-violet-50 border-violet-200 text-violet-500' : 'bg-violet-600 border-violet-600 text-white hover:bg-violet-700'}`}
+      >
+        <Sparkles className={`w-4 h-4 ${running ? 'animate-pulse' : ''}`} />
+        {running ? 'Đang phân tích… (1–3 phút)' : 'Phân tích ngay'}
+      </button>
+      {!running && state?.error && <div className="mt-1 text-sm text-red-600">{state.error}</div>}
+      {!running && !state?.error && state?.finishedAt && <div className="mt-1 text-sm text-emerald-700">Đã xong lúc {state.finishedAt.slice(11, 16)} — xem ở mục Phân tích bên dưới.</div>}
+    </div>
+  )
+}
 
 const ONLINE_MINUTES = 45
 
@@ -305,10 +353,11 @@ export default function Workers() {
               const m = minutesAgo(w.lastSeenAt)
               const online = m != null && m <= ONLINE_MINUTES
               return (
-                <button
+                <div
                   key={w.id}
+                  role="button"
                   onClick={() => setWorkerId(workerId === String(w.id) ? '' : String(w.id))}
-                  className={`text-left p-3 rounded-xl border transition ${workerId === String(w.id) ? 'border-sky-400 ring-2 ring-sky-100' : 'border-gray-200 hover:border-gray-300'}`}
+                  className={`cursor-pointer text-left p-3 rounded-xl border transition ${workerId === String(w.id) ? 'border-sky-400 ring-2 ring-sky-100' : 'border-gray-200 hover:border-gray-300'}`}
                 >
                   <div className="flex items-center gap-2">
                     <Smartphone className="w-5 h-5 text-slate-500" />
@@ -322,7 +371,8 @@ export default function Workers() {
                   <div className="text-sm text-slate-500">Lần cuối: {ago(w.lastSeenAt)}</div>
                   <div className="text-sm text-slate-500">Cảnh báo 24h: <b className={w.alerts24h > 0 ? 'text-red-600' : ''}>{w.alerts24h}</b> · Phân tích gần nhất: {fmtTime(w.lastAnalysisAt)}</div>
                   {w.lastStatus && <div className="mt-1 text-xs text-slate-400 truncate" title={w.lastStatus}>{w.lastStatus}</div>}
-                </button>
+                  <AnalyzeNow worker={w} onDone={() => { reportsQ.refetch(); workersQ.refetch(); recsQ.refetch(); setKind('') }} />
+                </div>
               )
             })}
           </div>
