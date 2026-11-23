@@ -407,7 +407,7 @@ export function WorkerSalesBoard({ worker }) {
 // ---------- age / gender / region split ----------
 const GENDER = { male: 'Nam', female: 'Nữ', unknown: 'Không rõ' }
 
-function SplitTable({ rows, label, nameOf }) {
+function SplitTable({ rows, label, nameOf, crm }) {
   const [sort, setSort] = useState({ key: 'spend', dir: 'desc' })
   const total = rows.reduce((t, r) => t + Number(r.spend || 0), 0)
   const totalMsg = rows.reduce((t, r) => t + Number(r.messages || 0), 0)
@@ -420,6 +420,14 @@ function SplitTable({ rows, label, nameOf }) {
     ['ctr', 'CTR', dash(pctf), (r) => div(r.clicks * 100, r.impressions)],
     ['messages', 'Tin nhắn', int, (r) => Number(r.messages || 0)],
     ['cpmsg', 'Chi phí/tin', dash(vnd), (r) => div(r.spend, r.messages)],
+    ...(crm ? [
+      ['crmLeads', 'Tin CRM', int, (r) => Number(r.crmLeads || 0)],
+      ['phones', 'SĐT', int, (r) => Number(r.phones || 0)],
+      ['cpp', 'Chi phí/SĐT', dash(vnd), (r) => div(r.spend, r.phones)],
+      ['orders', 'Đơn', int, (r) => Number(r.orders || 0)],
+      ['cpo', 'Chi phí/đơn', dash(vnd), (r) => div(r.spend, r.orders)],
+      ['revenue', 'Doanh số', vnd, (r) => Number(r.revenue || 0)],
+    ] : []),
   ]
   const get = (r, k) => cols.find((c) => c[0] === k)[3](r)
   const sorted = [...rows].sort((a, b) => {
@@ -450,13 +458,18 @@ function SplitTable({ rows, label, nameOf }) {
             return (
               <tr key={r.dim_key}>
                 <td className="px-3 py-1.5 whitespace-nowrap">{nameOf(r)}</td>
-                {cols.map(([k, , fmt]) => (
-                  <td key={k} className={`px-2 py-1.5 text-right whitespace-nowrap ${k === 'cpmsg' ? tone : ''}`}>{fmt(get(r, k))}</td>
-                ))}
+                {cols.map(([k, , fmt]) => {
+                  const v = get(r, k)
+                  let cls = k === 'cpmsg' ? tone : ''
+                  if (k === 'cpp' && v != null) cls = v <= 350000 ? 'text-emerald-700 font-semibold' : 'text-red-600'
+                  if (k === 'cpo' && v != null) cls = v < 2000000 ? 'text-emerald-700 font-semibold' : 'text-amber-700'
+                  if ((k === 'orders' || k === 'revenue') && Number(r.orders) > 0) cls = 'text-blue-700 font-semibold'
+                  return <td key={k} className={`px-2 py-1.5 text-right whitespace-nowrap ${cls}`}>{fmt(v)}{k === 'orders' && r.delivered > 0 ? <span className="text-xs text-emerald-700 ml-1">({r.delivered} giao)</span> : null}</td>
+                })}
               </tr>
             )
           })}
-          {rows.length === 0 && <tr><td colSpan={8} className="px-3 py-3 text-slate-400">Chưa có số liệu cho kỳ này.</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={cols.length + 1} className="px-3 py-3 text-slate-400">Chưa có số liệu cho kỳ này.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -511,12 +524,28 @@ function SplitModal({ worker, ad, onClose }) {
               {view === 'age' && <SplitTable rows={groupBy((r) => r.age || '?')} label="Độ tuổi" nameOf={(r) => r.dim_key} />}
               {view === 'gender' && <SplitTable rows={groupBy((r) => r.gender || 'unknown')} label="Giới tính" nameOf={(r) => GENDER[r.dim_key] || r.dim_key} />}
               {view === 'ageGender' && <SplitTable rows={ageRows} label="Tuổi · giới tính" nameOf={(r) => `${r.age} · ${GENDER[r.gender] || r.gender}`} />}
-              {view === 'region' && <SplitTable rows={d.region || []} label="Tỉnh/thành" nameOf={(r) => r.region || '—'} />}
+              {view === 'region' && (
+                <>
+                  <SplitTable rows={d.region || []} label="Tỉnh/thành" nameOf={(r) => r.region || '—'} crm />
+                  {d.crmError && <p className="text-sm text-amber-700 mt-2">{d.crmError}</p>}
+                  {(() => {
+                    const rows = d.region || []
+                    const ph = rows.reduce((t, r) => t + Number(r.phones || 0), 0)
+                    const unk = rows.find((r) => r.dim_key === 'unknown')
+                    const u = Number(unk?.phones || 0)
+                    return ph > 0 && u > 0 ? (
+                      <p className="text-sm text-slate-600 mt-2 bg-amber-50 rounded-lg px-3 py-2">
+                        {u}/{ph} SĐT chưa biết tỉnh vì CRM chưa có địa chỉ của khách (sale thường chỉ ghi địa chỉ khi lên đơn). Sale ghi thêm tỉnh/địa chỉ vào CRM khi xin được số thì cột SĐT theo tỉnh sẽ đầy đủ hơn.
+                      </p>
+                    ) : null
+                  })()}
+                </>
+              )}
             </>
           )}
           <p className="text-xs text-slate-400 mt-3">
             Số do Smoothgate đồng bộ từ Meta mỗi giờ{d.at ? ` (lần cuối ${d.at.slice(11, 16)} ${d.at.slice(8, 10)}/${d.at.slice(5, 7)})` : ''}.
-            Chi phí/tin xanh = rẻ hơn trung bình từ 20%, đỏ = đắt hơn từ 30% hoặc chi từ 100k mà 0 tin. Meta làm tròn số chia nhỏ nên tổng có thể lệch nhẹ.
+            Chi phí/tin xanh = rẻ hơn trung bình từ 20%, đỏ = đắt hơn từ 30% hoặc chi từ 100k mà 0 tin. Meta làm tròn số chia nhỏ nên tổng có thể lệch nhẹ. Ở Tỉnh/thành: Tin CRM, SĐT, Đơn, Doanh số lấy từ CRM — tỉnh theo địa chỉ khách; đơn = đơn CRM (không tính đơn hủy) của các quảng cáo này hoặc của SĐT đã nhắn qua chúng; chi phí/SĐT xanh ≤ 350k, chi phí/đơn xanh dưới 2tr.
           </p>
         </div>
       </div>

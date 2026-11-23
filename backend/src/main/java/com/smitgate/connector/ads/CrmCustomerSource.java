@@ -186,6 +186,59 @@ public class CrmCustomerSource {
                 rs.getString(6), rs.getTimestamp(7) == null ? null : rs.getTimestamp(7).toInstant()));
     }
 
+    /** A lead of a known ad with its phone (last 9 digits) and address, for the split by province. */
+    public record LeadGeo(String adId, String phone9, String address, String tags, Instant createdAt) {
+    }
+
+    public List<LeadGeo> leadGeo(java.util.Collection<String> adIds, int days) {
+        if (jdbc == null || adIds.isEmpty()) return List.of();
+        return jdbc.query(con -> {
+            var ps = con.prepareStatement("SELECT ad_id, NULLIF(RIGHT(REGEXP_REPLACE(COALESCE(\"Sdt\", ''), '\\D', '', 'g'), 9), ''), "
+                    + "dia_chi, \"Tag_khach_tiem_nang\", created_at FROM public.data_dulieukhach "
+                    + "WHERE created_at >= now() - make_interval(days => ?) AND ad_id = ANY(?)");
+            ps.setInt(1, days);
+            ps.setArray(2, con.createArrayOf("text", adIds.toArray(new String[0])));
+            return ps;
+        }, (rs, i) -> new LeadGeo(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4),
+                rs.getTimestamp(5) == null ? null : rs.getTimestamp(5).toInstant()));
+    }
+
+    /** A CRM order (don_hang): from one of the ads, or from a phone that came through one of them. */
+    public record CrmOrder(String adId, String phone9, String address, String status, double amount, java.time.LocalDate day) {
+    }
+
+    public List<CrmOrder> ordersFor(java.util.Collection<String> adIds, java.util.Collection<String> phones9, int days) {
+        if (jdbc == null || (adIds.isEmpty() && phones9.isEmpty())) return List.of();
+        return jdbc.query(con -> {
+            var ps = con.prepareStatement("SELECT ma_id_quang_cao, RIGHT(REGEXP_REPLACE(COALESCE(sdt, ''), '\\D', '', 'g'), 9), dia_chi, "
+                    + "tinh_trang, COALESCE(gia_ban_len_don, 0), ngay FROM public.don_hang "
+                    + "WHERE ngay >= CURRENT_DATE - ? AND (ma_id_quang_cao = ANY(?) "
+                    + "OR RIGHT(REGEXP_REPLACE(COALESCE(sdt, ''), '\\D', '', 'g'), 9) = ANY(?))");
+            ps.setInt(1, days);
+            ps.setArray(2, con.createArrayOf("text", adIds.toArray(new String[0])));
+            ps.setArray(3, con.createArrayOf("text", phones9.toArray(new String[0])));
+            return ps;
+        }, (rs, i) -> new CrmOrder(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getDouble(5),
+                rs.getDate(6) == null ? null : rs.getDate(6).toLocalDate()));
+    }
+
+    /** Phone (last 9 digits) → the newest address any CRM order or lead has for it. */
+    public Map<String, String> addressByPhone(java.util.Collection<String> phones9) {
+        Map<String, String> out = new HashMap<>();
+        if (jdbc == null || phones9.isEmpty()) return out;
+        jdbc.query(con -> {
+            var ps = con.prepareStatement("SELECT p, dia_chi FROM ("
+                    + "SELECT RIGHT(REGEXP_REPLACE(COALESCE(sdt, ''), '\\D', '', 'g'), 9) p, dia_chi, created_at FROM public.don_hang "
+                    + "UNION ALL SELECT RIGHT(REGEXP_REPLACE(COALESCE(\"Sdt\", ''), '\\D', '', 'g'), 9), dia_chi, created_at "
+                    + "FROM public.data_dulieukhach) x WHERE p = ANY(?) AND COALESCE(dia_chi, '') <> '' ORDER BY created_at");
+            ps.setArray(1, con.createArrayOf("text", phones9.toArray(new String[0])));
+            return ps;
+        }, rs -> {
+            out.put(rs.getString(1), rs.getString(2));
+        });
+        return out;
+    }
+
     /** Page id → Page name as the CRM shows it ("Kim Ánh Đỉnh Đồng Nam Định"), from recent leads. */
     public Map<String, String> pageNames() {
         Map<String, String> out = new HashMap<>();

@@ -86,7 +86,7 @@ public record CustomerContact(String phone, String firstName, String lastName, S
     }
 
     /** The province named last in a free-text Vietnamese address, as Meta's folded "st" value. */
-    static String provinceOf(String address) {
+    public static String provinceOf(String address) {
         if (address == null || address.isBlank()) return null;
         String text = fold(address);
         String best = null;

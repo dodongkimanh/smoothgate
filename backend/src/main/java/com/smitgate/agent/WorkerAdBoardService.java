@@ -140,12 +140,125 @@ public class WorkerAdBoardService {
             if (oneAd) args.add(adId);
             out.put(dim, jdbc.queryForList(sql, args.toArray()));
         }
+        try {
+            out.put("region", withCrm(w, castRows(out.get("region")), from, to, oneAd ? adId : null));
+        } catch (Exception e) {
+            out.put("crmError", "Không đọc được CRM: " + e.getMessage());
+        }
         java.sql.Timestamp t = jdbc.queryForObject("select max(updated_at) from ads_ad_breakdown_daily where ad_account_id = ?",
                 java.sql.Timestamp.class, w.adAccountId());
         out.put("at", t == null ? null : t.toLocalDateTime().atZone(java.time.ZoneOffset.UTC)
                 .withZoneSameInstant(AdWorkerService.VIETNAM_ZONE).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
         return out;
     }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> castRows(Object o) {
+        return (List<Map<String, Object>>) o;
+    }
+
+    /**
+     * Meta's split by region joined with the CRM by province: leads and phones (province from the lead's address, or
+     * from any CRM order/lead with the same phone) and CRM orders (don_hang) of these ads or of their leads' phones.
+     */
+    private List<Map<String, Object>> withCrm(AdWorkerService.Worker w, List<Map<String, Object>> meta, LocalDate from,
+                                              LocalDate to, String adId) {
+        LocalDate today = LocalDate.now(AdWorkerService.VIETNAM_ZONE);
+        List<String> ids = adId != null ? List.of(adId) : accountAdIds(w, today);
+        Map<String, Map<String, Object>> rows = new LinkedHashMap<>();
+        for (Map<String, Object> m : meta) {
+            String region = str(m.get("region"));
+            String key = com.smitgate.connector.ads.CustomerContact.provinceOf(region);
+            Map<String, Object> r = row(rows, key == null ? "?" + region : key, key == null ? region : null);
+            for (String f : List.of("spend", "impressions", "clicks", "messages")) {
+                r.put(f, num(r.get(f)) + num(m.get(f)));
+            }
+        }
+        // Leads of the last 60 days give the phones whose orders count for these ads.
+        List<CrmCustomerSource.LeadGeo> leads = crm.leadGeo(ids, 60);
+        java.util.Set<String> phones = new java.util.LinkedHashSet<>();
+        for (CrmCustomerSource.LeadGeo l : leads) {
+            if (l.phone9() != null && l.phone9().length() == 9) phones.add(l.phone9());
+        }
+        Map<String, String> addr = crm.addressByPhone(phones);
+        java.util.Set<String> phonesCounted = new java.util.HashSet<>();
+        for (CrmCustomerSource.LeadGeo l : leads) {
+            if (l.createdAt() == null) continue;
+            LocalDate d = l.createdAt().atZone(AdWorkerService.VIETNAM_ZONE).toLocalDate();
+            if (d.isBefore(from) || d.isAfter(to)) continue;
+            String key = provinceKey(l.address(), l.phone9() == null ? null : addr.get(l.phone9()));
+            Map<String, Object> r = row(rows, key, null);
+            r.put("crmLeads", num(r.get("crmLeads")) + 1);
+            boolean hasPhone = l.phone9() != null && l.phone9().length() == 9;
+            if (hasPhone && phonesCounted.add(l.phone9())) {
+                r.put("phones", num(r.get("phones")) + 1);
+            }
+            if (LeadQuality.isQuality(LeadQuality.classify(l.tags()), hasPhone)) {
+                r.put("quality", num(r.get("quality")) + 1);
+            }
+        }
+        java.util.Set<String> idSet = new java.util.HashSet<>(ids);
+        for (CrmCustomerSource.CrmOrder o : crm.ordersFor(ids, phones, 60)) {
+            if (o.day() == null || o.day().isBefore(from) || o.day().isAfter(to)) continue;
+            String status = str(o.status()).toLowerCase(java.util.Locale.ROOT);
+            if (status.contains("hủy") || status.contains("huỷ")) continue;
+            // An order with another ad's id belongs to that ad, even if the phone also wrote to one of ours.
+            String oAd = str(o.adId()).trim();
+            if (!oAd.isEmpty() && oAd.matches("\\d{6,}") && !idSet.contains(oAd)) continue;
+            String key = provinceKey(o.address(), o.phone9() == null ? null : addr.get(o.phone9()));
+            Map<String, Object> r = row(rows, key, null);
+            r.put("orders", num(r.get("orders")) + 1);
+            r.put("revenue", num(r.get("revenue")) + o.amount());
+            if (status.contains("giao thành công")) r.put("delivered", num(r.get("delivered")) + 1);
+            if (status.contains("hoàn")) r.put("returned", num(r.get("returned")) + 1);
+        }
+        List<Map<String, Object>> out = new ArrayList<>(rows.values());
+        out.sort(Comparator.comparingDouble((Map<String, Object> r) -> -num(r.get("spend")))
+                .thenComparingDouble(r -> -num(r.get("orders"))).thenComparingDouble(r -> -num(r.get("phones"))));
+        return out;
+    }
+
+    private static String provinceKey(String address, String phoneAddress) {
+        String k = com.smitgate.connector.ads.CustomerContact.provinceOf(address);
+        if (k == null) k = com.smitgate.connector.ads.CustomerContact.provinceOf(phoneAddress);
+        return k == null ? "unknown" : k;
+    }
+
+    private static Map<String, Object> row(Map<String, Map<String, Object>> rows, String key, String metaName) {
+        return rows.computeIfAbsent(key, k -> {
+            Map<String, Object> r = new LinkedHashMap<>();
+            r.put("dim_key", k);
+            r.put("region", metaName != null ? metaName : PROVINCE_NAMES.getOrDefault(k, "unknown".equals(k) ? "Không rõ tỉnh" : k));
+            for (String f : List.of("spend", "impressions", "clicks", "messages", "crmLeads", "phones", "quality", "orders",
+                    "delivered", "returned", "revenue")) {
+                r.put(f, 0d);
+            }
+            return r;
+        });
+    }
+
+    private static final Map<String, String> PROVINCE_NAMES = Map.ofEntries(
+            Map.entry("angiang", "An Giang"), Map.entry("bariavungtau", "Bà Rịa – Vũng Tàu"), Map.entry("bacgiang", "Bắc Giang"),
+            Map.entry("backan", "Bắc Kạn"), Map.entry("baclieu", "Bạc Liêu"), Map.entry("bacninh", "Bắc Ninh"),
+            Map.entry("bentre", "Bến Tre"), Map.entry("binhdinh", "Bình Định"), Map.entry("binhduong", "Bình Dương"),
+            Map.entry("binhphuoc", "Bình Phước"), Map.entry("binhthuan", "Bình Thuận"), Map.entry("camau", "Cà Mau"),
+            Map.entry("cantho", "Cần Thơ"), Map.entry("caobang", "Cao Bằng"), Map.entry("danang", "Đà Nẵng"),
+            Map.entry("daklak", "Đắk Lắk"), Map.entry("daknong", "Đắk Nông"), Map.entry("dienbien", "Điện Biên"),
+            Map.entry("dongnai", "Đồng Nai"), Map.entry("dongthap", "Đồng Tháp"), Map.entry("gialai", "Gia Lai"),
+            Map.entry("hagiang", "Hà Giang"), Map.entry("hanam", "Hà Nam"), Map.entry("hanoi", "Hà Nội"),
+            Map.entry("hatinh", "Hà Tĩnh"), Map.entry("haiduong", "Hải Dương"), Map.entry("haiphong", "Hải Phòng"),
+            Map.entry("haugiang", "Hậu Giang"), Map.entry("hoabinh", "Hòa Bình"), Map.entry("hungyen", "Hưng Yên"),
+            Map.entry("khanhhoa", "Khánh Hòa"), Map.entry("kiengiang", "Kiên Giang"), Map.entry("kontum", "Kon Tum"),
+            Map.entry("laichau", "Lai Châu"), Map.entry("lamdong", "Lâm Đồng"), Map.entry("langson", "Lạng Sơn"),
+            Map.entry("laocai", "Lào Cai"), Map.entry("longan", "Long An"), Map.entry("namdinh", "Nam Định"),
+            Map.entry("nghean", "Nghệ An"), Map.entry("ninhbinh", "Ninh Bình"), Map.entry("ninhthuan", "Ninh Thuận"),
+            Map.entry("phutho", "Phú Thọ"), Map.entry("phuyen", "Phú Yên"), Map.entry("quangbinh", "Quảng Bình"),
+            Map.entry("quangnam", "Quảng Nam"), Map.entry("quangngai", "Quảng Ngãi"), Map.entry("quangninh", "Quảng Ninh"),
+            Map.entry("quangtri", "Quảng Trị"), Map.entry("soctrang", "Sóc Trăng"), Map.entry("sonla", "Sơn La"),
+            Map.entry("tayninh", "Tây Ninh"), Map.entry("thaibinh", "Thái Bình"), Map.entry("thainguyen", "Thái Nguyên"),
+            Map.entry("thanhhoa", "Thanh Hóa"), Map.entry("thuathienhue", "Huế"), Map.entry("tiengiang", "Tiền Giang"),
+            Map.entry("travinh", "Trà Vinh"), Map.entry("tuyenquang", "Tuyên Quang"), Map.entry("vinhlong", "Vĩnh Long"),
+            Map.entry("vinhphuc", "Vĩnh Phúc"), Map.entry("yenbai", "Yên Bái"), Map.entry("hochiminh", "TP. Hồ Chí Minh"));
 
     static final String[] SALE_PERIODS = {"today", "yesterday", "last3", "last7", "thisMonth", "lastMonth", "max"};
 
