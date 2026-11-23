@@ -278,8 +278,8 @@ async function tick() {
   }
 }
 
+log(`Worker khởi động: kiểm tra mỗi ${cfg.checkMinutes} phút, phân tích lúc ${cfg.analysisSlots.join(', ')}, chốt ngày lúc ${cfg.dailyCloseAt}`)
 if (['--once', '--analyze', '--close'].some((f) => process.argv.includes(f))) {
-if (process.argv.includes('--once')) {
   await check()
   if (process.argv.includes('--analyze')) await analysis('thử')
   if (process.argv.includes('--close')) await dailyClose()
