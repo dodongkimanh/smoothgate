@@ -183,6 +183,31 @@ function evaluate(snap, now) {
     }
   }
 
+  // Each ad on its own, when its ad set has several ads (with one ad, the ad set alert above already covers it).
+  const adsTotal = new Map()
+  for (const a of snap.total || []) {
+    const r = adsTotal.get(a.adId) || { ...a, spend: 0, phones: 0, orders: 0, messages: 0 }
+    r.spend += num(a.spend); r.phones += num(a.phoneCount); r.orders += num(a.orderCount); r.messages += num(a.messageContacts)
+    adsTotal.set(a.adId, r)
+  }
+  const adsPerSet = new Map()
+  for (const a of adsTotal.values()) adsPerSet.set(a.adSetId, (adsPerSet.get(a.adSetId) || 0) + 1)
+  const activeAds = new Set((snap.today || []).filter((a) => /^ACTIVE$/i.test(a.delivery || '')).map((a) => a.adId))
+  for (const a of adsTotal.values()) {
+    if (!activeAds.has(a.adId) || (adsPerSet.get(a.adSetId) || 0) < 2) continue
+    const name = `Quảng cáo "${a.adName}" (nhóm ${a.adSetName})`
+    const facts = `Từ khi chạy: chi ${money(a.spend)}, ${a.messages} tin nhắn, ${a.phones} SĐT, ${a.orders} đơn.`
+    const sellsWell = a.orders > 0 && a.spend / a.orders < RULES.goodCostPerOrder
+    if (a.spend >= RULES.noPhoneSpend && a.phones === 0) {
+      out.push({ severity: 'high', refKey: `ad-nophone:${a.adId}:${now.day}`, title: `${name}: đã chi ${money(a.spend)} mà chưa có SĐT → nên tắt quảng cáo này`, body: `${facts}\nLuật: tiêu 500k mà 0 SĐT thì tắt.` })
+    } else if (!sellsWell && a.spend >= RULES.costPerPhoneSpend && a.phones > 0 && a.spend / a.phones > RULES.maxCostPerPhone) {
+      out.push({ severity: 'high', refKey: `ad-cpp:${a.adId}:${now.day}`, title: `${name}: ${money(a.spend / a.phones)}/SĐT, vượt 350k → nên tắt quảng cáo này`, body: `${facts}\nLuật: từ 1,5tr mà trên 350k/SĐT thì tắt.` })
+    }
+    if (a.spend >= RULES.noOrderSpend && a.orders === 0) {
+      out.push({ severity: 'high', refKey: `ad-noorder:${a.adId}:${now.day}`, title: `${name}: đã chi ${money(a.spend)} mà chưa có đơn → nên tắt quảng cáo này`, body: `${facts}\nLuật: tiêu 5tr mà 0 đơn thì tắt. ${lateOrders}` })
+    }
+  }
+
   // Whole campaign: 5tr spent since it started with no order, while some of its ad sets still run.
   const campaigns = new Map()
   for (const g of total) {

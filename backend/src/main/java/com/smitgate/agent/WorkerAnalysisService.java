@@ -63,7 +63,7 @@ public class WorkerAnalysisService {
             return Map.of("ok", false, "error", "Đã đủ " + MAX_ANALYSES_PER_DAY + " lần phân tích hôm nay");
         }
 
-        Map<String, List<Map<String, Object>>> live = workers.liveNumbers(w);
+        Map<String, List<Map<String, Object>>> live = workers.liveNumbersFull(w);
         List<Map<String, Object>> due = memory.dueRecommendations(w, today);
         if (sum(live.get("last7"), "spend") <= 0 && due.isEmpty()) {
             return Map.of("ok", true, "skipped", true, "text", "Tài khoản không chi tiêu trong 7 ngày — bỏ qua phân tích.");
@@ -98,11 +98,21 @@ public class WorkerAnalysisService {
                     + (long) num(after.get("phones")) + " SĐT, " + (long) num(after.get("orders")) + " đơn, doanh số " + money(num(after.get("revenue"))));
         }
 
-        String context = buildContext(w, now, slot, weekly, todaySets, weekSets, totalSets, totalCamps, live, history, dueLines);
+        String adTable = adReport(live, today);
+        String context = "## Bảng so sánh từng quảng cáo (server tính, số chính xác)\n" + adTable + "\n"
+                + buildContext(w, now, slot, weekly, todaySets, weekSets, totalSets, totalCamps, live, history, dueLines);
         String reply = claude.complete(WorkerPrompts.ANALYSIS_SYSTEM, context);
         if (reply == null || reply.isBlank()) {
             String why = claude.getLastError();
-            return Map.of("ok", false, "error", why != null ? why : "Không nhận được phân tích từ Claude");
+            String err = why != null ? why : "Không nhận được phân tích từ Claude";
+            // The computed comparison is still worth having without the AI write-up.
+            jdbc.update("""
+                    insert into ad_worker_reports (worker_id, kind, severity, ref_key, title, body)
+                    values (?, 'ANALYSIS', 'info', ?, ?, ?)
+                    """, w.id(), "adtable:" + today + ":" + now.format(DateTimeFormatter.ofPattern("HHmmss")),
+                    "Bảng so sánh quảng cáo " + w.accountName() + (slot == null || slot.isBlank() ? "" : " lúc " + slot),
+                    "(Phần nhận xét của AI chưa chạy được: " + err + ")\n\n" + adTable);
+            return Map.of("ok", false, "error", err + " — đã lưu bảng so sánh quảng cáo (không có nhận xét AI).");
         }
 
         // The reply ends with a ```json block of suggestions and verdicts; keep it out of the displayed text.
@@ -125,7 +135,7 @@ public class WorkerAnalysisService {
                 insert into ad_worker_reports (worker_id, kind, severity, ref_key, title, body)
                 values (?, 'ANALYSIS', 'info', ?, ?, ?) returning id
                 """, Long.class, w.id(), "analysis:" + today + ":" + slot + ":" + now.format(DateTimeFormatter.ofPattern("HHmmss")),
-                title, text);
+                title, text + "\n\n---\n**Bảng số liệu chi tiết theo quảng cáo**\n" + adTable);
 
         int saved = 0;
         int judged = 0;
@@ -393,6 +403,16 @@ public class WorkerAnalysisService {
         return Map.of("ok", true, "added", added > 0);
     }
 
+    /** The computed ad-by-ad comparison (see {@link WorkerAdReport}). */
+    String adReport(Map<String, List<Map<String, Object>>> live, LocalDate today) {
+        Map<String, Map<String, Agg>> byPeriod = new LinkedHashMap<>();
+        for (String p : WorkerAdReport.PERIODS) {
+            byPeriod.put(p, aggregate(live.getOrDefault(p, List.of()), a -> str(a.get("adId"))));
+        }
+        LeadStats st = leadStats(live, today);
+        return WorkerAdReport.build(byPeriod, st == null ? Map.of() : st.adPeriods);
+    }
+
     // ---------------------------------------------------------------- lead quality (CRM tags)
 
     /** CRM leads of this account's ads, counted by tag, per ad set / ad / sale. */
@@ -407,6 +427,8 @@ public class WorkerAnalysisService {
         final LeadQuality.Count allToday = new LeadQuality.Count();
         final LeadQuality.Count all7 = new LeadQuality.Count();
         final LeadQuality.Count unknown7 = new LeadQuality.Count();
+        /** Per ad: today, yesterday, last 3 days, last 30 days. */
+        final Map<String, LeadQuality.Count[]> adPeriods = new LinkedHashMap<>();
     }
 
     private LeadStats leadStats(Map<String, List<Map<String, Object>>> live, LocalDate today) {
@@ -443,6 +465,12 @@ public class WorkerAnalysisService {
                 continue;
             }
             st.set30.computeIfAbsent(set, k -> new LeadQuality.Count()).add(kind, l.hasPhone());
+            LeadQuality.Count[] per = st.adPeriods.computeIfAbsent(adId, k -> new LeadQuality.Count[]{
+                    new LeadQuality.Count(), new LeadQuality.Count(), new LeadQuality.Count(), new LeadQuality.Count()});
+            if (day.equals(today)) per[0].add(kind, l.hasPhone());
+            if (day.equals(today.minusDays(1))) per[1].add(kind, l.hasPhone());
+            if (!day.isBefore(today.minusDays(2))) per[2].add(kind, l.hasPhone());
+            per[3].add(kind, l.hasPhone());
             if (!day.isBefore(weekStart)) {
                 st.set7.computeIfAbsent(set, k -> new LeadQuality.Count()).add(kind, l.hasPhone());
                 st.ad7.computeIfAbsent(adId, k -> new LeadQuality.Count()).add(kind, l.hasPhone());
@@ -608,9 +636,11 @@ public class WorkerAnalysisService {
         long messages;
         long phones;
         long orders;
+        long clicks;
+        String setName;
     }
 
-    private static Map<String, Agg> aggregate(List<Map<String, Object>> ads, Function<Map<String, Object>, String> key) {
+    static Map<String, Agg> aggregate(List<Map<String, Object>> ads, Function<Map<String, Object>, String> key) {
         Map<String, Agg> out = new LinkedHashMap<>();
         if (ads == null) {
             return out;
@@ -637,6 +667,8 @@ public class WorkerAnalysisService {
             g.spend += num(a.get("spend"));
             g.sales += num(a.get("sales"));
             g.impressions += (long) num(a.get("impressions"));
+            g.clicks += (long) num(a.get("clicks"));
+            g.setName = str(a.get("adSetName"));
             g.messages += (long) num(a.get("messageContacts"));
             g.phones += (long) num(a.get("phoneCount"));
             g.orders += (long) num(a.get("orderCount"));

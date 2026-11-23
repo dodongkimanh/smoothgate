@@ -102,6 +102,16 @@ public class AdWorkerService {
         return out;
     }
 
+    /** For the analyses: also yesterday, the last 3 days and the last 30 days, per ad. */
+    public Map<String, List<Map<String, Object>>> liveNumbersFull(Worker w) {
+        LocalDate today = LocalDate.now(VIETNAM_ZONE);
+        Map<String, List<Map<String, Object>>> out = liveNumbers(w);
+        out.put("yesterday", ads(w, today.minusDays(1), today.minusDays(1)));
+        out.put("last3", ads(w, today.minusDays(2), today));
+        out.put("last30", ads(w, today.minusDays(29), today));
+        return out;
+    }
+
     private List<Map<String, Object>> ads(Worker w, LocalDate from, LocalDate to) {
         List<Map<String, Object>> rows = metaAdsConnector.listAdPerformance(
                 w.tenantId(), w.dataSourceId(), w.externalAccountId(), from, to, null, null);

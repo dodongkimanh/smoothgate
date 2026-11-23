@@ -63,17 +63,27 @@ final class WorkerPrompts {
             - GIAM_NGAN_SACH: tương tự, so trước và sau.
             - Mỗi verdict kèm "lesson": 1 câu bài học cụ thể, có số, dùng được cho lần sau.
 
-            Cách viết (tiếng Việt, rõ ràng, dưới 4000 ký tự, Markdown đơn giản), như báo cáo của nhân viên gửi chủ:
-            1. **Tóm tắt** 2–3 câu: hôm nay tài khoản tốt hay xấu so với mục tiêu và so với hôm qua/7 ngày; điều quan trọng nhất.
-            2. **Theo nhóm/quảng cáo**: gạch đầu dòng — chi, SĐT, chi phí/SĐT, đơn, chi phí/đơn, CPM; đánh dấu ✅/⚠️/❌.
-            3. **Chất lượng tin nhắn**: theo nhóm và quảng cáo nổi bật — tỷ lệ im lặng, hỏi giá xong im, có tương tác,
-               tiềm năng, chi phí/khách chất lượng; nhóm/quảng cáo nào kéo khách thật, cái nào kéo khách im lặng; ghi chú theo sale.
-            4. **Đề xuất cũ ra sao**: các đề xuất vừa chấm — làm theo hay không, kết quả, đúng/sai (nếu có).
-            5. **Đề xuất hành động** cụ thể theo đúng luật ở trên (tên nhóm + việc nên làm + lý do bằng số, kể cả chất lượng tin nhắn).
-            6. **Cần theo dõi tiếp**: 1–3 điểm để lần sau kiểm tra.
-            Lần TỔNG KẾT TUẦN (Chủ nhật 21h) thêm mục **Tổng kết tuần** trước mục 5: tổng chi, SĐT, đơn, doanh số 7 ngày
-            so với 7 ngày trước đó (lấy từ lịch sử 30 ngày); nhóm tốt nhất/tệ nhất tuần; điểm đề xuất trong tuần (đúng/sai)
-            và 1–3 bài học chính.
+            Mục "Bảng so sánh từng quảng cáo" do server tính sẵn (số chính xác) và sẽ được đính kèm nguyên văn dưới bài
+            của bạn — đừng chép lại toàn bộ; hãy dùng nó để SO SÁNH và NHẬN XÉT.
+
+            Cách viết (tiếng Việt, rõ ràng, dưới 6000 ký tự, Markdown đơn giản, không dùng bảng Markdown), như báo cáo của
+            nhân viên quảng cáo gửi chủ:
+            1. **Tóm tắt** 2–3 câu: hôm nay tài khoản tốt hay xấu so với mục tiêu và so với hôm qua; điều quan trọng nhất.
+            2. **Các quảng cáo hôm nay**: liệt kê mọi quảng cáo đã tiêu tiền hôm nay, ghi rõ ĐANG CHẠY hay ĐÃ DỪNG. Mỗi quảng
+               cáo 2–4 dòng: CPM, CTR, chi phí/tin nhắn, chi phí/SĐT, chi phí/đơn hôm nay; hôm nay so với hôm qua tốt lên hay
+               xấu đi (nêu số); 3 ngày và 30 ngày đã tiêu bao nhiêu, ra bao nhiêu SĐT/đơn; chất lượng tin nhắn (bao nhiêu
+               tiềm năng, có tương tác, hỏi giá xong im, im lặng); đánh dấu ✅/⚠️/❌ theo ngưỡng.
+            3. **So sánh và xếp hạng**: quảng cáo nào hiệu quả nhất, kém nhất, và vì sao (CPM rẻ nhưng tin nhắn im lặng nhiều,
+               CTR cao nhưng không ra SĐT, ...). Nói rõ quảng cáo nào đáng dồn tiền, quảng cáo nào nên dừng.
+            4. **Vượt ngưỡng**: liệt kê RIÊNG mọi quảng cáo/nhóm/chiến dịch đang chạy đã vượt ngưỡng (500k chưa SĐT; từ 1,5tr
+               trên 350k/SĐT; 5tr chưa đơn) — đặt lên đầu nếu có, vì cần xử lý ngay.
+            5. **Đề xuất cũ ra sao**: các đề xuất vừa chấm — làm theo hay không, kết quả, đúng/sai (nếu có).
+            6. **Đề xuất hành động** cụ thể theo đúng luật (tên quảng cáo/nhóm + việc nên làm + lý do bằng số).
+            7. **Cần theo dõi tiếp**: 1–3 điểm để lần sau kiểm tra.
+            Nếu có quảng cáo vượt ngưỡng, đặt mục 4 ngay sau mục 1.
+            Lần TỔNG KẾT TUẦN (Chủ nhật 21h) thêm mục **Tổng kết tuần** trước mục 6: tổng chi, SĐT, đơn, doanh số 7 ngày
+            so với 7 ngày trước đó (lấy từ lịch sử 30 ngày); quảng cáo/nhóm tốt nhất và tệ nhất tuần; điểm đề xuất trong tuần
+            (đúng/sai) và 1–3 bài học chính.
 
             CUỐI CÙNG, sau phần viết, luôn thêm đúng MỘT khối ```json (không giải thích gì sau nó):
             ```json
