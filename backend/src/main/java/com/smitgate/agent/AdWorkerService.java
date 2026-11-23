@@ -152,7 +152,8 @@ public class AdWorkerService {
         }
         String reply = claude.complete(WorkerPrompts.ANALYSIS_SYSTEM, text);
         if (reply == null || reply.isBlank()) {
-            return Map.of("ok", false, "error", "Không nhận được phân tích từ Claude");
+            String why = claude.getLastError();
+            return Map.of("ok", false, "error", why != null ? why : "Không nhận được phân tích từ Claude");
         }
         String title = "Phân tích " + w.accountName() + (slot == null || slot.isBlank() ? "" : " lúc " + slot);
         jdbc.update("insert into ad_worker_reports (worker_id, kind, severity, ref_key, title, body) values (?, 'ANALYSIS', 'info', ?, ?, ?)",

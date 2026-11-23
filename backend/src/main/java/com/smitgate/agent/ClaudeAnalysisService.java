@@ -32,8 +32,15 @@ public class ClaudeAnalysisService {
         }
     }
 
+    private volatile String lastError;
+
     public boolean isConfigured() {
         return client != null;
+    }
+
+    /** Why the last {@link #complete} returned null, in words the owner can act on. */
+    public String getLastError() {
+        return lastError;
     }
 
     /**
@@ -55,15 +62,21 @@ public class ClaudeAnalysisService {
             Message response = client.messages().create(params);
             if (response.stopReason().map(r -> "refusal".equals(r.asString())).orElse(false)) {
                 log.warn("Claude declined the worker analysis request");
+                lastError = "Claude từ chối yêu cầu phân tích";
                 return null;
             }
             StringBuilder result = new StringBuilder();
             response.content().stream()
                     .flatMap(block -> block.text().stream())
                     .forEach(textBlock -> result.append(textBlock.text()));
+            lastError = null;
             return result.toString().trim();
         } catch (Exception e) {
             log.error("Claude API call failed: {}", e.getMessage());
+            String msg = String.valueOf(e.getMessage());
+            lastError = msg.contains("credit balance")
+                    ? "Tài khoản Claude API đã hết tiền (cần nạp thêm ở console.anthropic.com → Plans & Billing)"
+                    : "Lỗi gọi Claude: " + (msg.length() > 200 ? msg.substring(0, 200) : msg);
             return null;
         }
     }

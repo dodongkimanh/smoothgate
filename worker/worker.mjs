@@ -282,7 +282,12 @@ async function tick() {
       const [h, m] = slot.split(':').map(Number)
       const minutes = now.hour * 60 + Number(now.hm.slice(3))
       const start = h * 60 + m
-      if (minutes >= start && minutes < start + 180 && !getMeta(`analysis:${now.day}:${slot}`)) {
+      const tries = Number(getMeta(`tries:${now.day}:${slot}`) || 0)
+      const lastTry = Number(getMeta(`lastTry:${now.day}:${slot}`) || 0)
+      if (minutes >= start && minutes < start + 180 && !getMeta(`analysis:${now.day}:${slot}`)
+          && tries < 3 && Date.now() - lastTry >= 30 * 60_000) {
+        setMeta(`tries:${now.day}:${slot}`, tries + 1)
+        setMeta(`lastTry:${now.day}:${slot}`, Date.now())
         if (!due) await check() // analyse fresh numbers
         await analysis(slot)
       }
