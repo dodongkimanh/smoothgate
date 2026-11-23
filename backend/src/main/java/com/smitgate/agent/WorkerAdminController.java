@@ -23,6 +23,7 @@ public class WorkerAdminController {
     private final AdWorkerService workers;
     private final WorkerMemoryService memory;
     private final WorkerAnalysisService analysis;
+    private final WorkerAdBoardService adBoard;
 
     /** "Phân tích ngay" runs in the background (Claude can take minutes); the page polls its state. */
     private final java.util.concurrent.ExecutorService runner = java.util.concurrent.Executors.newFixedThreadPool(2);
@@ -57,6 +58,16 @@ public class WorkerAdminController {
         AdWorkerService.Worker w = workers.find(tenant(request), id)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy worker"));
         return ResponseEntity.ok(ApiResponse.ok(analysis.liveQuality(w, null)));
+    }
+
+    /** The ads of this worker's account that spent today, Ads Manager columns plus per-period numbers and CRM leads. */
+    @GetMapping("/{id}/ads-board")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> adsBoard(HttpServletRequest request,
+                                                                     @org.springframework.web.bind.annotation.PathVariable long id,
+                                                                     @RequestParam(defaultValue = "false") boolean fresh) {
+        AdWorkerService.Worker w = workers.find(tenant(request), id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy worker"));
+        return ResponseEntity.ok(ApiResponse.ok(adBoard.board(w, fresh)));
     }
 
     @PostMapping("/{id}/analyze")

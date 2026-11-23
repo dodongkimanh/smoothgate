@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Smartphone, AlertTriangle, Sparkles, Info, RefreshCw, CalendarCheck, ClipboardCheck, MessageSquare } from 'lucide-react'
 import { getWorkers, getWorkerReports, getWorkerRecommendations, getWorkerLeadQuality, runWorkerAnalysis, getWorkerAnalysisState } from '../services/api'
 import { useEffect } from 'react'
+import WorkerAdsBoard from '../components/WorkerAdsBoard'
 
 // "Phân tích ngay": the server runs the analysis in the background; poll until it finishes, then reload the feed.
 function AnalyzeNow({ worker, onDone }) {
@@ -554,6 +555,8 @@ export default function Workers() {
           </div>
         )}
       </section>
+
+      <WorkerAdsBoard worker={workers.find((w) => String(w.id) === workerId) || workers[0]} />
 
       <LeadQuality worker={workers.find((w) => String(w.id) === workerId) || workers[0]} />
 

@@ -166,6 +166,26 @@ public class CrmCustomerSource {
                 rs.getTimestamp(5) == null ? null : rs.getTimestamp(5).toInstant()));
     }
 
+    /** One CRM lead of a known ad, with who it was assigned to, for the worker's ad board. */
+    public record AdLead(String adId, String customer, String sale, String tags, boolean hasPhone, String status,
+                         Instant createdAt) {
+    }
+
+    /** The leads of the last {@code days} days whose ad is one of {@code adIds}, newest first. */
+    public List<AdLead> adLeads(java.util.Collection<String> adIds, int days) {
+        if (jdbc == null || adIds.isEmpty()) return List.of();
+        String[] ids = adIds.toArray(new String[0]);
+        return jdbc.query(con -> {
+            var ps = con.prepareStatement("SELECT ad_id, \"Khach_hang\", \"Sale\", \"Tag_khach_tiem_nang\", "
+                    + "COALESCE(\"Sdt\", '') <> '', status, created_at FROM public.data_dulieukhach "
+                    + "WHERE created_at >= now() - make_interval(days => ?) AND ad_id = ANY(?) ORDER BY created_at DESC");
+            ps.setInt(1, days);
+            ps.setArray(2, con.createArrayOf("text", ids));
+            return ps;
+        }, (rs, i) -> new AdLead(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getBoolean(5),
+                rs.getString(6), rs.getTimestamp(7) == null ? null : rs.getTimestamp(7).toInstant()));
+    }
+
     /** Page id → Page name as the CRM shows it ("Kim Ánh Đỉnh Đồng Nam Định"), from recent leads. */
     public Map<String, String> pageNames() {
         Map<String, String> out = new HashMap<>();

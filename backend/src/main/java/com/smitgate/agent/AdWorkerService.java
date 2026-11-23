@@ -112,6 +112,11 @@ public class AdWorkerService {
         return out;
     }
 
+    /** Every field the Ads Manager page shows, per ad, for one date range of this worker's account. */
+    public List<Map<String, Object>> fullAds(Worker w, LocalDate from, LocalDate to) {
+        return metaAdsConnector.listAdPerformance(w.tenantId(), w.dataSourceId(), w.externalAccountId(), from, to, null, null);
+    }
+
     private List<Map<String, Object>> ads(Worker w, LocalDate from, LocalDate to) {
         List<Map<String, Object>> rows = metaAdsConnector.listAdPerformance(
                 w.tenantId(), w.dataSourceId(), w.externalAccountId(), from, to, null, null);
