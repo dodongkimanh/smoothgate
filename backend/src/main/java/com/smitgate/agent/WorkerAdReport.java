@@ -188,7 +188,45 @@ final class WorkerAdReport {
         sb.append("- ").append(title).append(": ").append(String.join(" · ", parts)).append('\n');
     }
 
-    static String id(Map<String, Object> ad) {
-        return str(ad.get("adId"));
+    /** The same comparison as rows for the page's table: one per ad, numbers per period, CRM tags, threshold check. */
+    static List<Map<String, Object>> rows(Map<String, Map<String, WorkerAnalysisService.Agg>> byPeriod,
+                                          Map<String, LeadQuality.Count[]> leadsByAd) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (String id : adsInScope(byPeriod)) {
+            WorkerAnalysisService.Agg t = byPeriod.get("today").get(id);
+            WorkerAnalysisService.Agg total = byPeriod.get("total").get(id);
+            Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("id", id);
+            row.put("name", t.name);
+            row.put("setName", t.setName);
+            row.put("campaignName", t.campaignName);
+            row.put("active", t.active);
+            row.put("budget", Math.round(t.budget));
+            Map<String, Object> periods = new java.util.LinkedHashMap<>();
+            LeadQuality.Count[] lc = leadsByAd.get(id);
+            for (int i = 0; i < PERIODS.length; i++) {
+                WorkerAnalysisService.Agg a = byPeriod.get(PERIODS[i]).get(id);
+                Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("spend", a == null ? 0 : Math.round(a.spend));
+                m.put("impressions", a == null ? 0 : a.impressions);
+                m.put("clicks", a == null ? 0 : a.clicks);
+                m.put("messages", a == null ? 0 : a.messages);
+                m.put("phones", a == null ? 0 : a.phones);
+                m.put("orders", a == null ? 0 : a.orders);
+                m.put("sales", a == null ? 0 : Math.round(a.sales));
+                // CRM tags exist for today / yesterday / 3 days / 30 days; "since launch" reuses the 30 days.
+                int ci = Math.min(i, 3);
+                if (lc != null && lc[ci] != null) {
+                    m.put("crm", lc[ci].toMap());
+                }
+                periods.put(PERIODS[i], m);
+            }
+            row.put("periods", periods);
+            String verdict = verdict(total, byPeriod.get("last3").get(id));
+            row.put("verdict", verdict);
+            row.put("level", verdict.contains("❌") ? "bad" : verdict.startsWith("✅") ? "good" : "warn");
+            out.add(row);
+        }
+        return out;
     }
 }

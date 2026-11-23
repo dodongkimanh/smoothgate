@@ -174,7 +174,7 @@ public class AdWorkerService {
     public List<Map<String, Object>> listReports(long tenantId, Long workerId, String kind, int limit) {
         StringBuilder sql = new StringBuilder("""
                 select r.id, r.worker_id as "workerId", w.name as "workerName", a.name as "accountName",
-                       r.kind, r.severity, r.title, r.body,
+                       r.kind, r.severity, r.title, r.body, r.data,
                        to_char(r.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') as "createdAt"
                 from ad_worker_reports r join ad_workers w on w.id = r.worker_id
                 join ad_accounts a on a.id = w.ad_account_id

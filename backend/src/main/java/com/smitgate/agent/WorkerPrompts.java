@@ -63,27 +63,24 @@ final class WorkerPrompts {
             - GIAM_NGAN_SACH: tương tự, so trước và sau.
             - Mỗi verdict kèm "lesson": 1 câu bài học cụ thể, có số, dùng được cho lần sau.
 
-            Mục "Bảng so sánh từng quảng cáo" do server tính sẵn (số chính xác) và sẽ được đính kèm nguyên văn dưới bài
-            của bạn — đừng chép lại toàn bộ; hãy dùng nó để SO SÁNH và NHẬN XÉT.
+            Mục "Bảng so sánh từng quảng cáo" do server tính sẵn (số chính xác) và được hiển thị thành BẢNG ngay dưới bài của
+            bạn (mỗi quảng cáo một dòng: chi, CPM, CTR, chi phí/tin, chi phí/SĐT, chi phí/đơn, thẻ CRM, ngưỡng). Vì vậy
+            KHÔNG liệt kê lại số của từng quảng cáo; hãy dùng bảng để SO SÁNH, NHẬN XÉT và KẾT LUẬN. Viết ngắn, dễ đọc.
 
-            Cách viết (tiếng Việt, rõ ràng, dưới 6000 ký tự, Markdown đơn giản, không dùng bảng Markdown), như báo cáo của
-            nhân viên quảng cáo gửi chủ:
-            1. **Tóm tắt** 2–3 câu: hôm nay tài khoản tốt hay xấu so với mục tiêu và so với hôm qua; điều quan trọng nhất.
-            2. **Các quảng cáo hôm nay**: liệt kê mọi quảng cáo đã tiêu tiền hôm nay, ghi rõ ĐANG CHẠY hay ĐÃ DỪNG. Mỗi quảng
-               cáo 2–4 dòng: CPM, CTR, chi phí/tin nhắn, chi phí/SĐT, chi phí/đơn hôm nay; hôm nay so với hôm qua tốt lên hay
-               xấu đi (nêu số); 3 ngày và 30 ngày đã tiêu bao nhiêu, ra bao nhiêu SĐT/đơn; chất lượng tin nhắn (bao nhiêu
-               tiềm năng, có tương tác, hỏi giá xong im, im lặng); đánh dấu ✅/⚠️/❌ theo ngưỡng.
-            3. **So sánh và xếp hạng**: quảng cáo nào hiệu quả nhất, kém nhất, và vì sao (CPM rẻ nhưng tin nhắn im lặng nhiều,
-               CTR cao nhưng không ra SĐT, ...). Nói rõ quảng cáo nào đáng dồn tiền, quảng cáo nào nên dừng.
-            4. **Vượt ngưỡng**: liệt kê RIÊNG mọi quảng cáo/nhóm/chiến dịch đang chạy đã vượt ngưỡng (500k chưa SĐT; từ 1,5tr
-               trên 350k/SĐT; 5tr chưa đơn) — đặt lên đầu nếu có, vì cần xử lý ngay.
-            5. **Đề xuất cũ ra sao**: các đề xuất vừa chấm — làm theo hay không, kết quả, đúng/sai (nếu có).
-            6. **Đề xuất hành động** cụ thể theo đúng luật (tên quảng cáo/nhóm + việc nên làm + lý do bằng số).
-            7. **Cần theo dõi tiếp**: 1–3 điểm để lần sau kiểm tra.
-            Nếu có quảng cáo vượt ngưỡng, đặt mục 4 ngay sau mục 1.
-            Lần TỔNG KẾT TUẦN (Chủ nhật 21h) thêm mục **Tổng kết tuần** trước mục 6: tổng chi, SĐT, đơn, doanh số 7 ngày
-            so với 7 ngày trước đó (lấy từ lịch sử 30 ngày); quảng cáo/nhóm tốt nhất và tệ nhất tuần; điểm đề xuất trong tuần
-            (đúng/sai) và 1–3 bài học chính.
+            Cách viết (tiếng Việt, dưới 3500 ký tự). Dùng bảng Markdown (| cột | cột |) ở các mục có ghi "bảng"; mỗi ô ngắn
+            gọn (dưới ~15 từ). Không dùng tiêu đề #, dùng **chữ đậm** cho tên mục:
+            1. **Tóm tắt**: 2–3 câu — hôm nay tốt/xấu so với mục tiêu và hôm qua (chi, SĐT, chi phí/SĐT, đơn); điều quan trọng nhất.
+            2. **Vượt ngưỡng — cần xử lý ngay** (bảng: Quảng cáo/nhóm | Đã chi | Kết quả | Luật vượt). Chỉ cái đang chạy.
+               Không có thì ghi một dòng "Không có quảng cáo nào vượt ngưỡng".
+            3. **Xếp hạng quảng cáo** (bảng: Hạng | Quảng cáo | Điểm mạnh | Điểm yếu | Kết luận) — tốt nhất đến kém nhất, kết
+               hợp chi phí/SĐT, chi phí/đơn, CPM, CTR, chất lượng tin nhắn; ghi rõ đang chạy hay đã dừng.
+            4. **Hôm nay so với hôm qua**: 2–4 gạch đầu dòng về thay đổi đáng chú ý (CPM, CTR, chi phí/tin, SĐT), có số.
+            5. **Chất lượng tin nhắn**: 2–4 gạch đầu dòng — quảng cáo nào kéo khách thật / khách im lặng; ghi chú theo sale.
+            6. **Đề xuất cũ ra sao**: gạch đầu dòng ngắn (nếu có).
+            7. **Đề xuất hành động** (bảng: Việc | Quảng cáo/nhóm | Lý do bằng số).
+            8. **Cần theo dõi tiếp**: 1–3 gạch đầu dòng.
+            Lần TỔNG KẾT TUẦN (Chủ nhật 21h) thêm mục **Tổng kết tuần** (bảng: Chỉ số | 7 ngày này | 7 ngày trước) trước mục 7,
+            rồi 1–3 gạch đầu dòng về quảng cáo tốt/tệ nhất tuần, điểm đề xuất và bài học.
 
             CUỐI CÙNG, sau phần viết, luôn thêm đúng MỘT khối ```json (không giải thích gì sau nó):
             ```json

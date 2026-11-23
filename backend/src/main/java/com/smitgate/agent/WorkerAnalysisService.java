@@ -98,7 +98,11 @@ public class WorkerAnalysisService {
                     + (long) num(after.get("phones")) + " SĐT, " + (long) num(after.get("orders")) + " đơn, doanh số " + money(num(after.get("revenue"))));
         }
 
-        String adTable = adReport(live, today);
+        Map<String, Map<String, Agg>> byPeriod = adsByPeriod(live);
+        LeadStats leadStats = leadStats(live, today);
+        Map<String, LeadQuality.Count[]> leadsByAd = leadStats == null ? Map.of() : leadStats.adPeriods;
+        String adTable = WorkerAdReport.build(byPeriod, leadsByAd);
+        String adData = json(Map.of("ads", WorkerAdReport.rows(byPeriod, leadsByAd)));
         String context = "## Bảng so sánh từng quảng cáo (server tính, số chính xác)\n" + adTable + "\n"
                 + buildContext(w, now, slot, weekly, todaySets, weekSets, totalSets, totalCamps, live, history, dueLines);
         String reply = claude.complete(WorkerPrompts.ANALYSIS_SYSTEM, context);
@@ -107,11 +111,11 @@ public class WorkerAnalysisService {
             String err = why != null ? why : "Không nhận được phân tích từ Claude";
             // The computed comparison is still worth having without the AI write-up.
             jdbc.update("""
-                    insert into ad_worker_reports (worker_id, kind, severity, ref_key, title, body)
-                    values (?, 'ANALYSIS', 'info', ?, ?, ?)
+                    insert into ad_worker_reports (worker_id, kind, severity, ref_key, title, body, data)
+                    values (?, 'ANALYSIS', 'info', ?, ?, ?, ?)
                     """, w.id(), "adtable:" + today + ":" + now.format(DateTimeFormatter.ofPattern("HHmmss")),
                     "Bảng so sánh quảng cáo " + w.accountName() + (slot == null || slot.isBlank() ? "" : " lúc " + slot),
-                    "(Phần nhận xét của AI chưa chạy được: " + err + ")\n\n" + adTable);
+                    "(Phần nhận xét của AI chưa chạy được: " + err + ")", adData);
             return Map.of("ok", false, "error", err + " — đã lưu bảng so sánh quảng cáo (không có nhận xét AI).");
         }
 
@@ -132,10 +136,10 @@ public class WorkerAnalysisService {
 
         String title = (weekly ? "Tổng kết tuần " : "Phân tích ") + w.accountName() + (slot == null || slot.isBlank() ? "" : " lúc " + slot);
         Long reportId = jdbc.queryForObject("""
-                insert into ad_worker_reports (worker_id, kind, severity, ref_key, title, body)
-                values (?, 'ANALYSIS', 'info', ?, ?, ?) returning id
+                insert into ad_worker_reports (worker_id, kind, severity, ref_key, title, body, data)
+                values (?, 'ANALYSIS', 'info', ?, ?, ?, ?) returning id
                 """, Long.class, w.id(), "analysis:" + today + ":" + slot + ":" + now.format(DateTimeFormatter.ofPattern("HHmmss")),
-                title, text + "\n\n---\n**Bảng số liệu chi tiết theo quảng cáo**\n" + adTable);
+                title, text, adData);
 
         int saved = 0;
         int judged = 0;
@@ -403,14 +407,13 @@ public class WorkerAnalysisService {
         return Map.of("ok", true, "added", added > 0);
     }
 
-    /** The computed ad-by-ad comparison (see {@link WorkerAdReport}). */
-    String adReport(Map<String, List<Map<String, Object>>> live, LocalDate today) {
+    /** Per-ad numbers for each period of the ad-by-ad comparison (see {@link WorkerAdReport}). */
+    private static Map<String, Map<String, Agg>> adsByPeriod(Map<String, List<Map<String, Object>>> live) {
         Map<String, Map<String, Agg>> byPeriod = new LinkedHashMap<>();
         for (String p : WorkerAdReport.PERIODS) {
             byPeriod.put(p, aggregate(live.getOrDefault(p, List.of()), a -> str(a.get("adId"))));
         }
-        LeadStats st = leadStats(live, today);
-        return WorkerAdReport.build(byPeriod, st == null ? Map.of() : st.adPeriods);
+        return byPeriod;
     }
 
     // ---------------------------------------------------------------- lead quality (CRM tags)

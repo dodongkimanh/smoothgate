@@ -73,15 +73,187 @@ function ago(iso) {
   return `${Math.floor(m / 1440)} ngày trước`
 }
 
-// Analyses come back as light Markdown: keep line breaks, render **bold**.
+function Inline({ text }) {
+  return (text || '').split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
+      : <span key={i}>{part}</span>,
+  )
+}
+
+const cellsOf = (line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim())
+
+// Analyses come back as light Markdown: headings in **bold**, "- " bullets and | tables |.
 function RichText({ text }) {
+  const lines = (text || '').split('\n')
+  const blocks = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const t = line.trim()
+    if (t.startsWith('|')) {
+      const rows = []
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        if (!/^\|?[\s:|-]+\|?$/.test(lines[i].trim())) rows.push(cellsOf(lines[i]))
+        i++
+      }
+      i--
+      const [head, ...body] = rows
+      blocks.push(
+        <div key={blocks.length} className="overflow-x-auto my-2">
+          <table className="min-w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
+            <thead className="bg-slate-100 text-slate-700">
+              <tr>{head.map((c, j) => <th key={j} className="text-left font-semibold px-3 py-2 whitespace-nowrap"><Inline text={c} /></th>)}</tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {body.map((r, k) => <tr key={k}>{r.map((c, j) => <td key={j} className="px-3 py-2 align-top text-slate-700"><Inline text={c} /></td>)}</tr>)}
+            </tbody>
+          </table>
+        </div>,
+      )
+    } else if (/^[-*•]\s+/.test(t) || /^\d+\.\s+/.test(t)) {
+      const items = []
+      while (i < lines.length && (/^\s*[-*•]\s+/.test(lines[i]) || /^\s*\d+\.\s+/.test(lines[i]))) {
+        items.push(lines[i].trim().replace(/^([-*•]|\d+\.)\s+/, ''))
+        i++
+      }
+      i--
+      blocks.push(
+        <ul key={blocks.length} className="list-disc pl-5 space-y-1 my-1">
+          {items.map((it, k) => <li key={k}><Inline text={it} /></li>)}
+        </ul>,
+      )
+    } else if (t === '---') {
+      blocks.push(<hr key={blocks.length} className="my-3 border-slate-200" />)
+    } else if (/^\*\*[^*]+\*\*:?$/.test(t)) {
+      blocks.push(<h4 key={blocks.length} className="mt-4 mb-1 text-[15px] font-semibold text-slate-900">{t.replace(/\*\*/g, '').replace(/:$/, '')}</h4>)
+    } else if (t) {
+      blocks.push(<p key={blocks.length} className="my-1"><Inline text={t} /></p>)
+    }
+  }
+  return <div className="text-[15px] leading-relaxed text-slate-700">{blocks}</div>
+}
+
+const PERIOD_TABS = [['today', 'Hôm nay'], ['yesterday', 'Hôm qua'], ['last3', '3 ngày'], ['last30', '30 ngày'], ['total', 'Từ khi chạy']]
+const LEVEL = {
+  bad: 'bg-red-50 text-red-700 border-red-200',
+  warn: 'bg-amber-50 text-amber-700 border-amber-200',
+  good: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+}
+
+// The ad-by-ad comparison computed by the server: one row per ad, numbers for the chosen period.
+function AdTable({ data }) {
+  const [period, setPeriod] = useState('today')
+  const [sort, setSort] = useState(null)
+  let ads = []
+  try { ads = (typeof data === 'string' ? JSON.parse(data) : data)?.ads || [] } catch { ads = [] }
+  if (!ads.length) return null
+
+  const val = (ad, p = period) => {
+    const m = ad.periods?.[p] || {}
+    const crm = m.crm || {}
+    return {
+      ...m,
+      cpm: m.impressions ? (m.spend * 1000) / m.impressions : null,
+      ctr: m.impressions ? (100 * m.clicks) / m.impressions : null,
+      cpMsg: m.messages ? m.spend / m.messages : null,
+      cpPhone: m.phones ? m.spend / m.phones : null,
+      cpOrder: m.orders ? m.spend / m.orders : null,
+      crm,
+      silentPct: crm.tagged ? (100 * crm.IM_LANG) / crm.tagged : null,
+    }
+  }
+  const cols = [
+    ['spend', 'Chi', (v) => money(v.spend)],
+    ['cpm', 'CPM', (v) => (v.cpm == null ? '—' : money(v.cpm))],
+    ['ctr', 'CTR', (v) => (v.ctr == null ? '—' : `${v.ctr.toFixed(2)}%`)],
+    ['messages', 'Tin nhắn', (v) => v.messages || 0],
+    ['cpMsg', 'Chi phí/tin', (v) => (v.cpMsg == null ? '—' : money(v.cpMsg))],
+    ['phones', 'SĐT', (v) => v.phones || 0],
+    ['cpPhone', 'Chi phí/SĐT', (v) => (v.cpPhone == null ? '—' : money(v.cpPhone)), (v) => (v.cpPhone == null ? (v.spend >= 500000 ? 'text-red-600 font-semibold' : '') : v.cpPhone <= 350000 ? 'text-emerald-700 font-semibold' : 'text-red-600 font-semibold')],
+    ['orders', 'Đơn', (v) => v.orders || 0],
+    ['cpOrder', 'Chi phí/đơn', (v) => (v.cpOrder == null ? '—' : money(v.cpOrder)), (v) => (v.cpOrder == null ? '' : v.cpOrder < 2000000 ? 'text-emerald-700 font-semibold' : 'text-red-600 font-semibold')],
+    ['sales', 'Doanh số', (v) => (v.sales ? money(v.sales) : '—')],
+    ['potential', 'Tiềm năng', (v) => (v.crm.TIEM_NANG || 0) + (v.crm.CHOT || 0), (v) => ((v.crm.TIEM_NANG || 0) + (v.crm.CHOT || 0) ? 'text-emerald-700 font-semibold' : 'text-slate-300')],
+    ['interact', 'Tương tác', (v) => v.crm.CO_TUONG_TAC || 0, (v) => (v.crm.CO_TUONG_TAC ? 'text-sky-700' : 'text-slate-300')],
+    ['askPrice', 'Hỏi giá im', (v) => v.crm.HOI_GIA || 0, (v) => (v.crm.HOI_GIA ? 'text-amber-700' : 'text-slate-300')],
+    ['silentPct', 'Im lặng', (v) => (v.crm.IM_LANG ? `${v.crm.IM_LANG} (${Math.round(v.silentPct)}%)` : '0'), (v) => (v.silentPct >= 70 ? 'text-red-600 font-semibold' : v.crm.IM_LANG ? 'text-red-500' : 'text-slate-300')],
+    ['quality', 'KH chất lượng', (v) => v.crm.quality || 0],
+  ]
+  const sortValue = (ad, key) => {
+    const v = val(ad)
+    if (key === 'potential') return (v.crm.TIEM_NANG || 0) + (v.crm.CHOT || 0)
+    if (key === 'interact') return v.crm.CO_TUONG_TAC || 0
+    if (key === 'askPrice') return v.crm.HOI_GIA || 0
+    if (key === 'quality') return v.crm.quality || 0
+    return v[key] ?? 1e15
+  }
+  const rows = sort ? [...ads].sort((a, b) => (sortValue(a, sort.key) - sortValue(b, sort.key)) * sort.dir) : ads
+  const changeVsYesterday = (ad) => {
+    const t = val(ad, 'today')
+    const y = val(ad, 'yesterday')
+    if (!y.spend) return null
+    const parts = []
+    if (t.cpm && y.cpm) parts.push(['CPM', t.cpm, y.cpm, false])
+    if (t.ctr && y.ctr) parts.push(['CTR', t.ctr, y.ctr, true])
+    if (t.cpMsg && y.cpMsg) parts.push(['Chi phí/tin', t.cpMsg, y.cpMsg, false])
+    return parts.map(([label, now, before, upIsGood]) => {
+      const pctChange = Math.round((100 * (now - before)) / before)
+      const good = upIsGood ? pctChange >= 0 : pctChange <= 0
+      return <span key={label} className={`mr-2 ${good ? 'text-emerald-700' : 'text-red-600'}`}>{label} {pctChange > 0 ? '▲' : '▼'}{Math.abs(pctChange)}%</span>
+    })
+  }
+
   return (
-    <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700">
-      {(text || '').split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-        part.startsWith('**') && part.endsWith('**')
-          ? <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>
-          : <span key={i}>{part}</span>,
-      )}
+    <div className="mt-3 rounded-lg border border-slate-200 bg-white overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-slate-100">
+        <span className="font-semibold text-slate-800 text-sm">Bảng so sánh quảng cáo · {ads.length} quảng cáo ({ads.filter((a) => a.active).length} đang chạy)</span>
+        <div className="flex flex-wrap gap-1">
+          {PERIOD_TABS.map(([k, label]) => (
+            <button key={k} onClick={() => setPeriod(k)} className={`px-2.5 py-1 rounded-md text-xs border ${period === k ? 'bg-sky-50 border-sky-300 text-sky-700' : 'border-gray-200 text-slate-600 hover:bg-slate-50'}`}>{label}</button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr>
+              <th className="text-left font-medium px-3 py-2 min-w-[240px] sticky left-0 bg-slate-50">Quảng cáo</th>
+              {cols.map(([key, label]) => (
+                <th key={key} onClick={() => setSort(sort?.key === key ? { key, dir: -sort.dir } : { key, dir: 1 })}
+                  className="text-right font-medium px-2 py-2 whitespace-nowrap cursor-pointer hover:text-slate-900">
+                  {label}{sort?.key === key ? (sort.dir > 0 ? ' ↑' : ' ↓') : ''}
+                </th>
+              ))}
+              <th className="text-left font-medium px-3 py-2 min-w-[260px]">Ngưỡng (từ khi chạy)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.map((ad) => {
+              const v = val(ad)
+              const delta = period === 'today' ? changeVsYesterday(ad) : null
+              return (
+                <tr key={ad.id} className="align-top">
+                  <td className="px-3 py-2 sticky left-0 bg-white">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`shrink-0 text-[11px] font-semibold px-1.5 py-0.5 rounded ${ad.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{ad.active ? 'Đang chạy' : 'Đã dừng'}</span>
+                      <span className="font-medium text-slate-800">{ad.name}</span>
+                    </div>
+                    <div className="text-xs text-slate-400 truncate max-w-[320px]" title={`${ad.setName} · ${ad.campaignName}`}>{ad.setName}{ad.budget ? ` · NS ${money(ad.budget)}` : ''}</div>
+                    {delta && delta.length > 0 && <div className="text-xs mt-0.5">so với hôm qua: {delta}</div>}
+                  </td>
+                  {cols.map(([key, , fmt, cls]) => (
+                    <td key={key} className={`text-right px-2 py-2 whitespace-nowrap ${cls ? cls(v) : ''}`}>{fmt(v)}</td>
+                  ))}
+                  <td className="px-3 py-2">
+                    <span className={`inline-block text-xs px-2 py-1 rounded border ${LEVEL[ad.level] || LEVEL.warn}`}>{ad.verdict}</span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="px-3 py-2 text-xs text-slate-400">Bấm tiêu đề cột để sắp xếp. Xanh = đạt (dưới 350k/SĐT, dưới 2tr/đơn), đỏ = vượt. Thẻ CRM của "Từ khi chạy" là 30 ngày.</p>
     </div>
   )
 }
@@ -112,9 +284,10 @@ function ReportItem({ r }) {
           </span>
         </span>
       </button>
-      {open && r.body && (
-        <div className="mt-2 ml-10 p-3 rounded-lg bg-slate-50 border border-slate-100">
-          <RichText text={r.body} />
+      {open && (r.body || r.data) && (
+        <div className="mt-2 ml-0 sm:ml-10 p-3 rounded-lg bg-slate-50 border border-slate-100">
+          {r.body && <RichText text={r.body} />}
+          {r.data && <AdTable data={r.data} />}
         </div>
       )}
     </li>
