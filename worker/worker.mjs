@@ -18,10 +18,11 @@ const cfg = {
   ...JSON.parse(readFileSync(join(HERE, 'config.json'), 'utf8')),
 }
 const RULES = {
-  noPhoneSpend: 1_000_000, // spent this much in 7 days with 0 phones -> turn off
+  // Spend is counted since the ad set / campaign started (the snapshot's 90-day "total").
+  noPhoneSpend: 500_000, // ad set spent this much with 0 phones -> turn off
   costPerPhoneSpend: 1_500_000, // from this spend, judge cost per phone
   maxCostPerPhone: 350_000,
-  noOrderSpend: 4_000_000, // spent this much in 7 days with 0 orders -> turn off
+  noOrderSpend: 5_000_000, // ad set OR whole campaign spent this much with 0 orders -> turn off
   goodCostPerOrder: 2_000_000, // under this per order -> may scale +20% every 3 days
   cpmSpikeRatio: 1.8,
   cpmSpikeMinSpend: 150_000,
@@ -131,33 +132,51 @@ function evaluate(snap, now) {
   const out = []
   const today = byAdSet(snap.today || [])
   const week = byAdSet(snap.last7 || [])
+  const total = byAdSet(snap.total || snap.last7 || [])
+  const weekById = new Map(week.map((g) => [g.adSetId, g]))
   const todayById = new Map(today.map((g) => [g.adSetId, g]))
   const threeDay = Math.floor(Date.parse(now.day) / (3 * 86400_000))
+  const lateOrders = '(Đơn có thể chốt muộn 3–6 ngày sau khi khách để lại SĐT.)'
 
-  for (const g of week) {
+  for (const g of total) {
     const t = todayById.get(g.adSetId)
     if (!t?.active) continue // only judge ad sets still running
+    const w7 = weekById.get(g.adSetId) || { spend: 0, cpm: 0 }
     const name = `${g.adSetName} (${g.campaignName || ''})`
     // Orders are the real goal: an ad set selling under 2tr/order is not turned off for expensive phones.
     const sellsWell = g.orders > 0 && g.spend / g.orders < RULES.goodCostPerOrder
-    const facts = `7 ngày: chi ${money(g.spend)}, ${g.messages} tin nhắn, ${g.phones} SĐT, ${g.orders} đơn.`
+    const facts = `Từ khi chạy: chi ${money(g.spend)}, ${g.messages} tin nhắn, ${g.phones} SĐT, ${g.orders} đơn.`
     if (g.spend >= RULES.noPhoneSpend && g.phones === 0) {
-      out.push({ severity: 'high', refKey: `nophone:${g.adSetId}:${now.day}`, title: `${g.adSetName}: đã chi ${money(g.spend)} mà chưa có SĐT → nên tắt`, body: `${name}\n${facts}\nLuật: 1tr mà 0 SĐT thì tắt.` })
+      out.push({ severity: 'high', refKey: `nophone:${g.adSetId}:${now.day}`, title: `${g.adSetName}: đã chi ${money(g.spend)} mà chưa có SĐT → nên tắt`, body: `${name}\n${facts}\nLuật: nhóm tiêu 500k mà 0 SĐT thì tắt.` })
     } else if (!sellsWell && g.spend >= RULES.costPerPhoneSpend && g.phones > 0 && g.spend / g.phones > RULES.maxCostPerPhone) {
       out.push({ severity: 'high', refKey: `cpp:${g.adSetId}:${now.day}`, title: `${g.adSetName}: ${money(g.spend / g.phones)}/SĐT, vượt 350k → nên tắt`, body: `${name}\n${facts}\nLuật: từ 1,5tr mà trên 350k/SĐT thì tắt.` })
     }
     if (g.spend >= RULES.noOrderSpend && g.orders === 0) {
-      out.push({ severity: 'high', refKey: `noorder:${g.adSetId}:${now.day}`, title: `${g.adSetName}: đã chi ${money(g.spend)} mà chưa có đơn → nên tắt`, body: `${name}\n${facts}\nLuật: 4tr mà 0 đơn thì tắt. (Đơn có thể chốt muộn 3–6 ngày sau khi khách để lại SĐT.)` })
+      out.push({ severity: 'high', refKey: `noorder:${g.adSetId}:${now.day}`, title: `${g.adSetName}: đã chi ${money(g.spend)} mà chưa có đơn → nên tắt`, body: `${name}\n${facts}\nLuật: nhóm hoặc chiến dịch tiêu 5tr mà 0 đơn thì tắt. ${lateOrders}` })
     }
     if (sellsWell) {
       out.push({ severity: 'info', refKey: `scale:${g.adSetId}:${threeDay}`, title: `${g.adSetName}: ${money(g.spend / g.orders)}/đơn, dưới 2tr → có thể tăng 20% ngân sách`, body: `${name}\n${facts}\nLuật: dưới 2tr/đơn thì tăng 20%, mỗi lần cách nhau 3 ngày.` })
     }
-    if (t.spend >= RULES.cpmSpikeMinSpend && g.cpm > 0 && t.cpm > g.cpm * RULES.cpmSpikeRatio) {
-      out.push({ severity: 'medium', refKey: `cpm:${g.adSetId}:${now.day}`, title: `${g.adSetName}: CPM hôm nay ${money(t.cpm)}, cao gấp ${(t.cpm / g.cpm).toFixed(1)} lần trung bình 7 ngày`, body: `${name}\nHôm nay: chi ${money(t.spend)}, ${t.impressions} hiển thị, CPM ${money(t.cpm)}. CPM 7 ngày: ${money(g.cpm)}.` })
+    if (t.spend >= RULES.cpmSpikeMinSpend && w7.cpm > 0 && t.cpm > w7.cpm * RULES.cpmSpikeRatio) {
+      out.push({ severity: 'medium', refKey: `cpm:${g.adSetId}:${now.day}`, title: `${g.adSetName}: CPM hôm nay ${money(t.cpm)}, cao gấp ${(t.cpm / w7.cpm).toFixed(1)} lần trung bình 7 ngày`, body: `${name}\nHôm nay: chi ${money(t.spend)}, ${t.impressions} hiển thị, CPM ${money(t.cpm)}. CPM 7 ngày: ${money(w7.cpm)}.` })
     }
     const adsetBudget = t.budgetSource && !/camp/i.test(t.budgetSource) ? t.budget : 0
     if (now.hour >= 15 && adsetBudget > 0 && t.spend < adsetBudget * 0.25) {
       out.push({ severity: 'medium', refKey: `slow:${g.adSetId}:${now.day}`, title: `${g.adSetName}: đến ${now.hm} mới tiêu ${money(t.spend)}/${money(adsetBudget)} ngân sách`, body: `${name}\nNhóm đang bật nhưng phân phối chậm. Kiểm tra trạng thái duyệt quảng cáo, đối tượng quá hẹp hoặc giá thầu.` })
+    }
+  }
+
+  // Whole campaign: 5tr spent since it started with no order, while some of its ad sets still run.
+  const campaigns = new Map()
+  for (const g of total) {
+    const c = campaigns.get(g.campaignId) || { name: g.campaignName, spend: 0, phones: 0, orders: 0, active: false, sets: 0 }
+    c.spend += g.spend; c.phones += g.phones; c.orders += g.orders; c.sets += 1
+    c.active ||= !!todayById.get(g.adSetId)?.active
+    campaigns.set(g.campaignId, c)
+  }
+  for (const [id, c] of campaigns) {
+    if (c.active && c.spend >= RULES.noOrderSpend && c.orders === 0) {
+      out.push({ severity: 'high', refKey: `noorder-camp:${id}:${now.day}`, title: `Chiến dịch "${c.name}": đã chi ${money(c.spend)} mà chưa có đơn → nên tắt`, body: `Từ khi chạy: ${c.sets} nhóm, chi ${money(c.spend)}, ${c.phones} SĐT, 0 đơn.\nLuật: nhóm hoặc chiến dịch tiêu 5tr mà 0 đơn thì tắt. ${lateOrders}` })
     }
   }
 

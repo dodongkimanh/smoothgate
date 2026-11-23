@@ -66,7 +66,10 @@ public class AdWorkerService {
                 LocalDateTime.now(VIETNAM_ZONE), truncate(device, 200), truncate(status, 500), w.id());
     }
 
-    /** Today's and the last 7 days' numbers per ad (as on the ads screen), plus 14 days of per-ad-set daily history. */
+    /**
+     * Per-ad numbers as on the ads screen for today, the last 7 days and the last 90 days ("total"), plus 14 days
+     * of per-ad-set daily history.
+     */
     public Map<String, Object> snapshot(Worker w) {
         LocalDate today = LocalDate.now(VIETNAM_ZONE);
         Map<String, Object> out = new LinkedHashMap<>();
@@ -75,6 +78,8 @@ public class AdWorkerService {
         out.put("now", LocalDateTime.now(VIETNAM_ZONE).withNano(0).toString());
         out.put("today", ads(w, today, today));
         out.put("last7", ads(w, today.minusDays(6), today));
+        // "Since it started" for the kill rules (spend with no phone / no order); 90 days covers any live campaign.
+        out.put("total", ads(w, today.minusDays(89), today));
         out.put("daily", jdbc.queryForList("""
                 select date::text as date, adset_id as "adSetId", max(adset_name) as "adSetName",
                        max(campaign_name) as "campaignName", round(sum(spend)) as spend,

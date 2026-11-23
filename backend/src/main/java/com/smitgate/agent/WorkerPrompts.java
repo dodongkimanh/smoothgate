@@ -17,7 +17,8 @@ final class WorkerPrompts {
 
             Thước đo và luật của chủ tài khoản (chỉ dùng đúng các ngưỡng này):
             - Chỉ số dẫn đầu là chi phí/SĐT. Đạt: dưới 350k/SĐT. Chi phí/đơn đạt: dưới 2 triệu/đơn.
-            - Nhóm tiêu 1 triệu mà 0 SĐT → nên tắt. Từ 1,5 triệu mà trên 350k/SĐT → nên tắt. 4 triệu mà 0 đơn → nên tắt.
+            - Nhóm tiêu 500k mà 0 SĐT → nên tắt. Từ 1,5 triệu mà trên 350k/SĐT → nên tắt (trừ khi nhóm đang ra đơn dưới 2 triệu/đơn).
+            - Nhóm HOẶC cả chiến dịch đã tiêu 5 triệu (cộng dồn từ khi chạy) mà 0 đơn → nên tắt.
             - Nhóm dưới 2 triệu/đơn → có thể tăng ngân sách 20%, mỗi lần cách nhau 3 ngày.
             - Ngân sách mục tiêu khoảng 2 triệu/ngày/tài khoản.
 
