@@ -11,6 +11,7 @@ import {
   Bot,
   UserCog,
   UploadCloud,
+  Smartphone,
 } from 'lucide-react'
 import { useAuthStore, isStaffUser } from '../store/authStore'
 import logoMark from '../assets/smoothgate-mark.svg'
@@ -24,6 +25,7 @@ const navItems = [
   { path: '/connect-poscake', icon: Package, label: 'Kết nối Poscake' },
   { path: '/ad-accounts', icon: Users, label: 'Tài khoản QC' },
   { path: '/meta-sync', icon: UploadCloud, label: 'Đồng bộ Meta' },
+  { path: '/workers', icon: Smartphone, label: 'Máy theo dõi' },
 ]
 
 const bottomItems = [

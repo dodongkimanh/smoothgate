@@ -5,6 +5,7 @@ import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.Model;
+import com.anthropic.models.messages.OutputConfig;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,6 +29,42 @@ public class ClaudeAnalysisService {
             log.info("Claude API client initialized");
         } else {
             log.warn("ANTHROPIC_API_KEY not set — Claude analysis disabled");
+        }
+    }
+
+    public boolean isConfigured() {
+        return client != null;
+    }
+
+    /**
+     * One plain request: a fixed system prompt plus the user's text. Returns the reply text, or null when Claude
+     * is not configured, refuses, or the call fails (the reason is logged).
+     */
+    public String complete(String systemPrompt, String userMessage) {
+        if (client == null) {
+            return null;
+        }
+        try {
+            MessageCreateParams params = MessageCreateParams.builder()
+                    .model("claude-opus-5-5")
+                    .maxTokens(16000L)
+                    .outputConfig(OutputConfig.builder().effort(OutputConfig.Effort.MEDIUM).build())
+                    .system(systemPrompt)
+                    .addUserMessage(userMessage)
+                    .build();
+            Message response = client.messages().create(params);
+            if (response.stopReason().map(r -> "refusal".equals(r.asString())).orElse(false)) {
+                log.warn("Claude declined the worker analysis request");
+                return null;
+            }
+            StringBuilder result = new StringBuilder();
+            response.content().stream()
+                    .flatMap(block -> block.text().stream())
+                    .forEach(textBlock -> result.append(textBlock.text()));
+            return result.toString().trim();
+        } catch (Exception e) {
+            log.error("Claude API call failed: {}", e.getMessage());
+            return null;
         }
     }
 

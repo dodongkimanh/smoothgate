@@ -43,6 +43,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/ops/health").permitAll()
+                        // Phone workers: no user login, each request is checked against the worker's own key
+                        .requestMatchers("/api/worker/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         // OAuth callbacks are browser redirects FROM external providers — no JWT present
                         .requestMatchers("/api/integrations/meta/oauth/callback").permitAll()

@@ -46,6 +46,7 @@ export default function Header({ onMenuToggle }) {
       '/agent': 'Agent AI',
       '/staff': 'Quản lý nhân viên',
       '/meta-sync': 'Đồng bộ dữ liệu lên Meta',
+      '/workers': 'Máy theo dõi tài khoản',
     }
     return titles[location.pathname] || 'SmoothGate'
   }
